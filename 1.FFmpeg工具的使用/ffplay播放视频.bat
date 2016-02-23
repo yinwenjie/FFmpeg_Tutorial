@@ -11,7 +11,7 @@ IF NOT EXIST bin\ffplay.exe (
 ECHO ffplay found.
 CD bin || GOTO:error
 
-ffplay.exe -window_title "FFPlay Demo" -x 720 -y 576 -t 00:10 -autoexit -i ../video/IMG_0886.MOV
+ffplay.exe -window_title "FFPlay Demo" -x 720 -y 576 -t 00:10 -autoexit -i ../video/2_football.h264
 
 :error
 ECHO.
