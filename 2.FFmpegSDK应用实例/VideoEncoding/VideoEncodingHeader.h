@@ -16,4 +16,12 @@ extern "C"
 #define AUDIO_INBUF_SIZE 20480
 #define AUDIO_REFILL_THRESH 4096
 
+typedef struct
+{
+	AVCodec			*codec;
+	AVFrame			*frame;
+	AVCodecContext	*c;
+	AVPacket		pkt;
+} CodecCtx;
+
 #endif
