@@ -1,6 +1,7 @@
 #pragma once
 #ifndef _VIDEO_ENCODING_HEADER_
 #define _VIDEO_ENCODING_HEADER_
+
 extern "C"
 {
 	#include "libavutil/opt.h"
@@ -11,17 +12,5 @@ extern "C"
 	#include "libavutil/mathematics.h"
 	#include "libavutil/samplefmt.h"
 }
-
-#define INBUF_SIZE 4096
-#define AUDIO_INBUF_SIZE 20480
-#define AUDIO_REFILL_THRESH 4096
-
-typedef struct
-{
-	AVCodec			*codec;
-	AVFrame			*frame;
-	AVCodecContext	*c;
-	AVPacket		pkt;
-} CodecCtx;
 
 #endif

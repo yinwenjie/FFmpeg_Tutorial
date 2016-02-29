@@ -15,12 +15,18 @@
     <ClInclude Include="Encoder.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="InputOutput.h">
+      <Filter>header</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="VideoEncodingMain.cpp">
       <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="Encoder.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="InputOutput.cpp">
       <Filter>source</Filter>
     </ClCompile>
   </ItemGroup>

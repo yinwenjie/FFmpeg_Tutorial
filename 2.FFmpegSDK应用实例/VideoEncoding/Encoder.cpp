@@ -1,6 +1,7 @@
 #include "Encoder.h"
+#include "VideoEncodingHeader.h"
 
-void setContext(CodecCtx &ctx)
+void setContext(Codec_Ctx &ctx)
 {
 	/* put sample parameters */
 	ctx.c->bit_rate = 400000;
@@ -23,11 +24,12 @@ void setContext(CodecCtx &ctx)
 	av_opt_set(ctx.c->priv_data, "preset", "slow", 0);
 }
 
-bool OpenEncoder(CodecCtx &ctx)
+bool OpenEncoder(Codec_Ctx &ctx)
 {
 	int ret;
 
 	avcodec_register_all();
+
 	/* find the mpeg1 video encoder */
 	ctx.codec = avcodec_find_encoder(AV_CODEC_ID_H264);
 	if (!ctx.codec) 
@@ -72,7 +74,7 @@ bool OpenEncoder(CodecCtx &ctx)
 	return true;
 }
 
-void CloseEncoder(CodecCtx &ctx)
+void CloseEncoder(Codec_Ctx &ctx)
 {
 	avcodec_close(ctx.c);
 	av_free(ctx.c);
