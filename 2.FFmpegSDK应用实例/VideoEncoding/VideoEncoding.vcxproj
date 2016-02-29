@@ -82,9 +82,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Encoder.h" />
     <ClInclude Include="VideoEncodingHeader.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Encoder.cpp" />
     <ClCompile Include="VideoEncodingMain.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
