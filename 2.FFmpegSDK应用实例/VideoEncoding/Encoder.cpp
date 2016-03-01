@@ -82,11 +82,3 @@ void CloseEncoder(Codec_Ctx &ctx)
 	av_frame_free(&(ctx.frame));
 }
 
-bool OpenFile(FILE* &pFile)
-{
-	pFile = fopen("out.h264", "wb");
-	if (!(pFile)) {
-		fprintf(stderr, "Could not open %s\n", "out.h264");
-		return false;
-	}
-}

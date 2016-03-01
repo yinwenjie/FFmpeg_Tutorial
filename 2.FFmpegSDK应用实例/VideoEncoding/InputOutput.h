@@ -17,11 +17,15 @@ typedef struct
 	uint16_t nImageHeight;
 
 	uint16_t nFrameRate;
-	uint16_t nBitRate;
+	uint64_t nBitRate;
 	uint16_t nGOPSize;
 	uint16_t nMaxBFrames;
 } IO_Param;
 
 bool ParseInputParam(int argc, char **argv, IO_Param &io_param);
+
+bool OpenFile(IO_Param &io_param);
+
+void CloseFile(IO_Param &io_param);
 
 #endif

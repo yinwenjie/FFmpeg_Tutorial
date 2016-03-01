@@ -11,8 +11,6 @@ typedef struct
 	AVPacket		pkt;
 } Codec_Ctx;
 
-bool OpenFile(FILE* &pFile);
-
 bool OpenEncoder(Codec_Ctx &ctx);
 
 void CloseEncoder(Codec_Ctx &ctx);

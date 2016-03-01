@@ -6,9 +6,9 @@ bool ParseInputParam(int argc, char **argv, IO_Param &io_param)
 {
 	bool bNameInFound = false, bNameOutFound = false, bWidthFound = false, bHeightFound = false, bBitrateFound = false;
 
-	io_param.nFrameRate = 25;
-	io_param.nGOPSize = 10;
-	io_param.nMaxBFrames = 1;
+	io_param.nFrameRate		= 25;
+	io_param.nGOPSize		= 10;
+	io_param.nMaxBFrames	= 1;
 
 	for (int idx = 1; idx < argc; idx++)
 	{
@@ -34,7 +34,7 @@ bool ParseInputParam(int argc, char **argv, IO_Param &io_param)
 		}
 		else if (!stricmp(argv[idx], "-br"))
 		{
-			io_param.nBitRate = atoi(argv[idx+1]);
+			io_param.nBitRate = atol(argv[idx+1]);
 			bBitrateFound = true;
 		}
 		else if (!stricmp(argv[idx], "-fr"))
@@ -79,4 +79,27 @@ bool ParseInputParam(int argc, char **argv, IO_Param &io_param)
 
 	printf("Paramaters parsing OK!\n");
 	return true;
+}
+
+bool OpenFile(IO_Param &io_param)
+{
+	io_param.pFin = fopen(io_param.pNameIn, "rb");
+	if (!(io_param.pFin))
+	{
+		fprintf(stderr, "Could not open %s\n", io_param.pNameIn);
+		return false;
+	}
+
+	io_param.pFout = fopen(io_param.pNameOut, "wb");
+	if (!(io_param.pFin))
+	{
+		fprintf(stderr, "Could not open %s\n", io_param.pNameOut);
+		return false;
+	}
+}
+
+void CloseFile(IO_Param &io_param)
+{
+	fclose(io_param.pFin);
+	fclose(io_param.pFout);
 }

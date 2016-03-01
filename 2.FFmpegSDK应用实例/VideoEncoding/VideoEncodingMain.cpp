@@ -27,15 +27,14 @@ int main(int argc, char **argv)
 
 	IO_Param io_param;
 	ParseInputParam(argc, argv, io_param);
-
-	return 0;
-
+	
 	Codec_Ctx ctx = { NULL, NULL, NULL};
 	int i, ret, x, y, got_output;
-	FILE *pFout;
 
-	OpenFile(pFout);
+	OpenFile(io_param);
 	OpenEncoder(ctx);
+
+	return 0;
 
 	/* encode 1 second of video */
 	for (i = 0; i < 25; i++) 
@@ -76,7 +75,7 @@ int main(int argc, char **argv)
 
 		if (got_output) {
 			printf("Write frame %3d (size=%5d)\n", i, ctx.pkt.size);
-			fwrite(ctx.pkt.data, 1, ctx.pkt.size, pFout);
+			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
 	}
@@ -92,14 +91,14 @@ int main(int argc, char **argv)
 
 		if (got_output) {
 			printf("Write frame %3d (size=%5d)\n", i, ctx.pkt.size);
-			fwrite(ctx.pkt.data, 1, ctx.pkt.size, pFout);
+			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
 	}
 
 	/* add sequence end code to have a real mpeg file */
 //	fwrite(endcode, 1, sizeof(endcode), pFout);
-	fclose(pFout);
+	CloseFile(io_param);
 
 	CloseEncoder(ctx);
 
