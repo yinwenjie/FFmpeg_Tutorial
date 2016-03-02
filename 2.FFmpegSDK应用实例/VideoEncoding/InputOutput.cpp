@@ -103,3 +103,8 @@ void CloseFile(IO_Param &io_param)
 	fclose(io_param.pFin);
 	fclose(io_param.pFout);
 }
+
+int ReadYUVData(IO_Param &io_param)
+{
+
+}

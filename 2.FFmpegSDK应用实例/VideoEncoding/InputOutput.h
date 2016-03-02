@@ -28,4 +28,6 @@ bool OpenFile(IO_Param &io_param);
 
 void CloseFile(IO_Param &io_param);
 
+int ReadYUVData(IO_Param &io_param);
+
 #endif
