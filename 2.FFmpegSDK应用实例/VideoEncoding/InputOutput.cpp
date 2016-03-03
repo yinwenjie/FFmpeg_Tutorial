@@ -96,6 +96,8 @@ bool OpenFile(IO_Param &io_param)
 		fprintf(stderr, "Could not open %s\n", io_param.pNameOut);
 		return false;
 	}
+
+	return true;
 }
 
 void CloseFile(IO_Param &io_param)
@@ -104,7 +106,24 @@ void CloseFile(IO_Param &io_param)
 	fclose(io_param.pFout);
 }
 
-int ReadYUVData(Codec_Ctx &ctx, IO_Param &io_param)
+int ReadYUVData(Codec_Ctx &ctx, IO_Param &io_param, int color_plane)
 {
-	return 0;
+	int frame_height	= color_plane == 0? ctx.frame->height : ctx.frame->height / 2;
+	int frame_width		= color_plane == 0? ctx.frame->width : ctx.frame->width / 2;
+	int frame_size		= frame_width * frame_height;
+	int frame_stride	= ctx.frame->linesize[color_plane];
+
+	if (frame_width == frame_stride)
+	{
+		fread_s(ctx.frame->data[color_plane], frame_size, 1, frame_size, io_param.pFin);
+	} 
+	else
+	{
+		for (int row_idx = 0; row_idx < frame_height; row_idx++)
+		{
+			fread_s(ctx.frame->data[color_plane] + row_idx * frame_stride, frame_width, 1, frame_width, io_param.pFin);
+		}
+	}
+
+	return frame_size;
 }

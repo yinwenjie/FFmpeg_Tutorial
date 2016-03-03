@@ -29,6 +29,6 @@ bool OpenFile(IO_Param &io_param);
 
 void CloseFile(IO_Param &io_param);
 
-int ReadYUVData(Codec_Ctx &ctx, IO_Param &io_param);
+int ReadYUVData(Codec_Ctx &ctx, IO_Param &io_param, int color_plane);
 
 #endif

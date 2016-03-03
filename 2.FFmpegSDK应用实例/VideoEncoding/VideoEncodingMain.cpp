@@ -34,35 +34,21 @@ int main(int argc, char **argv)
 	OpenFile(io_param);
 	OpenEncoder(ctx, io_param);
 
-	return 0;
-
 	/* encode 1 second of video */
-	for (i = 0; i < 25; i++) 
+	for (i = 0; i < 250; i++) 
 	{
 		av_init_packet(&(ctx.pkt));
 		ctx.pkt.data = NULL;    // packet data will be allocated by the encoder
 		ctx.pkt.size = 0;
 
 		fflush(stdout);
-		/* prepare a dummy image */
+		
 		/* Y */
-		for (y = 0; y < ctx.c->height; y++) 
-		{
-			for (x = 0; x < ctx.c->width; x++) 
-			{
-				ctx.frame->data[0][y * ctx.frame->linesize[0] + x] = x + y + i * 3;
-			}
-		}
+		ReadYUVData(ctx, io_param, 0);
 
 		/* Cb and Cr */
-		for (y = 0; y < ctx.c->height / 2; y++) 
-		{
-			for (x = 0; x < ctx.c->width / 2; x++)
-			{
-				ctx.frame->data[1][y * ctx.frame->linesize[1] + x] = 128 + y + i * 2;
-				ctx.frame->data[2][y * ctx.frame->linesize[2] + x] = 64 + x + i * 5;
-			}
-		}
+		ReadYUVData(ctx, io_param, 1);
+		ReadYUVData(ctx, io_param, 2);
 
 		ctx.frame->pts = i;
 
