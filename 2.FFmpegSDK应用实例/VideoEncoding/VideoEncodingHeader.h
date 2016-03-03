@@ -13,4 +13,12 @@ extern "C"
 	#include "libavutil/samplefmt.h"
 }
 
+typedef struct
+{
+	AVCodec			*codec;
+	AVFrame			*frame;
+	AVCodecContext	*c;
+	AVPacket		pkt;
+} Codec_Ctx;
+
 #endif

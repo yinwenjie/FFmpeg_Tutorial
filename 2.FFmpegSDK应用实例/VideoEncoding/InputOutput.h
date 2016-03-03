@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include "VideoEncodingHeader.h"
 
 typedef struct
 {
@@ -28,6 +29,6 @@ bool OpenFile(IO_Param &io_param);
 
 void CloseFile(IO_Param &io_param);
 
-int ReadYUVData(IO_Param &io_param);
+int ReadYUVData(Codec_Ctx &ctx, IO_Param &io_param);
 
 #endif

@@ -1,13 +1,13 @@
 #include "Encoder.h"
 #include "VideoEncodingHeader.h"
 
-void setContext(Codec_Ctx &ctx)
+void setContext(Codec_Ctx &ctx, IO_Param io_param)
 {
 	/* put sample parameters */
-	ctx.c->bit_rate = 400000;
+	ctx.c->bit_rate = io_param.nBitRate;
     /* resolution must be a multiple of two */
-	ctx.c->width = 352;
-	ctx.c->height = 288;
+	ctx.c->width = io_param.nImageWidth;
+	ctx.c->height = io_param.nImageHeight;
     /* frames per second */
 	AVRational rational = {1,25};
 	ctx.c->time_base = rational;
@@ -17,14 +17,14 @@ void setContext(Codec_Ctx &ctx)
      * then gop_size is ignored and the output of encoder
      * will always be I frame irrespective to gop_size
      */
-	ctx.c->gop_size = 10;
-	ctx.c->max_b_frames = 1;
+	ctx.c->gop_size = io_param.nGOPSize;
+	ctx.c->max_b_frames = io_param.nMaxBFrames;
 	ctx.c->pix_fmt = AV_PIX_FMT_YUV420P;
 
 	av_opt_set(ctx.c->priv_data, "preset", "slow", 0);
 }
 
-bool OpenEncoder(Codec_Ctx &ctx)
+bool OpenEncoder(Codec_Ctx &ctx, IO_Param io_param)
 {
 	int ret;
 
@@ -45,7 +45,7 @@ bool OpenEncoder(Codec_Ctx &ctx)
 		return false;
 	}
 
-	setContext(ctx);
+	setContext(ctx,io_param);
 
 	/* open it */
 	if (avcodec_open2(ctx.c, ctx.codec, NULL) < 0) {

@@ -32,7 +32,7 @@ int main(int argc, char **argv)
 	int i, ret, x, y, got_output;
 
 	OpenFile(io_param);
-	OpenEncoder(ctx);
+	OpenEncoder(ctx, io_param);
 
 	return 0;
 

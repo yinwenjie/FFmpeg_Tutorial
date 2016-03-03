@@ -104,7 +104,7 @@ void CloseFile(IO_Param &io_param)
 	fclose(io_param.pFout);
 }
 
-int ReadYUVData(IO_Param &io_param)
+int ReadYUVData(Codec_Ctx &ctx, IO_Param &io_param)
 {
-
+	return 0;
 }
