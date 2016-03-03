@@ -14,6 +14,7 @@ void hello()
 	printf("\t-w:\tInput frame width\n");
 	printf("\t-h:\tInput frame height\n");
 	printf("\t-br:\tInput bit rate\n");
+	printf("\t-tf:\tTotal frames to encode\n");
 	printf("=================================\nOptional Paramaters:\n");
 	printf("\t-fr:\tFrame rate\n");
 	printf("\t-gs:\tGOP size\n");
@@ -29,13 +30,13 @@ int main(int argc, char **argv)
 	ParseInputParam(argc, argv, io_param);
 	
 	Codec_Ctx ctx = { NULL, NULL, NULL};
-	int i, ret, x, y, got_output;
+	int i, ret, got_output;
 
 	OpenFile(io_param);
 	OpenEncoder(ctx, io_param);
 
 	/* encode 1 second of video */
-	for (i = 0; i < 250; i++) 
+	for (i = 0; i < io_param.nTotalFrames; i++) 
 	{
 		av_init_packet(&(ctx.pkt));
 		ctx.pkt.data = NULL;    // packet data will be allocated by the encoder

@@ -21,6 +21,7 @@ typedef struct
 	uint64_t nBitRate;
 	uint16_t nGOPSize;
 	uint16_t nMaxBFrames;
+	uint16_t nTotalFrames;
 } IO_Param;
 
 bool ParseInputParam(int argc, char **argv, IO_Param &io_param);

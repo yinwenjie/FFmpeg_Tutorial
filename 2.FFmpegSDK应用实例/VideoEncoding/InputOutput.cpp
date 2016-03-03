@@ -4,7 +4,7 @@
 
 bool ParseInputParam(int argc, char **argv, IO_Param &io_param)
 {
-	bool bNameInFound = false, bNameOutFound = false, bWidthFound = false, bHeightFound = false, bBitrateFound = false;
+	bool bNameInFound = false, bNameOutFound = false, bWidthFound = false, bHeightFound = false, bBitrateFound = false, bTotalFrames = false;
 
 	io_param.nFrameRate		= 25;
 	io_param.nGOPSize		= 10;
@@ -36,6 +36,11 @@ bool ParseInputParam(int argc, char **argv, IO_Param &io_param)
 		{
 			io_param.nBitRate = atol(argv[idx+1]);
 			bBitrateFound = true;
+		}
+		else if (!stricmp(argv[idx], "-tf"))
+		{
+			io_param.nTotalFrames = atoi(argv[idx+1]);
+			bTotalFrames = true;
 		}
 		else if (!stricmp(argv[idx], "-fr"))
 		{
