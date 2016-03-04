@@ -74,6 +74,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="VideoDecodingMain.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="VideoDecodingHeader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
