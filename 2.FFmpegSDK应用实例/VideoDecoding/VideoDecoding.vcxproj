@@ -83,6 +83,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Decoder.h" />
+    <ClInclude Include="InputOutput.h" />
     <ClInclude Include="VideoDecodingHeader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
