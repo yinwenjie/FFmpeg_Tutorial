@@ -15,9 +15,11 @@ extern "C"
 
 typedef struct
 {
-	AVCodec			*codec;
+	AVCodec			*pCodec;	
+	AVCodecContext	*pCodecContext;
+	AVCodecParserContext *pCodecParserCtx;
+	
 	AVFrame			*frame;
-	AVCodecContext	*c;
 	AVPacket		pkt;
 } Codec_Ctx;
 
