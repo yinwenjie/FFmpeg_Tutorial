@@ -79,6 +79,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Decoder.cpp" />
+    <ClCompile Include="InputOutput.cpp" />
     <ClCompile Include="VideoDecodingMain.cpp" />
   </ItemGroup>
   <ItemGroup>
