@@ -50,19 +50,15 @@ int main(int argc, char **argv)
 	int frame_count;
 	uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
 	
-	/* set end of buffer to 0 (this ensures that no overreading happens for damaged mpeg streams) */
 	memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
 	
 	printf("Decode video file %s to %s\n", argv[1], argv[2]);
 
-	OpenDeocder(ctx);
-
-    
+	OpenDeocder(ctx);    
 
 	frame_count = 0;
 	for (;;) 
 	{
-//		uDataSize = fread(inbuf, 1, INBUF_SIZE, inputoutput.pFin);
 		uDataSize = fread_s(inbuf,INBUF_SIZE, 1, INBUF_SIZE, inputoutput.pFin);
 		if (0 == uDataSize)
 		{
@@ -85,7 +81,7 @@ int main(int argc, char **argv)
 				continue;
 			}
 
-			//Some Info from AVCodecParserContext
+/*			//Some Info from AVCodecParserContext
 			printf("[Packet]Size:%6d\t",ctx.pkt.size);
 			switch(ctx.pCodecParserCtx->pict_type)
 			{
@@ -103,6 +99,7 @@ int main(int argc, char **argv)
 				break;
 			}
 			printf("Number:%4d\n",ctx.pCodecParserCtx->output_picture_number);
+			*/
 
 			int ret = avcodec_decode_video2(ctx.pCodecContext, ctx.frame, &got_picture, &(ctx.pkt));
 			if (ret < 0) 
