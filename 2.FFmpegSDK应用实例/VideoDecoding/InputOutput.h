@@ -15,4 +15,6 @@ void Parse(int argc, char **argv, IO_Param &io_param);
 
 bool OpenFiles(IO_Param &io_param);
 
+void CloseFiles(IO_Param &io_param);
+
 #endif

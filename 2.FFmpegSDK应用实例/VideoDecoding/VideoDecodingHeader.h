@@ -2,6 +2,10 @@
 #ifndef _VIDEO_DECODING_HEADER_
 #define _VIDEO_DECODING_HEADER_
 
+#define INBUF_SIZE 4096
+#define AUDIO_INBUF_SIZE 20480
+#define AUDIO_REFILL_THRESH 4096
+
 extern "C"
 {
 	#include "libavutil/opt.h"

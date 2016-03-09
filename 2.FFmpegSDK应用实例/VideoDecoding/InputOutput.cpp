@@ -25,3 +25,9 @@ void Parse(int argc, char **argv, IO_Param &io_param)
 	io_param.pNameIn = argv[1];
 	io_param.pNameOut = argv[2];
 }
+
+void CloseFiles(IO_Param &io_param)
+{
+	fclose(io_param.pFin);
+	fclose(io_param.pFout);
+}
