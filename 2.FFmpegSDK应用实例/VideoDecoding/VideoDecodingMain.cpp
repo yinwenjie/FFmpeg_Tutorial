@@ -47,7 +47,6 @@ int main(int argc, char **argv)
 
 	OpenFiles(inputoutput);
 	
-	int frame_count;
 	uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
 	
 	memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
@@ -56,8 +55,7 @@ int main(int argc, char **argv)
 
 	OpenDeocder(ctx);    
 
-	frame_count = 0;
-	for (;;) 
+	while(1)
 	{
 		uDataSize = fread_s(inbuf,INBUF_SIZE, 1, INBUF_SIZE, inputoutput.pFin);
 		if (0 == uDataSize)
@@ -80,26 +78,6 @@ int main(int argc, char **argv)
 			{
 				continue;
 			}
-
-/*			//Some Info from AVCodecParserContext
-			printf("[Packet]Size:%6d\t",ctx.pkt.size);
-			switch(ctx.pCodecParserCtx->pict_type)
-			{
-			case AV_PICTURE_TYPE_I: 
-				printf("Type:I\t");
-				break;
-			case AV_PICTURE_TYPE_P: 
-				printf("Type:P\t");
-				break;
-			case AV_PICTURE_TYPE_B: 
-				printf("Type:B\t");
-				break;
-			default: 
-				printf("Type:Other\t");
-				break;
-			}
-			printf("Number:%4d\n",ctx.pCodecParserCtx->output_picture_number);
-			*/
 
 			int ret = avcodec_decode_video2(ctx.pCodecContext, ctx.frame, &got_picture, &(ctx.pkt));
 			if (ret < 0) 
@@ -125,12 +103,15 @@ int main(int argc, char **argv)
 			printf("Decode Error.\n");
 			return ret;
 		}
-		if (!got_picture)
-			break;
+
 		if (got_picture) 
 		{
 			write_out_yuv_frame(ctx, inputoutput);
 			printf("Flush Decoder: Succeed to decode 1 frame!\n");
+		}
+		else
+		{
+			break;
 		}
 	}
 
