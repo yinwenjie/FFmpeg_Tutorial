@@ -5,7 +5,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoEncoding", "VideoEncod
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoDecoding", "VideoDecoding\VideoDecoding.vcxproj", "{6319EC34-0D91-4202-9718-98B410187F06}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoDemuxing", "VideoDemuxing\VideoDemuxing.vcxproj", "{1B420F66-6686-4A36-9ECB-53BB109078F2}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoDemuxing", "VideoDemuxing\VideoDemuxing.vcxproj", "{DA5DE0F6-DB9A-466B-95EF-F4E70B009016}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,10 +21,10 @@ Global
 		{6319EC34-0D91-4202-9718-98B410187F06}.Debug|Win32.Build.0 = Debug|Win32
 		{6319EC34-0D91-4202-9718-98B410187F06}.Release|Win32.ActiveCfg = Release|Win32
 		{6319EC34-0D91-4202-9718-98B410187F06}.Release|Win32.Build.0 = Release|Win32
-		{1B420F66-6686-4A36-9ECB-53BB109078F2}.Debug|Win32.ActiveCfg = Debug|Win32
-		{1B420F66-6686-4A36-9ECB-53BB109078F2}.Debug|Win32.Build.0 = Debug|Win32
-		{1B420F66-6686-4A36-9ECB-53BB109078F2}.Release|Win32.ActiveCfg = Release|Win32
-		{1B420F66-6686-4A36-9ECB-53BB109078F2}.Release|Win32.Build.0 = Release|Win32
+		{DA5DE0F6-DB9A-466B-95EF-F4E70B009016}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DA5DE0F6-DB9A-466B-95EF-F4E70B009016}.Debug|Win32.Build.0 = Debug|Win32
+		{DA5DE0F6-DB9A-466B-95EF-F4E70B009016}.Release|Win32.ActiveCfg = Release|Win32
+		{DA5DE0F6-DB9A-466B-95EF-F4E70B009016}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

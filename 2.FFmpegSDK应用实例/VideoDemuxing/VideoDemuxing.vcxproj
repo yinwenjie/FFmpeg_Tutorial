@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{1B420F66-6686-4A36-9ECB-53BB109078F2}</ProjectGuid>
+    <ProjectGuid>{DA5DE0F6-DB9A-466B-95EF-F4E70B009016}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>VideoDemuxing</RootNamespace>
   </PropertyGroup>
@@ -50,13 +50,10 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>avcodec.lib;avutil.lib;avformat.lib;swscale.lib;swresample.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -78,9 +75,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="VideoDemuxingMain.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="VideoDemuxingHeader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
