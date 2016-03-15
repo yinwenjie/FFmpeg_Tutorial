@@ -1,7 +1,6 @@
 #include <stdio.h>
 
 #include "VideoDemuxingHeader.h"
-#include "Stream.h"
 
 static AVFormatContext *fmt_ctx = NULL;
 static AVCodecContext *video_dec_ctx = NULL, *audio_dec_ctx;
