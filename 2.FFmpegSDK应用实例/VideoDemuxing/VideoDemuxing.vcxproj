@@ -51,6 +51,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/D __STDC_CONSTANT_MACROS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -77,13 +78,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="DemuxerVideo.cpp" />
-    <ClCompile Include="Stream.cpp" />
     <ClCompile Include="VideoDemuxingMain.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DemuxerVideo.h" />
-    <ClInclude Include="Stream.h" />
     <ClInclude Include="VideoDemuxingHeader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
