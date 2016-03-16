@@ -9,4 +9,11 @@ extern "C"
 	#include "libavformat/avformat.h"
 }
 
+typedef struct 
+{
+	const char *src_filename;
+	const char *video_dst_filename;
+	const char *audio_dst_filename;
+} IOFileName;
+
 #endif
