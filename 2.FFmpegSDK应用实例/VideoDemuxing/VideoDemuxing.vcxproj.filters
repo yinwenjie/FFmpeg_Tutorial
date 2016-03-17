@@ -18,9 +18,18 @@
     <ClCompile Include="VideoDemuxingMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DemuxingContext.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VideoDemuxingHeader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IOFile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DemuxingContext.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

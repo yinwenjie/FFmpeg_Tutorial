@@ -1,91 +1,19 @@
 #include <stdio.h>
+#include "DemuxingContext.h"
 
-#include "VideoDemuxingHeader.h"
-
-// static AVFormatContext *fmt_ctx = NULL;
-// static AVCodecContext *video_dec_ctx = NULL, *audio_dec_ctx;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
-// static AVStream *video_stream = NULL, *audio_stream = NULL;
-// static const char *src_filename = NULL;
-// static const char *video_dst_filename = NULL;
-// static const char *audio_dst_filename = NULL;
-static FILE *video_dst_file = NULL;
-static FILE *audio_dst_file = NULL;
 
 static uint8_t *video_dst_data[4] = {NULL};
-static int      video_dst_linesize[4];
+static int video_dst_linesize[4];
 static int video_dst_bufsize;
 
-// static int video_stream_idx = -1, audio_stream_idx = -1;
 static AVFrame *frame = NULL;
 static AVPacket pkt;
 static int video_frame_count = 0;
 static int audio_frame_count = 0;
 
-/* Enable or disable frame reference counting. You are not supposed to support
- * both paths in your application but pick the one most appropriate to your
- * needs. Look for the use of refcount in this example to see what are the
- * differences of API usage between them. */
-static int refcount = 0;
-
-static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ctx, enum AVMediaType type)
-{
-	int ret, stream_index;
-	AVStream *st;
-	AVCodecContext *dec_ctx = NULL;
-	AVCodec *dec = NULL;
-	AVDictionary *opts = NULL;
-
-	ret = av_find_best_stream(va_ctx.fmt_ctx, type, -1, -1, NULL, 0);
-	if (ret < 0) 
-	{
-		fprintf(stderr, "Could not find %s stream in input file '%s'\n", av_get_media_type_string(type), files.src_filename);
-		return ret;
-	} 
-	else 
-	{
-		stream_index = ret;
-		st = va_ctx.fmt_ctx->streams[stream_index];
-
-		/* find decoder for the stream */
-		dec_ctx = st->codec;
-		dec = avcodec_find_decoder(dec_ctx->codec_id);
-		if (!dec) 
-		{
-			fprintf(stderr, "Failed to find %s codec\n", av_get_media_type_string(type));
-			return AVERROR(EINVAL);
-		}
-
-		/* Init the decoders, with or without reference counting */
-		av_dict_set(&opts, "refcounted_frames", refcount ? "1" : "0", 0);
-		if ((ret = avcodec_open2(dec_ctx, dec, &opts)) < 0) 
-		{
-			fprintf(stderr, "Failed to open %s codec\n", av_get_media_type_string(type));
-			return ret;
-		}
-
-		switch (type)
-		{
-		case AVMEDIA_TYPE_VIDEO:
-			va_ctx.video_stream_idx = stream_index;
-			va_ctx.video_stream = va_ctx.fmt_ctx->streams[stream_index];
-			va_ctx.video_dec_ctx = va_ctx.video_stream->codec;
-			break;
-		case AVMEDIA_TYPE_AUDIO:
-			va_ctx.audio_stream_idx = stream_index;
-			va_ctx.audio_stream = va_ctx.fmt_ctx->streams[stream_index];
-			va_ctx.audio_dec_ctx = va_ctx.audio_stream->codec;
-			break;
-		default:
-			fprintf(stderr, "Error: unsupported MediaType: %s\n", av_get_media_type_string(type));
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
+extern int refcount;
 static int get_format_from_sample_fmt(const char **fmt,	enum AVSampleFormat sample_fmt)
 {
 	int i;
@@ -114,7 +42,7 @@ static int get_format_from_sample_fmt(const char **fmt,	enum AVSampleFormat samp
 	return -1;
 }
 
-static int decode_packet(DemuxingVideoAudioContex &va_ctx, int *got_frame, int cached)
+static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_frame, int cached)
 {
     int ret = 0;
     int decoded = pkt.size;
@@ -158,7 +86,7 @@ static int decode_packet(DemuxingVideoAudioContex &va_ctx, int *got_frame, int c
                           pix_fmt, width, height);
 
             /* write to rawvideo file */
-            fwrite(video_dst_data[0], 1, video_dst_bufsize, video_dst_file);
+            fwrite(video_dst_data[0], 1, video_dst_bufsize, files.video_dst_file);
         }
     } else if (pkt.stream_index == va_ctx.audio_stream_idx) {
         /* decode audio frame */
@@ -188,7 +116,7 @@ static int decode_packet(DemuxingVideoAudioContex &va_ctx, int *got_frame, int c
              * in these cases.
              * You should use libswresample or libavfilter to convert the frame
              * to packed data. */
-            fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
+            fwrite(frame->extended_data[0], 1, unpadded_linesize, files.audio_dst_file);
         }
     }
 
@@ -235,64 +163,8 @@ int main(int argc, char **argv)
 
 	hello(files, argc, argv);
 
-	/* register all formats and codecs */
-	av_register_all();
-
-	/* open input file, and allocate format context */
-	if (avformat_open_input(&(va_ctx.fmt_ctx), files.src_filename, NULL, NULL) < 0)
+	if (InitDemuxContext(files, va_ctx) < 0)
 	{
-		fprintf(stderr, "Could not open source file %s\n", files.src_filename);
-		exit(1);
-	}
-
-	/* retrieve stream information */
-	if (avformat_find_stream_info(va_ctx.fmt_ctx, NULL) < 0) 
-	{
-		fprintf(stderr, "Could not find stream information\n");
-		exit(1);
-	}
-
-	if (open_codec_context(files, va_ctx, AVMEDIA_TYPE_VIDEO) >= 0) 
-	{
-		video_dst_file = fopen(files.video_dst_filename, "wb");
-		if (!video_dst_file) 
-		{
-			fprintf(stderr, "Could not open destination file %s\n", files.video_dst_filename);
-			ret = 1;
-			goto end;
-		}
-
-		/* allocate image where the decoded image will be put */
-		width = va_ctx.video_dec_ctx->width;
-		height = va_ctx.video_dec_ctx->height;
-		pix_fmt = va_ctx.video_dec_ctx->pix_fmt;
-		ret = av_image_alloc(video_dst_data, video_dst_linesize, width, height, pix_fmt, 1);
-		if (ret < 0) 
-		{
-			fprintf(stderr, "Could not allocate raw video buffer\n");
-			goto end;
-		}
-		video_dst_bufsize = ret;
-	}
-
-	if (open_codec_context(files, va_ctx, AVMEDIA_TYPE_AUDIO) >= 0) 
-	{
-		audio_dst_file = fopen(files.audio_dst_filename, "wb");
-		if (!audio_dst_file) 
-		{
-			fprintf(stderr, "Could not open destination file %s\n", files.audio_dst_filename);
-			ret = 1;
-			goto end;
-		}
-	}
-
-	/* dump input information to stderr */
-	av_dump_format(va_ctx.fmt_ctx, 0, files.src_filename, 0);
-
-	if (!va_ctx.audio_stream && !va_ctx.video_stream) 
-	{
-		fprintf(stderr, "Could not find audio or video stream in the input, aborting\n");
-		ret = 1;
 		goto end;
 	}
 
@@ -309,17 +181,14 @@ int main(int argc, char **argv)
 	pkt.data = NULL;
 	pkt.size = 0;
 
-	if (va_ctx.video_stream)
-		printf("Demuxing video from file '%s' into '%s'\n", files.src_filename, files.video_dst_filename);
-	if (va_ctx.audio_stream)
-		printf("Demuxing audio from file '%s' into '%s'\n", files.src_filename, files.audio_dst_filename);
+
 
 	/* read frames from the file */
 	while (av_read_frame(va_ctx.fmt_ctx, &pkt) >= 0) 
 	{
 		AVPacket orig_pkt = pkt;
 		do {
-			ret = decode_packet(va_ctx,&got_frame, 0);
+			ret = decode_packet(files, va_ctx, &got_frame, 0);
 			if (ret < 0)
 				break;
 			pkt.data += ret;
@@ -331,9 +200,11 @@ int main(int argc, char **argv)
 	/* flush cached frames */
 	pkt.data = NULL;
 	pkt.size = 0;
-	do {
-		decode_packet(va_ctx, &got_frame, 1);
-	} while (got_frame);
+	do 
+	{
+		decode_packet(files, va_ctx, &got_frame, 1);
+	}
+	while (got_frame);
 
 	printf("Demuxing succeeded.\n");
 
@@ -373,10 +244,10 @@ end:
 	avcodec_close(va_ctx.video_dec_ctx);
 	avcodec_close(va_ctx.audio_dec_ctx);
 	avformat_close_input(&(va_ctx.fmt_ctx));
-	if (video_dst_file)
-		fclose(video_dst_file);
-	if (audio_dst_file)
-		fclose(audio_dst_file);
+	if (files.video_dst_file)
+		fclose(files.video_dst_file);
+	if (files.audio_dst_file)
+		fclose(files.audio_dst_file);
 	av_frame_free(&frame);
 	av_free(video_dst_data[0]);
 

@@ -9,19 +9,4 @@ extern "C"
 	#include "libavformat/avformat.h"
 }
 
-typedef struct 
-{
-	const char *src_filename;
-	const char *video_dst_filename;
-	const char *audio_dst_filename;
-} IOFileName;
-
-typedef struct
-{
-	AVFormatContext *fmt_ctx;
-	AVCodecContext *video_dec_ctx, *audio_dec_ctx;
-	AVStream *video_stream, *audio_stream;
-	int video_stream_idx, audio_stream_idx;
-} DemuxingVideoAudioContex;
-
 #endif
