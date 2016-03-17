@@ -16,4 +16,12 @@ typedef struct
 	const char *audio_dst_filename;
 } IOFileName;
 
+typedef struct
+{
+	AVFormatContext *fmt_ctx;
+	AVCodecContext *video_dec_ctx, *audio_dec_ctx;
+	AVStream *video_stream, *audio_stream;
+	int video_stream_idx, audio_stream_idx;
+} DemuxingVideoAudioContex;
+
 #endif

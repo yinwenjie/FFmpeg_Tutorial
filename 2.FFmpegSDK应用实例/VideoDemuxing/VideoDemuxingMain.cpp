@@ -2,14 +2,14 @@
 
 #include "VideoDemuxingHeader.h"
 
-static AVFormatContext *fmt_ctx = NULL;
-static AVCodecContext *video_dec_ctx = NULL, *audio_dec_ctx;
+// static AVFormatContext *fmt_ctx = NULL;
+// static AVCodecContext *video_dec_ctx = NULL, *audio_dec_ctx;
 static int width, height;
 static enum AVPixelFormat pix_fmt;
-static AVStream *video_stream = NULL, *audio_stream = NULL;
-static const char *src_filename = NULL;
-static const char *video_dst_filename = NULL;
-static const char *audio_dst_filename = NULL;
+// static AVStream *video_stream = NULL, *audio_stream = NULL;
+// static const char *src_filename = NULL;
+// static const char *video_dst_filename = NULL;
+// static const char *audio_dst_filename = NULL;
 static FILE *video_dst_file = NULL;
 static FILE *audio_dst_file = NULL;
 
@@ -17,7 +17,7 @@ static uint8_t *video_dst_data[4] = {NULL};
 static int      video_dst_linesize[4];
 static int video_dst_bufsize;
 
-static int video_stream_idx = -1, audio_stream_idx = -1;
+// static int video_stream_idx = -1, audio_stream_idx = -1;
 static AVFrame *frame = NULL;
 static AVPacket pkt;
 static int video_frame_count = 0;
@@ -29,7 +29,7 @@ static int audio_frame_count = 0;
  * differences of API usage between them. */
 static int refcount = 0;
 
-static int open_codec_context(int *stream_idx,	AVFormatContext *fmt_ctx, enum AVMediaType type)
+static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ctx, enum AVMediaType type)
 {
 	int ret, stream_index;
 	AVStream *st;
@@ -37,32 +37,50 @@ static int open_codec_context(int *stream_idx,	AVFormatContext *fmt_ctx, enum AV
 	AVCodec *dec = NULL;
 	AVDictionary *opts = NULL;
 
-	ret = av_find_best_stream(fmt_ctx, type, -1, -1, NULL, 0);
-	if (ret < 0) {
-		fprintf(stderr, "Could not find %s stream in input file '%s'\n",
-			av_get_media_type_string(type), src_filename);
+	ret = av_find_best_stream(va_ctx.fmt_ctx, type, -1, -1, NULL, 0);
+	if (ret < 0) 
+	{
+		fprintf(stderr, "Could not find %s stream in input file '%s'\n", av_get_media_type_string(type), files.src_filename);
 		return ret;
-	} else {
+	} 
+	else 
+	{
 		stream_index = ret;
-		st = fmt_ctx->streams[stream_index];
+		st = va_ctx.fmt_ctx->streams[stream_index];
 
 		/* find decoder for the stream */
 		dec_ctx = st->codec;
 		dec = avcodec_find_decoder(dec_ctx->codec_id);
-		if (!dec) {
-			fprintf(stderr, "Failed to find %s codec\n",
-				av_get_media_type_string(type));
+		if (!dec) 
+		{
+			fprintf(stderr, "Failed to find %s codec\n", av_get_media_type_string(type));
 			return AVERROR(EINVAL);
 		}
 
 		/* Init the decoders, with or without reference counting */
 		av_dict_set(&opts, "refcounted_frames", refcount ? "1" : "0", 0);
-		if ((ret = avcodec_open2(dec_ctx, dec, &opts)) < 0) {
-			fprintf(stderr, "Failed to open %s codec\n",
-				av_get_media_type_string(type));
+		if ((ret = avcodec_open2(dec_ctx, dec, &opts)) < 0) 
+		{
+			fprintf(stderr, "Failed to open %s codec\n", av_get_media_type_string(type));
 			return ret;
 		}
-		*stream_idx = stream_index;
+
+		switch (type)
+		{
+		case AVMEDIA_TYPE_VIDEO:
+			va_ctx.video_stream_idx = stream_index;
+			va_ctx.video_stream = va_ctx.fmt_ctx->streams[stream_index];
+			va_ctx.video_dec_ctx = va_ctx.video_stream->codec;
+			break;
+		case AVMEDIA_TYPE_AUDIO:
+			va_ctx.audio_stream_idx = stream_index;
+			va_ctx.audio_stream = va_ctx.fmt_ctx->streams[stream_index];
+			va_ctx.audio_dec_ctx = va_ctx.audio_stream->codec;
+			break;
+		default:
+			fprintf(stderr, "Error: unsupported MediaType: %s\n", av_get_media_type_string(type));
+			return -1;
+		}
 	}
 
 	return 0;
@@ -96,16 +114,16 @@ static int get_format_from_sample_fmt(const char **fmt,	enum AVSampleFormat samp
 	return -1;
 }
 
-static int decode_packet(int *got_frame, int cached)
+static int decode_packet(DemuxingVideoAudioContex &va_ctx, int *got_frame, int cached)
 {
     int ret = 0;
     int decoded = pkt.size;
 
     *got_frame = 0;
 
-    if (pkt.stream_index == video_stream_idx) {
+    if (pkt.stream_index == va_ctx.video_stream_idx) {
         /* decode video frame */
-        ret = avcodec_decode_video2(video_dec_ctx, frame, got_frame, &pkt);
+        ret = avcodec_decode_video2(va_ctx.video_dec_ctx, frame, got_frame, &pkt);
         if (ret < 0) {
             printf("Error decoding video frame (%d)\n", ret);
             return ret;
@@ -142,9 +160,9 @@ static int decode_packet(int *got_frame, int cached)
             /* write to rawvideo file */
             fwrite(video_dst_data[0], 1, video_dst_bufsize, video_dst_file);
         }
-    } else if (pkt.stream_index == audio_stream_idx) {
+    } else if (pkt.stream_index == va_ctx.audio_stream_idx) {
         /* decode audio frame */
-        ret = avcodec_decode_audio4(audio_dec_ctx, frame, got_frame, &pkt);
+        ret = avcodec_decode_audio4(va_ctx.audio_dec_ctx, frame, got_frame, &pkt);
         if (ret < 0) {
             printf("Error decoding audio frame (%s)\n", ret);
             return ret;
@@ -212,7 +230,8 @@ static void hello(IOFileName &files, int argc, char **argv)
 int main(int argc, char **argv)
 {
 	int ret = 0, got_frame;
-	IOFileName files
+	IOFileName files = {NULL};
+	DemuxingVideoAudioContex va_ctx = {NULL};
 
 	hello(files, argc, argv);
 
@@ -220,36 +239,33 @@ int main(int argc, char **argv)
 	av_register_all();
 
 	/* open input file, and allocate format context */
-	if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0)
+	if (avformat_open_input(&(va_ctx.fmt_ctx), files.src_filename, NULL, NULL) < 0)
 	{
-		fprintf(stderr, "Could not open source file %s\n", src_filename);
+		fprintf(stderr, "Could not open source file %s\n", files.src_filename);
 		exit(1);
 	}
 
 	/* retrieve stream information */
-	if (avformat_find_stream_info(fmt_ctx, NULL) < 0) 
+	if (avformat_find_stream_info(va_ctx.fmt_ctx, NULL) < 0) 
 	{
 		fprintf(stderr, "Could not find stream information\n");
 		exit(1);
 	}
 
-	if (open_codec_context(&video_stream_idx, fmt_ctx, AVMEDIA_TYPE_VIDEO) >= 0) 
+	if (open_codec_context(files, va_ctx, AVMEDIA_TYPE_VIDEO) >= 0) 
 	{
-		video_stream = fmt_ctx->streams[video_stream_idx];
-		video_dec_ctx = video_stream->codec;
-
-		video_dst_file = fopen(video_dst_filename, "wb");
+		video_dst_file = fopen(files.video_dst_filename, "wb");
 		if (!video_dst_file) 
 		{
-			fprintf(stderr, "Could not open destination file %s\n", video_dst_filename);
+			fprintf(stderr, "Could not open destination file %s\n", files.video_dst_filename);
 			ret = 1;
 			goto end;
 		}
 
 		/* allocate image where the decoded image will be put */
-		width = video_dec_ctx->width;
-		height = video_dec_ctx->height;
-		pix_fmt = video_dec_ctx->pix_fmt;
+		width = va_ctx.video_dec_ctx->width;
+		height = va_ctx.video_dec_ctx->height;
+		pix_fmt = va_ctx.video_dec_ctx->pix_fmt;
 		ret = av_image_alloc(video_dst_data, video_dst_linesize, width, height, pix_fmt, 1);
 		if (ret < 0) 
 		{
@@ -259,23 +275,21 @@ int main(int argc, char **argv)
 		video_dst_bufsize = ret;
 	}
 
-	if (open_codec_context(&audio_stream_idx, fmt_ctx, AVMEDIA_TYPE_AUDIO) >= 0) 
+	if (open_codec_context(files, va_ctx, AVMEDIA_TYPE_AUDIO) >= 0) 
 	{
-		audio_stream = fmt_ctx->streams[audio_stream_idx];
-		audio_dec_ctx = audio_stream->codec;
-		audio_dst_file = fopen(audio_dst_filename, "wb");
+		audio_dst_file = fopen(files.audio_dst_filename, "wb");
 		if (!audio_dst_file) 
 		{
-			fprintf(stderr, "Could not open destination file %s\n", audio_dst_filename);
+			fprintf(stderr, "Could not open destination file %s\n", files.audio_dst_filename);
 			ret = 1;
 			goto end;
 		}
 	}
 
 	/* dump input information to stderr */
-	av_dump_format(fmt_ctx, 0, src_filename, 0);
+	av_dump_format(va_ctx.fmt_ctx, 0, files.src_filename, 0);
 
-	if (!audio_stream && !video_stream) 
+	if (!va_ctx.audio_stream && !va_ctx.video_stream) 
 	{
 		fprintf(stderr, "Could not find audio or video stream in the input, aborting\n");
 		ret = 1;
@@ -295,17 +309,17 @@ int main(int argc, char **argv)
 	pkt.data = NULL;
 	pkt.size = 0;
 
-	if (video_stream)
-		printf("Demuxing video from file '%s' into '%s'\n", src_filename, video_dst_filename);
-	if (audio_stream)
-		printf("Demuxing audio from file '%s' into '%s'\n", src_filename, audio_dst_filename);
+	if (va_ctx.video_stream)
+		printf("Demuxing video from file '%s' into '%s'\n", files.src_filename, files.video_dst_filename);
+	if (va_ctx.audio_stream)
+		printf("Demuxing audio from file '%s' into '%s'\n", files.src_filename, files.audio_dst_filename);
 
 	/* read frames from the file */
-	while (av_read_frame(fmt_ctx, &pkt) >= 0) 
+	while (av_read_frame(va_ctx.fmt_ctx, &pkt) >= 0) 
 	{
 		AVPacket orig_pkt = pkt;
 		do {
-			ret = decode_packet(&got_frame, 0);
+			ret = decode_packet(va_ctx,&got_frame, 0);
 			if (ret < 0)
 				break;
 			pkt.data += ret;
@@ -318,23 +332,22 @@ int main(int argc, char **argv)
 	pkt.data = NULL;
 	pkt.size = 0;
 	do {
-		decode_packet(&got_frame, 1);
+		decode_packet(va_ctx, &got_frame, 1);
 	} while (got_frame);
 
 	printf("Demuxing succeeded.\n");
 
-	if (video_stream) 
+	if (va_ctx.video_stream) 
 	{
 		printf("Play the output video file with the command:\n"
 			"ffplay -f rawvideo -pix_fmt %s -video_size %dx%d %s\n",
-			av_get_pix_fmt_name(pix_fmt), width, height,
-			video_dst_filename);
+			av_get_pix_fmt_name(pix_fmt), width, height, files.video_dst_filename);
 	}
 
-	if (audio_stream) 
+	if (va_ctx.audio_stream) 
 	{
-		enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
-		int n_channels = audio_dec_ctx->channels;
+		enum AVSampleFormat sfmt = va_ctx.audio_dec_ctx->sample_fmt;
+		int n_channels = va_ctx.audio_dec_ctx->channels;
 		const char *fmt;
 
 		if (av_sample_fmt_is_planar(sfmt))
@@ -352,14 +365,14 @@ int main(int argc, char **argv)
 
 		printf("Play the output audio file with the command:\n"
 			"ffplay -f %s -ac %d -ar %d %s\n",
-			fmt, n_channels, audio_dec_ctx->sample_rate,
-			audio_dst_filename);
+			fmt, n_channels, va_ctx.audio_dec_ctx->sample_rate,
+			files.audio_dst_filename);
 	}
 
 end:
-	avcodec_close(video_dec_ctx);
-	avcodec_close(audio_dec_ctx);
-	avformat_close_input(&fmt_ctx);
+	avcodec_close(va_ctx.video_dec_ctx);
+	avcodec_close(va_ctx.audio_dec_ctx);
+	avformat_close_input(&(va_ctx.fmt_ctx));
 	if (video_dst_file)
 		fclose(video_dst_file);
 	if (audio_dst_file)
