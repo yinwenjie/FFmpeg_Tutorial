@@ -49,18 +49,21 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
 
     *got_frame = 0;
 
-    if (pkt.stream_index == va_ctx.video_stream_idx) {
+    if (pkt.stream_index == va_ctx.video_stream_idx) 
+	{
         /* decode video frame */
         ret = avcodec_decode_video2(va_ctx.video_dec_ctx, frame, got_frame, &pkt);
-        if (ret < 0) {
+        if (ret < 0)
+		{
             printf("Error decoding video frame (%d)\n", ret);
             return ret;
         }
 
-        if (*got_frame) {
-
+        if (*got_frame)
+		{
             if (frame->width != width || frame->height != height ||
-                frame->format != pix_fmt) {
+                frame->format != pix_fmt) 
+			{
                 /* To handle this change, one could call av_image_alloc again and
                  * decode the following frames into another rawvideo file. */
                 printf("Error: Width, height and pixel format have to be "
@@ -74,10 +77,7 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
                 return -1;
             }
 
-            printf("video_frame%s n:%d coded_n:%d pts:%s\n",
-                   cached ? "(cached)" : "",
-                   video_frame_count++, frame->coded_picture_number,
-                   frame->pts);
+            printf("video_frame%s n:%d coded_n:%d pts:%s\n", cached ? "(cached)" : "", video_frame_count++, frame->coded_picture_number, frame->pts);
 
             /* copy decoded frame to destination buffer:
              * this is required since rawvideo expects non aligned data */
@@ -88,10 +88,13 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
             /* write to rawvideo file */
             fwrite(video_dst_data[0], 1, video_dst_bufsize, files.video_dst_file);
         }
-    } else if (pkt.stream_index == va_ctx.audio_stream_idx) {
+    } 
+	else if (pkt.stream_index == va_ctx.audio_stream_idx) 
+	{
         /* decode audio frame */
         ret = avcodec_decode_audio4(va_ctx.audio_dec_ctx, frame, got_frame, &pkt);
-        if (ret < 0) {
+        if (ret < 0) 
+		{
             printf("Error decoding audio frame (%s)\n", ret);
             return ret;
         }
@@ -101,7 +104,8 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
          * Also, some decoders might over-read the packet. */
         decoded = FFMIN(ret, pkt.size);
 
-        if (*got_frame) {
+        if (*got_frame) 
+		{
             size_t unpadded_linesize = frame->nb_samples * av_get_bytes_per_sample((AVSampleFormat)frame->format);
             printf("audio_frame%s n:%d nb_samples:%d pts:%s\n",
                    cached ? "(cached)" : "",
@@ -180,9 +184,7 @@ int main(int argc, char **argv)
 	av_init_packet(&pkt);
 	pkt.data = NULL;
 	pkt.size = 0;
-
-
-
+	
 	/* read frames from the file */
 	while (av_read_frame(va_ctx.fmt_ctx, &pkt) >= 0) 
 	{
