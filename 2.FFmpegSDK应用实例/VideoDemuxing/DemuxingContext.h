@@ -19,4 +19,6 @@ typedef struct
 
 int InitDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx);
 
+void CloseDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx);
+
 #endif

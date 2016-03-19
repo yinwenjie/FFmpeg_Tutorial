@@ -132,7 +132,7 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
     return decoded;
 }
 
-static void hello(IOFileName &files, int argc, char **argv)
+static int hello(IOFileName &files, int argc, char **argv)
 {
 	if (argc != 4 && argc != 5) 
 	{
@@ -145,7 +145,7 @@ static void hello(IOFileName &files, int argc, char **argv)
 			"reference counting frame system which allows keeping a copy of\n"
 			"the data for longer than one decode call.\n"
 			"\n", argv[0]);
-		exit(1);
+		return -1;
 	}
 
 	if (argc == 5 && !strcmp(argv[1], "-refcount"))
@@ -243,13 +243,7 @@ int main(int argc, char **argv)
 	}
 
 end:
-	avcodec_close(va_ctx.video_dec_ctx);
-	avcodec_close(va_ctx.audio_dec_ctx);
-	avformat_close_input(&(va_ctx.fmt_ctx));
-	if (files.video_dst_file)
-		fclose(files.video_dst_file);
-	if (files.audio_dst_file)
-		fclose(files.audio_dst_file);
+	CloseDemuxContext(files, va_ctx);
 	av_frame_free(&frame);
 	av_free(video_dst_data[0]);
 

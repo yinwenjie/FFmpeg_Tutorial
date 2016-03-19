@@ -140,3 +140,14 @@ int InitDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx)
 	return 0;
 }
 
+void CloseDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx)
+{
+	avcodec_close(va_ctx.video_dec_ctx);
+	avcodec_close(va_ctx.audio_dec_ctx);
+	avformat_close_input(&(va_ctx.fmt_ctx));
+	if (files.video_dst_file)
+		fclose(files.video_dst_file);
+	if (files.audio_dst_file)
+		fclose(files.audio_dst_file);
+}
+
