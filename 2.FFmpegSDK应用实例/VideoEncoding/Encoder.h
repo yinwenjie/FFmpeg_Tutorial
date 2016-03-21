@@ -5,8 +5,8 @@
 #include "InputOutput.h"
 
 
-bool OpenEncoder(Codec_Ctx &ctx, IO_Param io_param);
+bool Open_encoder(CodecCtx &ctx, IOParam io_param);
 
-void CloseEncoder(Codec_Ctx &ctx);
+void Close_encoder(CodecCtx &ctx);
 
 #endif

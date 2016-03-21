@@ -3,6 +3,15 @@
 #include "Encoder.h"
 #include "InputOutput.h"
 
+/*************************************************
+Function:		hello
+Description:	输出提示信息和命令行格式
+Calls:			无
+Called By:		main
+Input:			无
+Output:			无
+Return:			无
+*************************************************/
 void hello()
 {
 	printf("*********************************\n");
@@ -22,21 +31,25 @@ void hello()
 	printf("*********************************\n");
 }
 
+/*************************************************
+Function:		main
+Description:	入口点函数
+*************************************************/
 int main(int argc, char **argv)
 {
 	hello();
 
-	IO_Param io_param;
-	ParseInputParam(argc, argv, io_param);
+	IOParam io_param;
+	Parse_input_param(argc, argv, io_param);
 	
-	Codec_Ctx ctx = { NULL, NULL, NULL};
-	int i, ret, got_output;
+	CodecCtx ctx = { NULL, NULL, NULL};
+	int frameIdx, ret, got_output;
 
-	OpenFile(io_param);
-	OpenEncoder(ctx, io_param);
+	Open_file(io_param);
+	Open_encoder(ctx, io_param);
 
 	/* encode 1 second of video */
-	for (i = 0; i < io_param.nTotalFrames; i++) 
+	for (frameIdx = 0; frameIdx < io_param.nTotalFrames; frameIdx++)
 	{
 		av_init_packet(&(ctx.pkt));
 		ctx.pkt.data = NULL;    // packet data will be allocated by the encoder
@@ -45,13 +58,13 @@ int main(int argc, char **argv)
 		fflush(stdout);
 		
 		/* Y */
-		ReadYUVData(ctx, io_param, 0);
+		Read_yuv_data(ctx, io_param, 0);
 
 		/* Cb and Cr */
-		ReadYUVData(ctx, io_param, 1);
-		ReadYUVData(ctx, io_param, 2);
+		Read_yuv_data(ctx, io_param, 1);
+		Read_yuv_data(ctx, io_param, 2);
 
-		ctx.frame->pts = i;
+		ctx.frame->pts = frameIdx;
 
 		/* encode the image */
 		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), ctx.frame, &got_output);
@@ -61,13 +74,13 @@ int main(int argc, char **argv)
 		}
 
 		if (got_output) {
-			printf("Write frame %3d (size=%5d)\n", i, ctx.pkt.size);
+			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
 	}
 	/* get the delayed frames */
-	for (got_output = 1; got_output; i++) {
+	for (got_output = 1; got_output; frameIdx++) {
 		fflush(stdout);
 
 		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), NULL, &got_output);
@@ -77,7 +90,7 @@ int main(int argc, char **argv)
 		}
 
 		if (got_output) {
-			printf("Write frame %3d (size=%5d)\n", i, ctx.pkt.size);
+			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
@@ -85,9 +98,9 @@ int main(int argc, char **argv)
 
 	/* add sequence end code to have a real mpeg file */
 //	fwrite(endcode, 1, sizeof(endcode), pFout);
-	CloseFile(io_param);
+	Close_file(io_param);
 
-	CloseEncoder(ctx);
+	Close_encoder(ctx);
 
 	return 0;
 }

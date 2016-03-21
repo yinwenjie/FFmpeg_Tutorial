@@ -1,7 +1,7 @@
 #include "Encoder.h"
 #include "VideoEncodingHeader.h"
 
-void setContext(Codec_Ctx &ctx, IO_Param io_param)
+void setContext(CodecCtx &ctx, IOParam io_param)
 {
 	/* put sample parameters */
 	ctx.c->bit_rate = io_param.nBitRate;
@@ -24,7 +24,7 @@ void setContext(Codec_Ctx &ctx, IO_Param io_param)
 	av_opt_set(ctx.c->priv_data, "preset", "slow", 0);
 }
 
-bool OpenEncoder(Codec_Ctx &ctx, IO_Param io_param)
+bool Open_encoder(CodecCtx &ctx, IOParam io_param)
 {
 	int ret;
 
@@ -74,7 +74,7 @@ bool OpenEncoder(Codec_Ctx &ctx, IO_Param io_param)
 	return true;
 }
 
-void CloseEncoder(Codec_Ctx &ctx)
+void Close_encoder(CodecCtx &ctx)
 {
 	avcodec_close(ctx.c);
 	av_free(ctx.c);

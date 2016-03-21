@@ -14,7 +14,7 @@ void hello()
 	printf("*********************************\n");
 }
 
-void write_out_yuv_frame(const Codec_Ctx &ctx, IO_Param &in_out)
+void write_out_yuv_frame(const CodecCtx &ctx, IOParam &in_out)
 {
 	uint8_t **pBuf	= ctx.frame->data;
 	int*	pStride = ctx.frame->linesize;
@@ -38,14 +38,14 @@ int main(int argc, char **argv)
 	int uDataSize = 0;
 	int got_picture, len;
 
-	Codec_Ctx ctx;
-	IO_Param inputoutput;
+	CodecCtx ctx;
+	IOParam inputoutput;
 
 	hello();
 	
 	Parse(argc, argv, inputoutput);
 
-	OpenFiles(inputoutput);
+	Open_files(inputoutput);
 	
 	uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
 	
@@ -115,7 +115,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	CloseFiles(inputoutput);
+	Close_files(inputoutput);
 	CloseDecoder(ctx);
 
 	return 1;

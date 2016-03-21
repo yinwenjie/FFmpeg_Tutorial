@@ -2,32 +2,32 @@
 
 #include "InputOutput.h"
 
-bool OpenFiles(IO_Param &io_param)
+bool Open_files(IOParam &IOParam)
 {
-	io_param.pFin = fopen(io_param.pNameIn, "rb");
-	if (!io_param.pFin)
+	IOParam.pFin = fopen(IOParam.pNameIn, "rb");
+	if (!IOParam.pFin)
 	{
-		printf("Could not open %s\n", io_param.pNameIn);
+		printf("Could not open %s\n", IOParam.pNameIn);
 		return false;
 	}
 
-	io_param.pFout = fopen(io_param.pNameOut, "wb");
-	if (!io_param.pFout) {
-		printf("Could not open %s\n", io_param.pNameOut);
+	IOParam.pFout = fopen(IOParam.pNameOut, "wb");
+	if (!IOParam.pFout) {
+		printf("Could not open %s\n", IOParam.pNameOut);
 		return false;
 	}
 
 	return true;
 }
 
-void Parse(int argc, char **argv, IO_Param &io_param)
+void Parse(int argc, char **argv, IOParam &IOParam)
 {
-	io_param.pNameIn = argv[1];
-	io_param.pNameOut = argv[2];
+	IOParam.pNameIn = argv[1];
+	IOParam.pNameOut = argv[2];
 }
 
-void CloseFiles(IO_Param &io_param)
+void Close_files(IOParam &IOParam)
 {
-	fclose(io_param.pFin);
-	fclose(io_param.pFout);
+	fclose(IOParam.pFin);
+	fclose(IOParam.pFout);
 }

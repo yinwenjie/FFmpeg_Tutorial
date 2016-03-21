@@ -3,8 +3,8 @@
 #define _DECODER_H_
 #include "VideoDecodingHeader.h"
 
-bool OpenDeocder(Codec_Ctx &ctx);
+bool OpenDeocder(CodecCtx &ctx);
 
-void CloseDecoder(Codec_Ctx &ctx);
+void CloseDecoder(CodecCtx &ctx);
 
 #endif

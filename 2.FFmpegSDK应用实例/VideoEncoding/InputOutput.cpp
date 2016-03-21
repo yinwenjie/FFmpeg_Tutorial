@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "InputOutput.h"
 
-bool ParseInputParam(int argc, char **argv, IO_Param &io_param)
+bool Parse_input_param(int argc, char **argv, IOParam &io_param)
 {
 	bool bNameInFound = false, bNameOutFound = false, bWidthFound = false, bHeightFound = false, bBitrateFound = false, bTotalFrames = false;
 
@@ -86,7 +86,7 @@ bool ParseInputParam(int argc, char **argv, IO_Param &io_param)
 	return true;
 }
 
-bool OpenFile(IO_Param &io_param)
+bool Open_file(IOParam &io_param)
 {
 	io_param.pFin = fopen(io_param.pNameIn, "rb");
 	if (!(io_param.pFin))
@@ -105,13 +105,13 @@ bool OpenFile(IO_Param &io_param)
 	return true;
 }
 
-void CloseFile(IO_Param &io_param)
+void Close_file(IOParam &io_param)
 {
 	fclose(io_param.pFin);
 	fclose(io_param.pFout);
 }
 
-int ReadYUVData(Codec_Ctx &ctx, IO_Param &io_param, int color_plane)
+int Read_yuv_data(CodecCtx &ctx, IOParam &io_param, int color_plane)
 {
 	int frame_height	= color_plane == 0? ctx.frame->height : ctx.frame->height / 2;
 	int frame_width		= color_plane == 0? ctx.frame->width : ctx.frame->width / 2;

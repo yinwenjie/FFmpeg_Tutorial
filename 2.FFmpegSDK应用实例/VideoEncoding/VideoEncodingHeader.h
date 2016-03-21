@@ -19,6 +19,6 @@ typedef struct
 	AVFrame			*frame;
 	AVCodecContext	*c;
 	AVPacket		pkt;
-} Codec_Ctx;
+} CodecCtx;
 
 #endif

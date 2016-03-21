@@ -9,12 +9,12 @@ typedef struct
 
 	char *pNameIn;
 	char *pNameOut;
-} IO_Param;
+} IOParam;
 
-void Parse(int argc, char **argv, IO_Param &io_param);
+void Parse(int argc, char **argv, IOParam &IOParam);
 
-bool OpenFiles(IO_Param &io_param);
+bool Open_files(IOParam &IOParam);
 
-void CloseFiles(IO_Param &io_param);
+void Close_files(IOParam &IOParam);
 
 #endif
