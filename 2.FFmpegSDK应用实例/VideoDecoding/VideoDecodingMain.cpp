@@ -108,12 +108,13 @@ int main(int argc, char **argv)
 				printf("Decode Error.\n");
 				return ret;
 			}
+
 			if (got_picture) 
 			{
 				write_out_yuv_frame(ctx, inputoutput);
 				printf("Succeed to decode 1 frame!\n");
 			}
-		}
+		} //while(uDataSize > 0)
 	}
 
     ctx.pkt.data = NULL;
@@ -136,7 +137,7 @@ int main(int argc, char **argv)
 		{
 			break;
 		}
-	}
+	} //while(1)
 
 	Close_files(inputoutput);
 	CloseDecoder(ctx);

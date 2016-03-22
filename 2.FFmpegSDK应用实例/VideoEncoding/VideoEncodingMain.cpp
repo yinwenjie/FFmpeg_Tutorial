@@ -82,7 +82,7 @@ int main(int argc, char **argv)
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
-	}
+	} //for (frameIdx = 0; frameIdx < io_param.nTotalFrames; frameIdx++)
 
 	/* get the delayed frames */
 	for (got_output = 1; got_output; frameIdx++) 
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
-	}
+	} //for (got_output = 1; got_output; frameIdx++) 
 
 	//½áÎ²´¦Àí
 	Close_file(io_param);

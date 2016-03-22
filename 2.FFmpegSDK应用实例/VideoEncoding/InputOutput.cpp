@@ -55,7 +55,7 @@ bool Parse_input_param(int argc, char **argv, IOParam &io_param)
 		{
 			io_param.nMaxBFrames = atoi(argv[idx+1]);
 		}
-	}
+	} //for (int idx = 1; idx < argc; idx++)
 
 	//必要信息缺失，返回错误
 	if (!bNameInFound)
