@@ -69,8 +69,9 @@ void Close_file(IOParam &io_param);
 	Description:	从打开的输入文件中读取yuv数据，并保存到CodecCtx::AVFrame
 	Calls:			无
 	Called By:		main
-	Input:			(in)io_param : 保存输入输出文件的指针					
-	Output:			无
+	Input:			(in)io_param : 保存输入输出文件的指针	
+					(in)color_plane ： 颜色分量标识：0-Y, 1-U, 2-V
+	Output:			(out)ctx : 保存AVFrame的结构实例
 	Return:			无
 *************************************************/
 int Read_yuv_data(CodecCtx &ctx, IOParam &io_param, int color_plane);

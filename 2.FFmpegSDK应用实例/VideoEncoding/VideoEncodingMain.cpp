@@ -37,69 +37,75 @@ Description:	入口点函数
 *************************************************/
 int main(int argc, char **argv)
 {
-	hello();
+	hello();									//输出提示信息
 
 	IOParam io_param;
-	Parse_input_param(argc, argv, io_param);
+	if (Parse_input_param(argc, argv, io_param))//读取并解析命令行参数
+	{
+		printf("Error: Incomplete input parameters. Please check the command line.");
+	}
+	
 	
 	CodecCtx ctx = { NULL, NULL, NULL};
 	int frameIdx, ret, got_output;
 
-	Open_file(io_param);
-	Open_encoder(ctx, io_param);
+	Open_file(io_param);						//打开输入输出文件
+	Open_encoder(ctx, io_param);				//根据输入参数设置并打开编码器各个部件
 
 	/* encode 1 second of video */
 	for (frameIdx = 0; frameIdx < io_param.nTotalFrames; frameIdx++)
 	{
-		av_init_packet(&(ctx.pkt));
-		ctx.pkt.data = NULL;    // packet data will be allocated by the encoder
+		av_init_packet(&(ctx.pkt));				//初始化AVPacket实例
+		ctx.pkt.data = NULL;					// packet data will be allocated by the encoder
 		ctx.pkt.size = 0;
 
 		fflush(stdout);
-		
-		/* Y */
-		Read_yuv_data(ctx, io_param, 0);
-
-		/* Cb and Cr */
-		Read_yuv_data(ctx, io_param, 1);
-		Read_yuv_data(ctx, io_param, 2);
+				
+		Read_yuv_data(ctx, io_param, 0);		//Y分量
+		Read_yuv_data(ctx, io_param, 1);		//U分量
+		Read_yuv_data(ctx, io_param, 2);		//V分量
 
 		ctx.frame->pts = frameIdx;
 
 		/* encode the image */
-		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), ctx.frame, &got_output);
-		if (ret < 0) {
+		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), ctx.frame, &got_output);	//将AVFrame中的像素信息编码为AVPacket中的码流
+		if (ret < 0) 
+		{
 			fprintf(stderr, "Error encoding frame\n");
 			exit(1);
 		}
 
-		if (got_output) {
+		if (got_output) 
+		{
+			//获得一个完整的编码帧
 			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
 	}
+
 	/* get the delayed frames */
-	for (got_output = 1; got_output; frameIdx++) {
+	for (got_output = 1; got_output; frameIdx++) 
+	{
 		fflush(stdout);
 
-		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), NULL, &got_output);
-		if (ret < 0) {
+		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), NULL, &got_output);		//输出编码器中剩余的码流
+		if (ret < 0)
+		{
 			fprintf(stderr, "Error encoding frame\n");
 			exit(1);
 		}
 
-		if (got_output) {
+		if (got_output) 
+		{
 			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
 	}
 
-	/* add sequence end code to have a real mpeg file */
-//	fwrite(endcode, 1, sizeof(endcode), pFout);
+	//结尾处理
 	Close_file(io_param);
-
 	Close_encoder(ctx);
 
 	return 0;
