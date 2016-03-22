@@ -18,14 +18,18 @@ extern "C"
 	#include "libavutil/samplefmt.h"
 }
 
+/*************************************************
+	Struct:			CodecCtx
+	Description:	FFMpeg编解码器上下文
+*************************************************/
 typedef struct
 {
-	AVCodec			*pCodec;	
-	AVCodecContext	*pCodecContext;
-	AVCodecParserContext *pCodecParserCtx;
+	AVCodec			*pCodec;				//编解码器实例指针
+	AVCodecContext	*pCodecContext;			//编解码器上下文，指定了编解码的参数
+	AVCodecParserContext *pCodecParserCtx;	//编解码解析器，从码流中截取完整的一个NAL Unit数据
 	
-	AVFrame			*frame;
-	AVPacket		pkt;
+	AVFrame			*frame;					//封装图像对象指针
+	AVPacket		pkt;					//封装码流对象实例
 } CodecCtx;
 
 #endif

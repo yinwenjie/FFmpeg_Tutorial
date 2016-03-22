@@ -3,6 +3,15 @@
 #include "InputOutput.h"
 #include "Decoder.h"
 
+/*************************************************
+Function:		hello
+Description:	输出提示信息和命令行格式
+Calls:			无
+Called By:		main
+Input:			无
+Output:			无
+Return:			无
+*************************************************/
 void hello()
 {
 	printf("*********************************\n");
@@ -14,6 +23,16 @@ void hello()
 	printf("*********************************\n");
 }
 
+
+/*************************************************
+Function:		write_out_yuv_frame
+Description:	将解码完成的YUV数据写出到文件
+Calls:			无
+Called By:		main
+Input:			(in)ctx : 获取AVFrame中的数据地址
+Output:			(out)in_out : 写出到in_out指定的输出文件
+Return:			无
+*************************************************/
 void write_out_yuv_frame(const CodecCtx &ctx, IOParam &in_out)
 {
 	uint8_t **pBuf	= ctx.frame->data;
@@ -32,6 +51,10 @@ void write_out_yuv_frame(const CodecCtx &ctx, IOParam &in_out)
 	}
 }
 
+/*************************************************
+Function:		main
+Description:	入口点函数
+*************************************************/
 int main(int argc, char **argv)
 {
 	uint8_t *pDataPtr = NULL;
