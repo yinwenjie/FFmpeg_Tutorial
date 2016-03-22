@@ -1,6 +1,15 @@
 #include "Encoder.h"
 #include "VideoEncodingHeader.h"
 
+/*************************************************
+	Function:		setContext
+	Description:	根据输入参数设置编码器上下文
+	Calls:			av_opt_set
+	Called By:		Open_encoder
+	Input:			(in)io_param : 命令行输入参数
+	Output:			(out)ctx : 编码器上下文部件					
+	Return:			无
+*************************************************/
 void setContext(CodecCtx &ctx, IOParam io_param)
 {
 	/* put sample parameters */

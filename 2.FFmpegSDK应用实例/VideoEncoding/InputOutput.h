@@ -41,10 +41,38 @@ typedef struct
 *************************************************/
 bool Parse_input_param(int argc, char **argv, IOParam &io_param);
 
+/*************************************************
+	Function:		Open_file
+	Description:	打开输入输出文件
+	Calls:			无
+	Called By:		main
+	Input:			(in/out)io_param : 传入文件的路径					
+	Output:			(in/out)io_param : 用结构体成员保存打开文件的指针
+	Return:			true : 打开输入输出文件正确
+					false : 打开输入输出文件错误
+*************************************************/
 bool Open_file(IOParam &io_param);
 
+/*************************************************
+	Function:		Close_file
+	Description:	关闭输入输出文件
+	Calls:			无
+	Called By:		main
+	Input:			(in)io_param : 保存输入输出文件的指针					
+	Output:			无
+	Return:			无
+*************************************************/
 void Close_file(IOParam &io_param);
 
+/*************************************************
+	Function:		Read_yuv_data
+	Description:	从打开的输入文件中读取yuv数据，并保存到CodecCtx::AVFrame
+	Calls:			无
+	Called By:		main
+	Input:			(in)io_param : 保存输入输出文件的指针					
+	Output:			无
+	Return:			无
+*************************************************/
 int Read_yuv_data(CodecCtx &ctx, IOParam &io_param, int color_plane);
 
 #endif
