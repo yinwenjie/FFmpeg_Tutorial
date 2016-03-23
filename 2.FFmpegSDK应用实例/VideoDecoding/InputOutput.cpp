@@ -12,7 +12,8 @@ bool Open_files(IOParam &IOParam)
 	}
 
 	IOParam.pFout = fopen(IOParam.pNameOut, "wb");
-	if (!IOParam.pFout) {
+	if (!IOParam.pFout) 
+	{
 		printf("Could not open %s\n", IOParam.pNameOut);
 		return false;
 	}

@@ -64,11 +64,11 @@ int main(int argc, char **argv)
 	CodecCtx ctx;
 	IOParam inputoutput;
 
-	hello();
+	hello();								//输出提示信息
 	
-	Parse(argc, argv, inputoutput);
+	Parse(argc, argv, inputoutput);			//解析命令行参数
 
-	Open_files(inputoutput);
+	Open_files(inputoutput);				//打开输入输出文件
 	
 	uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
 	
@@ -76,10 +76,11 @@ int main(int argc, char **argv)
 	
 	printf("Decode video file %s to %s\n", argv[1], argv[2]);
 
-	OpenDeocder(ctx);    
+	Open_deocder(ctx);						//打开编解码器各个组件
 
 	while(1)
 	{
+		//将码流文件按某长度读入输入缓存区
 		uDataSize = fread_s(inbuf,INBUF_SIZE, 1, INBUF_SIZE, inputoutput.pFin);
 		if (0 == uDataSize)
 		{
@@ -90,6 +91,7 @@ int main(int argc, char **argv)
 
 		while(uDataSize > 0)
 		{
+			//解析缓存区中的数据为AVPacket对象，包含一个NAL Unit的数据
 			len = av_parser_parse2(ctx.pCodecParserCtx, ctx.pCodecContext, 
 										&(ctx.pkt.data), &(ctx.pkt.size), 
 										pDataPtr, uDataSize, 
@@ -102,6 +104,7 @@ int main(int argc, char **argv)
 				continue;
 			}
 
+			//根据AVCodecContext的设置，解析AVPacket中的码流，输出到AVFrame
 			int ret = avcodec_decode_video2(ctx.pCodecContext, ctx.frame, &got_picture, &(ctx.pkt));
 			if (ret < 0) 
 			{
@@ -111,6 +114,7 @@ int main(int argc, char **argv)
 
 			if (got_picture) 
 			{
+				//获得一帧完整的图像，写出到输出文件
 				write_out_yuv_frame(ctx, inputoutput);
 				printf("Succeed to decode 1 frame!\n");
 			}
@@ -121,6 +125,7 @@ int main(int argc, char **argv)
     ctx.pkt.size = 0;
 	while(1)
 	{
+		//将编码器中剩余的数据继续输出完
 		int ret = avcodec_decode_video2(ctx.pCodecContext, ctx.frame, &got_picture, &(ctx.pkt));
 		if (ret < 0) 
 		{
@@ -139,8 +144,9 @@ int main(int argc, char **argv)
 		}
 	} //while(1)
 
+	//收尾工作
 	Close_files(inputoutput);
-	CloseDecoder(ctx);
+	Close_decoder(ctx);
 
 	return 1;
 }

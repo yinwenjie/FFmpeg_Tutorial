@@ -1,7 +1,7 @@
 #include "Decoder.h"
 #include "VideoDecodingHeader.h"
 
-bool OpenDeocder(CodecCtx &ctx)
+bool Open_deocder(CodecCtx &ctx)
 {
 	avcodec_register_all();	
 	av_init_packet(&(ctx.pkt));
@@ -47,7 +47,7 @@ bool OpenDeocder(CodecCtx &ctx)
 	return true;
 }
 
-void CloseDecoder(CodecCtx &ctx)
+void Close_decoder(CodecCtx &ctx)
 {
 	avcodec_close(ctx.pCodecContext);
 	av_free(ctx.pCodecContext);
