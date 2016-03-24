@@ -69,6 +69,7 @@ int InitDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx)
 {
 	int ret = 0, width, height;
 	enum AVPixelFormat pix_fmt;
+
 	/* register all formats and codecs */
 	av_register_all();
 

@@ -4,14 +4,12 @@
 static int width, height;
 static enum AVPixelFormat pix_fmt;
 
-static uint8_t *video_dst_data[4] = {NULL};
-static int video_dst_linesize[4];
-static int video_dst_bufsize;
+// static uint8_t *video_dst_data[4] = {NULL};
+// static int video_dst_linesize[4];
+// static int video_dst_bufsize;
 
 static AVFrame *frame = NULL;
 static AVPacket pkt;
-static int video_frame_count = 0;
-static int audio_frame_count = 0;
 
 extern int refcount;
 static int get_format_from_sample_fmt(const char **fmt,	enum AVSampleFormat sample_fmt)
@@ -46,6 +44,8 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
 {
     int ret = 0;
     int decoded = pkt.size;
+	static int video_frame_count = 0;
+	static int audio_frame_count = 0;
 
     *got_frame = 0;
 
@@ -81,12 +81,12 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
 
             /* copy decoded frame to destination buffer:
              * this is required since rawvideo expects non aligned data */
-            av_image_copy(video_dst_data, video_dst_linesize,
+			av_image_copy(va_ctx.video_dst_data, va_ctx.video_dst_linesize,
                           (const uint8_t **)(frame->data), frame->linesize,
                           pix_fmt, width, height);
 
             /* write to rawvideo file */
-            fwrite(video_dst_data[0], 1, video_dst_bufsize, files.video_dst_file);
+			fwrite(va_ctx.video_dst_data[0], 1, va_ctx.video_dst_bufsize, files.video_dst_file);
         }
     } 
 	else if (pkt.stream_index == va_ctx.audio_stream_idx) 
@@ -245,7 +245,7 @@ int main(int argc, char **argv)
 end:
 	CloseDemuxContext(files, va_ctx);
 	av_frame_free(&frame);
-	av_free(video_dst_data[0]);
+	av_free(va_ctx.video_dst_data[0]);
 
 	return ret < 0;
 }
