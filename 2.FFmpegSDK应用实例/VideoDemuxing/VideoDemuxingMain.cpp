@@ -15,9 +15,13 @@ extern int refcount;
 static int get_format_from_sample_fmt(const char **fmt,	enum AVSampleFormat sample_fmt)
 {
 	int i;
-	struct sample_fmt_entry {
+	struct sample_fmt_entry 
+	{
 		enum AVSampleFormat sample_fmt; const char *fmt_be, *fmt_le;
-	} sample_fmt_entries[] = {
+	}
+
+	sample_fmt_entries[] = 
+	{
 		{ AV_SAMPLE_FMT_U8,  "u8",    "u8"    },
 		{ AV_SAMPLE_FMT_S16, "s16be", "s16le" },
 		{ AV_SAMPLE_FMT_S32, "s32be", "s32le" },
@@ -26,17 +30,17 @@ static int get_format_from_sample_fmt(const char **fmt,	enum AVSampleFormat samp
 	};
 	*fmt = NULL;
 
-	for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
+	for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++)
+	{
 		struct sample_fmt_entry *entry = &sample_fmt_entries[i];
-		if (sample_fmt == entry->sample_fmt) {
+		if (sample_fmt == entry->sample_fmt)
+		{
 			*fmt = AV_NE(entry->fmt_be, entry->fmt_le);
 			return 0;
 		}
 	}
 
-	fprintf(stderr,
-		"sample format %s is not supported as output format\n",
-		av_get_sample_fmt_name(sample_fmt));
+	fprintf(stderr,	"sample format %s is not supported as output format\n",	av_get_sample_fmt_name(sample_fmt));
 	return -1;
 }
 
@@ -61,8 +65,7 @@ static int decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, in
 
         if (*got_frame)
 		{
-            if (frame->width != width || frame->height != height ||
-                frame->format != pix_fmt) 
+            if (frame->width != width || frame->height != height || frame->format != pix_fmt) 
 			{
                 /* To handle this change, one could call av_image_alloc again and
                  * decode the following frames into another rawvideo file. */
@@ -189,7 +192,8 @@ int main(int argc, char **argv)
 	while (av_read_frame(va_ctx.fmt_ctx, &pkt) >= 0) 
 	{
 		AVPacket orig_pkt = pkt;
-		do {
+		do 
+		{
 			ret = decode_packet(files, va_ctx, &got_frame, 0);
 			if (ret < 0)
 				break;
