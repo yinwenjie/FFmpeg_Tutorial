@@ -10,6 +10,9 @@ typedef struct
 	AVFormatContext *fmt_ctx;
 	AVCodecContext *video_dec_ctx, *audio_dec_ctx;
 	AVStream *video_stream, *audio_stream;
+	AVFrame *frame;
+	AVPacket pkt;
+
 	int video_stream_idx, audio_stream_idx;
 
 	uint8_t *video_dst_data[4];

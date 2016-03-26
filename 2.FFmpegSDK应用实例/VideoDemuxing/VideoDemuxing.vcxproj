@@ -79,10 +79,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AVDecoder.cpp" />
     <ClCompile Include="DemuxingContext.cpp" />
     <ClCompile Include="VideoDemuxingMain.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AVDecoder.h" />
     <ClInclude Include="DemuxingContext.h" />
     <ClInclude Include="IOFile.h" />
     <ClInclude Include="VideoDemuxingHeader.h" />
