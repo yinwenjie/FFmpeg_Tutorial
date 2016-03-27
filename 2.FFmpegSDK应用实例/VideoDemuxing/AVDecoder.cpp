@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include "AVDecoder.h"
 
-extern int refcount;
 extern int width, height;
 extern enum AVPixelFormat pix_fmt;
 
@@ -119,7 +118,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 
 	/* If we use frame reference counting, we own the data and need
 	* to de-reference it when we don't use it anymore */
-	if (*got_frame && refcount)
+	if (*got_frame && files.refcount)
 		av_frame_unref(va_ctx.frame);
 
 	return decoded;

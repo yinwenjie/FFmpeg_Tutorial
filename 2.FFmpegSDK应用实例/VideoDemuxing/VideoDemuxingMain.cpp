@@ -4,8 +4,16 @@
 
 int width, height;
 enum AVPixelFormat pix_fmt;
-extern int refcount;
 
+/*************************************************
+Function:		hello
+Description:	输出提示信息和命令行格式
+Calls:			无
+Called By:		main
+Input:			无
+Output:			无
+Return:			无
+*************************************************/
 static int hello(IOFileName &files, int argc, char **argv)
 {
 	if (argc != 4 && argc != 5) 
@@ -24,7 +32,7 @@ static int hello(IOFileName &files, int argc, char **argv)
 
 	if (argc == 5 && !strcmp(argv[1], "-refcount"))
 	{
-		refcount = 1;
+		files.refcount = 1;
 		argv++;
 	}
 

@@ -5,7 +5,6 @@
  * both paths in your application but pick the one most appropriate to your
  * needs. Look for the use of refcount in this example to see what are the
  * differences of API usage between them. */
-int refcount = 0;
 
 static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ctx, enum AVMediaType type)
 {
@@ -36,7 +35,7 @@ static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ct
 		}
 
 		/* Init the decoders, with or without reference counting */
-		av_dict_set(&opts, "refcounted_frames", refcount ? "1" : "0", 0);
+		av_dict_set(&opts, "refcounted_frames", files.refcount ? "1" : "0", 0);
 		if ((ret = avcodec_open2(dec_ctx, dec, &opts)) < 0) 
 		{
 			fprintf(stderr, "Failed to open %s codec\n", av_get_media_type_string(type));
