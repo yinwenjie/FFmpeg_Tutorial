@@ -63,11 +63,9 @@ static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ct
 	return 0;
 }
 
-
 int InitDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx)
 {
 	int ret = 0, width, height;
-	enum AVPixelFormat pix_fmt;
 
 	/* register all formats and codecs */
 	av_register_all();
@@ -98,8 +96,8 @@ int InitDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx)
 		/* allocate image where the decoded image will be put */
 		width = va_ctx.video_dec_ctx->width;
 		height = va_ctx.video_dec_ctx->height;
-		pix_fmt = va_ctx.video_dec_ctx->pix_fmt;
-		ret = av_image_alloc(va_ctx.video_dst_data, va_ctx.video_dst_linesize, width, height, pix_fmt, 1);
+		va_ctx.pix_fmt = va_ctx.video_dec_ctx->pix_fmt;
+		ret = av_image_alloc(va_ctx.video_dst_data, va_ctx.video_dst_linesize, width, height, va_ctx.pix_fmt, 1);
 		if (ret < 0) 
 		{
 			fprintf(stderr, "Could not allocate raw video buffer\n");

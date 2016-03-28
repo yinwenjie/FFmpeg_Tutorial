@@ -2,14 +2,18 @@
 #include "AVDecoder.h"
 
 extern int width, height;
-extern enum AVPixelFormat pix_fmt;
 
 int Get_format_from_sample_fmt(const char **fmt, enum AVSampleFormat sample_fmt)
 {
 	int i;
-	struct sample_fmt_entry {
-		enum AVSampleFormat sample_fmt; const char *fmt_be, *fmt_le;
-	} sample_fmt_entries[] = {
+	struct sample_fmt_entry 
+	{
+		enum AVSampleFormat sample_fmt; 
+		const char *fmt_be, *fmt_le;
+	}
+	
+	sample_fmt_entries[] = 
+	{
 		{ AV_SAMPLE_FMT_U8, "u8", "u8" },
 		{ AV_SAMPLE_FMT_S16, "s16be", "s16le" },
 		{ AV_SAMPLE_FMT_S32, "s32be", "s32le" },
@@ -18,9 +22,11 @@ int Get_format_from_sample_fmt(const char **fmt, enum AVSampleFormat sample_fmt)
 	};
 	*fmt = NULL;
 
-	for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
+	for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++)
+	{
 		struct sample_fmt_entry *entry = &sample_fmt_entries[i];
-		if (sample_fmt == entry->sample_fmt) {
+		if (sample_fmt == entry->sample_fmt)
+		{
 			*fmt = AV_NE(entry->fmt_be, entry->fmt_le);
 			return 0;
 		}
@@ -54,7 +60,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 		if (*got_frame)
 		{
 			if (va_ctx.frame->width != width || va_ctx.frame->height != height ||
-				va_ctx.frame->format != pix_fmt)
+				va_ctx.frame->format != va_ctx.pix_fmt)
 			{
 				/* To handle this change, one could call av_image_alloc again and
 				* decode the following frames into another rawvideo file. */
@@ -63,7 +69,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 					"pixel format of the input video changed:\n"
 					"old: width = %d, height = %d, format = %s\n"
 					"new: width = %d, height = %d, format = %s\n",
-					width, height, av_get_pix_fmt_name((AVPixelFormat)pix_fmt),
+					width, height, av_get_pix_fmt_name((AVPixelFormat)(va_ctx.pix_fmt)),
 					va_ctx.frame->width, va_ctx.frame->height,
 					av_get_pix_fmt_name((AVPixelFormat)va_ctx.frame->format));
 				return -1;
@@ -75,7 +81,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 			* this is required since rawvideo expects non aligned data */
 			av_image_copy(va_ctx.video_dst_data, va_ctx.video_dst_linesize,
 				(const uint8_t **)(va_ctx.frame->data), va_ctx.frame->linesize,
-				pix_fmt, width, height);
+				va_ctx.pix_fmt, width, height);
 
 			/* write to rawvideo file */
 			fwrite(va_ctx.video_dst_data[0], 1, va_ctx.video_dst_bufsize, files.video_dst_file);

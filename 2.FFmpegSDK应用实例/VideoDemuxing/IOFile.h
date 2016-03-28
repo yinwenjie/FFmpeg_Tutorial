@@ -1,6 +1,10 @@
 #ifndef _IOFILE_H_
 #define _IOFILE_H_
 
+/*************************************************
+Struct:			IOParam
+Description:	接收命令行参数
+*************************************************/
 typedef struct 
 {
 	const char *src_filename;

@@ -3,7 +3,6 @@
 #include "AVDecoder.h"
 
 int width, height;
-enum AVPixelFormat pix_fmt;
 
 /*************************************************
 Function:		hello
@@ -43,6 +42,10 @@ static int hello(IOFileName &files, int argc, char **argv)
 	return 0;
 }
 
+/*************************************************
+Function:		main
+Description:	入口点函数
+*************************************************/
 int main(int argc, char **argv)
 {
 	int ret = 0, got_frame;
@@ -98,7 +101,7 @@ int main(int argc, char **argv)
 	{
 		printf("Play the output video file with the command:\n"
 			"ffplay -f rawvideo -pix_fmt %s -video_size %dx%d %s\n",
-			av_get_pix_fmt_name(pix_fmt), width, height, files.video_dst_filename);
+			av_get_pix_fmt_name(va_ctx.pix_fmt), width, height, files.video_dst_filename);
 	}
 
 	if (va_ctx.audio_stream) 
