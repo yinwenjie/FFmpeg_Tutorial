@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include "AVDecoder.h"
 
-extern int width, height;
 
 int Get_format_from_sample_fmt(const char **fmt, enum AVSampleFormat sample_fmt)
 {
@@ -59,7 +58,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 
 		if (*got_frame)
 		{
-			if (va_ctx.frame->width != width || va_ctx.frame->height != height ||
+			if (va_ctx.frame->width != va_ctx.width || va_ctx.frame->height != va_ctx.height ||
 				va_ctx.frame->format != va_ctx.pix_fmt)
 			{
 				/* To handle this change, one could call av_image_alloc again and
@@ -69,7 +68,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 					"pixel format of the input video changed:\n"
 					"old: width = %d, height = %d, format = %s\n"
 					"new: width = %d, height = %d, format = %s\n",
-					width, height, av_get_pix_fmt_name((AVPixelFormat)(va_ctx.pix_fmt)),
+					va_ctx.width, va_ctx.height, av_get_pix_fmt_name((AVPixelFormat)(va_ctx.pix_fmt)),
 					va_ctx.frame->width, va_ctx.frame->height,
 					av_get_pix_fmt_name((AVPixelFormat)va_ctx.frame->format));
 				return -1;
@@ -81,7 +80,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 			* this is required since rawvideo expects non aligned data */
 			av_image_copy(va_ctx.video_dst_data, va_ctx.video_dst_linesize,
 				(const uint8_t **)(va_ctx.frame->data), va_ctx.frame->linesize,
-				va_ctx.pix_fmt, width, height);
+				va_ctx.pix_fmt, va_ctx.width, va_ctx.height);
 
 			/* write to rawvideo file */
 			fwrite(va_ctx.video_dst_data[0], 1, va_ctx.video_dst_bufsize, files.video_dst_file);

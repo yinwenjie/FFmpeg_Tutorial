@@ -18,6 +18,7 @@ typedef struct
 	AVPacket pkt;
 
 	int video_stream_idx, audio_stream_idx;
+	int width, height;
 
 	uint8_t *video_dst_data[4];
 	int video_dst_linesize[4];

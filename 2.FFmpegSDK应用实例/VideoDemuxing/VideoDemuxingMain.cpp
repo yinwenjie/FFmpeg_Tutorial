@@ -2,7 +2,6 @@
 #include "DemuxingContext.h"
 #include "AVDecoder.h"
 
-int width, height;
 
 /*************************************************
 Function:		hello
@@ -101,7 +100,7 @@ int main(int argc, char **argv)
 	{
 		printf("Play the output video file with the command:\n"
 			"ffplay -f rawvideo -pix_fmt %s -video_size %dx%d %s\n",
-			av_get_pix_fmt_name(va_ctx.pix_fmt), width, height, files.video_dst_filename);
+			av_get_pix_fmt_name(va_ctx.pix_fmt), va_ctx.width, va_ctx.height, files.video_dst_filename);
 	}
 
 	if (va_ctx.audio_stream) 
