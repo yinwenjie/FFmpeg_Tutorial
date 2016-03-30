@@ -51,14 +51,14 @@ int main(int argc, char **argv)
 	IOFileName files = {NULL};
 	DemuxingVideoAudioContex va_ctx = {NULL};
 
-	hello(files, argc, argv);
+	hello(files, argc, argv);					//输出提示信息
 
-	if (InitDemuxContext(files, va_ctx) < 0)
+	if (InitDemuxContext(files, va_ctx) < 0)	//初始化解复用上下文结构体，包括注册组件、打开输入输出文件、查找音视频流等
 	{
 		goto end;
 	}
 
-	va_ctx.frame = av_frame_alloc();
+	va_ctx.frame = av_frame_alloc();			//分配AVFrame结构对象
 	if (!va_ctx.frame)
 	{
 		fprintf(stderr, "Could not allocate frame\n");
@@ -67,16 +67,17 @@ int main(int argc, char **argv)
 	}
 
 	/* initialize packet, set data to NULL, let the demuxer fill it */
-	av_init_packet(&va_ctx.pkt);
+	av_init_packet(&va_ctx.pkt);				//初始化AVPacket对象
 	va_ctx.pkt.data = NULL;
 	va_ctx.pkt.size = 0;
 	
 	/* read frames from the file */
-	while (av_read_frame(va_ctx.fmt_ctx, &va_ctx.pkt) >= 0)
+	while (av_read_frame(va_ctx.fmt_ctx, &va_ctx.pkt) >= 0)		//从输入程序中读取一个包的数据
 	{
 		AVPacket orig_pkt = va_ctx.pkt;
-		do {
-			ret = Decode_packet(files, va_ctx, &got_frame, 0);
+		do 
+		{
+			ret = Decode_packet(files, va_ctx, &got_frame, 0);	//解码这个包
 			if (ret < 0)
 				break;
 			va_ctx.pkt.data += ret;
@@ -90,7 +91,7 @@ int main(int argc, char **argv)
 	va_ctx.pkt.size = 0;
 	do 
 	{
-		Decode_packet(files, va_ctx, &got_frame, 1);
+		Decode_packet(files, va_ctx, &got_frame, 1);	//解码缓存中未输出的包
 	}
 	while (got_frame);
 
