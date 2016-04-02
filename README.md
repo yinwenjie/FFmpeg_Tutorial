@@ -105,7 +105,71 @@ ffmpeg.exe可谓是整个工程的核心所在，它的主要功能是完成音�
 
 
 ---
-#二、调用FFmpeg SDK对YUV视频序列进行编码
+##二、调用FFmpeg SDK对YUV视频序列进行编码
+
+视频由像素格式编码为码流格式是FFMpeg的一项基本功能。通常，视频编码器的输入视频通常为原始的图像像素值，输出格式为符合某种格式规定的二进制码流。
+
+##1、FFMpeg进行视频编码所需要的结构：
+
+- AVCodec：AVCodec结构保存了一个编解码器的实例，实现实际的编码功能。通常我们在程序中定义一个指向AVCodec结构的指针指向该实例。
+- AVCodecContext：AVCodecContext表示AVCodec所代表的上下文信息，保存了AVCodec所需要的一些参数。对于实现编码功能，我们可以在这个结构中设置我们指定的编码参数。通常也是定义一个指针指向AVCodecContext。
+- AVFrame：AVFrame结构保存编码之前的像素数据，并作为编码器的输入数据。其在程序中也是一个指针的形式。
+- AVPacket：AVPacket表示码流包结构，包含编码之后的码流数据。该结构可以不定义指针，以一个对象的形式定义。
+
+在我们的程序中，我们将这些结构整合在了一个结构体中：
+
+	/*************************************************
+	Struct:			CodecCtx
+	Description:	FFMpeg编解码器上下文
+	*************************************************/
+	typedef struct
+	{
+		AVCodec			*codec;		//指向编解码器实例
+		AVFrame			*frame;		//保存解码之后/编码之前的像素数据
+		AVCodecContext	*c;			//编解码器上下文，保存编解码器的一些参数设置
+		AVPacket		pkt;		//码流包结构，包含编码码流数据
+	} CodecCtx;
+
+##2、FFMpeg编码的主要步骤：
+
+###(1)、输入编码参数
+
+这一步我们可以设置一个专门的配置文件，并将参数按照某个事写入这个配置文件中，再在程序中解析这个配置文件获得编码的参数。如果参数不多的话，我们可以直接使用命令行将编码参数传入即可。
+
+###(2)、按照要求初始化需要的FFMpeg结构
+
+首先，所有涉及到编解码的的功能，都必须要注册音视频编解码器之后才能使用。注册编解码调用下面的函数：
+
+	avcodec_register_all();
+
+编解码器注册完成之后，根据指定的CODEC_ID查找指定的codec实例。CODEC_ID通常指定了编解码器的格式，在这里我们使用当前应用最为广泛的H.264格式为例。查找codec调用的函数为avcodec\_find_encoder，其声明格式为：
+
+	AVCodec *avcodec_find_encoder(enum AVCodecID id);
+
+该函数的输入参数为一个AVCodecID的枚举类型，返回值为一个指向AVCodec结构的指针，用于接收找到的编解码器实例。如果没有找到，那么该函数会返回一个空指针。调用方法如下：
+
+	/* find the mpeg1 video encoder */
+	ctx.codec = avcodec_find_encoder(AV_CODEC_ID_H264);	//根据CODEC_ID查找编解码器对象实例的指针
+	if (!ctx.codec) 
+	{
+		fprintf(stderr, "Codec not found\n");
+		return false;
+	}
+
+AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecContext实例需要我们前面查找到的AVCodec作为参数，调用的是avcodec\_alloc_context3函数。其声明方式为：
+
+	AVCodecContext *avcodec_alloc_context3(const AVCodec *codec);
+
+其特点同avcodec\_find_encoder类似，返回一个指向AVCodecContext实例的指针。如果分配失败，会返回一个空指针。调用方式为：
+
+	ctx.c = avcodec_alloc_context3(ctx.codec);			//分配AVCodecContext实例
+	if (!ctx.c)
+	{
+		fprintf(stderr, "Could not allocate video codec context\n");
+		return false;
+	}
+
+需注意，在分配成功之后，应将编码的参数设置赋值给AVCodecContext的成员。
 
 ---
 #三、调用FFmpeg SDK对H.264格式的视频压缩码流进行解码
