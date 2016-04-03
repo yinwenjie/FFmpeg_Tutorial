@@ -171,6 +171,46 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 需注意，在分配成功之后，应将编码的参数设置赋值给AVCodecContext的成员。
 
+现在，AVCodec、AVCodecContext的指针都已经分配好，然后以这两个对象的指针作为参数打开编码器对象。调用的函数为avcodec\_open2，声明方式为：
+
+	int avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options);
+
+该函数的前两个参数是我们刚刚建立的两个对象，第三个参数为一个字典类型对象，用于保存函数执行过程总未能识别的AVCodecContext和另外一些私有设置选项。函数的返回值表示编码器是否打开成功，若成功返回0，失败返回一个负数。调用方式为：
+
+	if (avcodec_open2(ctx.c, ctx.codec, NULL) < 0)		//根据编码器上下文打开编码器
+	{
+		fprintf(stderr, "Could not open codec\n");
+		exit(1);
+	}
+
+然后，我们需要处理AVFrame对象。AVFrame表示视频原始像素数据的一个容器，处理该类型数据需要两个步骤，其一是分配AVFrame对象，其二是分配实际的像素数据的存储空间。分配对象空间类似于new操作符一样，只是需要调用函数av\_frame_alloc。如果失败，那么函数返回一个空指针。AVFrame对象分配成功后，需要设置图像的分辨率和像素格式等。实际调用过程如下：
+
+	ctx.frame = av_frame_alloc();						//分配AVFrame对象
+	if (!ctx.frame) 
+	{
+        fprintf(stderr, "Could not allocate video frame\n");
+        return false;
+    }
+	ctx.frame->format = ctx.c->pix_fmt;
+	ctx.frame->width = ctx.c->width;
+	ctx.frame->height = ctx.c->height;
+
+分配像素的存储空间需要调用av\_image_alloc函数，其声明方式为：
+
+	int av_image_alloc(uint8_t *pointers[4], int linesizes[4], int w, int h, enum AVPixelFormat pix_fmt, int align);
+
+该函数的四个参数分别表示AVFrame结构中的缓存指针、各个颜色分量的宽度、图像分辨率（宽、高）、像素格式和内存对其的大小。该函数会返回分配的内存的大小，如果失败则返回一个负值。具体调用方式如：
+
+	ret = av_image_alloc(ctx.frame->data, ctx.frame->linesize, ctx.c->width, ctx.c->height, ctx.c->pix_fmt, 32);
+	if (ret < 0) 
+	{
+		fprintf(stderr, "Could not allocate raw picture buffer\n");
+		return false;
+	}
+
+###(3)、编码循环体
+
+
 ---
 #三、调用FFmpeg SDK对H.264格式的视频压缩码流进行解码
 
