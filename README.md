@@ -210,6 +210,30 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 ###(3)、编码循环体
 
+到此为止，我们的准备工作已经大致完成，下面开始执行实际编码的循环过程。用伪代码大致表示编码的流程为：
+
+	while (numCoded < maxNumToCode)
+	{
+		read_yuv_data();
+		encode_video_frame();
+		write_out_h264();
+	}
+
+其中，read\_yuv_data部分直接使用fread语句读取即可，只需要知道的是，三个颜色分量Y/U/V的地址分别为AVframe::data[0]、AVframe::data[1]和AVframe::data[2]，图像的宽度分别为AVframe::linesize[0]、AVframe::linesize[1]和AVframe::linesize[2]。需要注意的是，linesize中的值通常指的是stride而不是width，也就是说，像素保存区可能是带有一定宽度的无效边区的，在读取数据时需注意。
+
+编码前另外需要完成的操作时初始化AVPacket对象。该对象保存了编码之后的码流数据。对其进行初始化的操作非常简单，只需要调用av\_init_packet并传入AVPacket对象的指针。随后将AVPacket::data设为NULL，AVPacket::size赋值0.
+
+成功将原始的YUV像素值保存到了AVframe结构中之后，便可以调用avcodec\_encode_video2函数进行实际的编码操作。该函数可谓是整个工程的核心所在，其声明方式为：
+
+	int avcodec_encode_video2(AVCodecContext *avctx, AVPacket *avpkt, const AVFrame *frame, int *got_packet_ptr);
+
+其参数和返回值的意义：
+
+- avctx: AVCodecContext结构，指定了编码的一些参数；
+- avpkt: AVPacket对象的指针，用于保存输出码流；
+- frame：AVframe结构，用于传入原始的像素数据；
+- got_packet_ptr：输出参数，用于标识AVPacket中是否已经有了完整的一帧；
+- 返回值：编码是否成功。成功返回0，失败则返回负的错误码
 
 ---
 #三、调用FFmpeg SDK对H.264格式的视频压缩码流进行解码
