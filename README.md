@@ -235,6 +235,98 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 - got_packet_ptr：输出参数，用于标识AVPacket中是否已经有了完整的一帧；
 - 返回值：编码是否成功。成功返回0，失败则返回负的错误码
 
+通过输出参数*got_packet_ptr，我们可以判断是否应有一帧完整的码流数据包输出，如果是，那么可以将AVpacket中的码流数据输出出来，其地址为AVPacket::data，大小为AVPacket::size。具体调用方式如下：
+
+	/* encode the image */
+	ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), ctx.frame, &got_output);	//将AVFrame中的像素信息编码为AVPacket中的码流
+	if (ret < 0) 
+	{
+		fprintf(stderr, "Error encoding frame\n");
+		exit(1);
+	}
+
+	if (got_output) 
+	{
+		//获得一个完整的编码帧
+		printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
+		fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
+		av_packet_unref(&(ctx.pkt));
+	}
+
+因此，一个完整的编码循环提就可以使用下面的代码实现：
+
+	/* encode 1 second of video */
+	for (frameIdx = 0; frameIdx < io_param.nTotalFrames; frameIdx++)
+	{
+		av_init_packet(&(ctx.pkt));				//初始化AVPacket实例
+		ctx.pkt.data = NULL;					// packet data will be allocated by the encoder
+		ctx.pkt.size = 0;
+
+		fflush(stdout);
+				
+		Read_yuv_data(ctx, io_param, 0);		//Y分量
+		Read_yuv_data(ctx, io_param, 1);		//U分量
+		Read_yuv_data(ctx, io_param, 2);		//V分量
+
+		ctx.frame->pts = frameIdx;
+
+		/* encode the image */
+		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), ctx.frame, &got_output);	//将AVFrame中的像素信息编码为AVPacket中的码流
+		if (ret < 0) 
+		{
+			fprintf(stderr, "Error encoding frame\n");
+			exit(1);
+		}
+
+		if (got_output) 
+		{
+			//获得一个完整的编码帧
+			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
+			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
+			av_packet_unref(&(ctx.pkt));
+		}
+	} //for (frameIdx = 0; frameIdx < io_param.nTotalFrames; frameIdx++)
+
+###(4)、收尾处理
+
+如果我们就此结束编码器的整个运行过程，我们会发现，编码完成之后的码流对比原来的数据少了一帧。这是因为我们是根据读取原始像素数据结束来判断循环结束的，这样最后一帧还保留在编码器中尚未输出。所以在关闭整个解码过程之前，我们必须继续执行编码的操作，直到将最后一帧输出为止。执行这项操作依然调用avcodec\_encode_video2函数，只是表示AVFrame的参数设为NULL即可：
+
+	/* get the delayed frames */
+	for (got_output = 1; got_output; frameIdx++) 
+	{
+		fflush(stdout);
+
+		ret = avcodec_encode_video2(ctx.c, &(ctx.pkt), NULL, &got_output);		//输出编码器中剩余的码流
+		if (ret < 0)
+		{
+			fprintf(stderr, "Error encoding frame\n");
+			exit(1);
+		}
+
+		if (got_output) 
+		{
+			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
+			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
+			av_packet_unref(&(ctx.pkt));
+		}
+	} //for (got_output = 1; got_output; frameIdx++) 
+
+此后，我们就可以按计划关闭编码器的各个组件，结束整个编码的流程。编码器组件的释放流程可类比建立流程，需要关闭AVCocec、释放AVCodecContext、释放AVFrame中的图像缓存和对象本身：
+
+	avcodec_close(ctx.c);
+	av_free(ctx.c);
+	av_freep(&(ctx.frame->data[0]));
+	av_frame_free(&(ctx.frame));
+
+##3、总结
+
+使用FFMpeg进行视频编码的主要流程如：
+
+1. 首先解析、处理输入参数，如编码器的参数、图像的参数、输入输出文件；
+2. 建立整个FFMpeg编码器的各种组件工具，顺序依次为：avcodec\_register\_all \-> avcodec\_find_encoder \-> avcodec\_alloc\_context3 \->  avcodec\_open2 \-> av\_frame\_alloc \->  av\_image\_alloc;
+3. 编码循环：av\_init_packet \-> avcodec\_encode\_video2(两次) \-> av\_packet\_unref
+4. 关闭编码器组件：avcodec\_close，av\_free，av\_freep，av\_frame\_free
+
 ---
 #三、调用FFmpeg SDK对H.264格式的视频压缩码流进行解码
 
