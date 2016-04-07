@@ -111,10 +111,10 @@ ffmpeg.exe可谓是整个工程的核心所在，它的主要功能是完成音�
 
 ##1、FFMpeg进行视频编码所需要的结构：
 
-- AVCodec：AVCodec结构保存了一个编解码器的实例，实现实际的编码功能。通常我们在程序中定义一个指向AVCodec结构的指针指向该实例。
-- AVCodecContext：AVCodecContext表示AVCodec所代表的上下文信息，保存了AVCodec所需要的一些参数。对于实现编码功能，我们可以在这个结构中设置我们指定的编码参数。通常也是定义一个指针指向AVCodecContext。
-- AVFrame：AVFrame结构保存编码之前的像素数据，并作为编码器的输入数据。其在程序中也是一个指针的形式。
-- AVPacket：AVPacket表示码流包结构，包含编码之后的码流数据。该结构可以不定义指针，以一个对象的形式定义。
+- **AVCodec**：AVCodec结构保存了一个编解码器的实例，实现实际的编码功能。通常我们在程序中定义一个指向AVCodec结构的指针指向该实例。
+- **AVCodecContext**：AVCodecContext表示AVCodec所代表的上下文信息，保存了AVCodec所需要的一些参数。对于实现编码功能，我们可以在这个结构中设置我们指定的编码参数。通常也是定义一个指针指向AVCodecContext。
+- **AVFrame**：AVFrame结构保存编码之前的像素数据，并作为编码器的输入数据。其在程序中也是一个指针的形式。
+- **AVPacket**：AVPacket表示码流包结构，包含编码之后的码流数据。该结构可以不定义指针，以一个对象的形式定义。
 
 在我们的程序中，我们将这些结构整合在了一个结构体中：
 
@@ -424,7 +424,99 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 ###(3)、解码循环体
 
-完成必须的codec组件的建立和初始化之后，开始进入正式的解码循环过程。
+完成必须的codec组件的建立和初始化之后，开始进入正式的解码循环过程。解码循环通常按照以下几个步骤实现：
+
+首先按照某个指定的长度读取一段码流保存到缓存区中。
+
+由于H.264中一个包的长度是不定的，我们读取一段固定长度的码流通常不可能刚好读出一个包的长度。所以我们就需要使用AVCodecParserContext结构对我们读出的码流信息进行解析，直到取出一个完整的H.264包。对码流解析的函数为av\_parser_parse2，声明方式如：
+
+	int av_parser_parse2(AVCodecParserContext *s,
+                     AVCodecContext *avctx,
+                     uint8_t **poutbuf, int *poutbuf_size,
+                     const uint8_t *buf, int buf_size,
+                     int64_t pts, int64_t dts,
+                     int64_t pos);
+
+这个函数的各个参数的意义：
+
+- **AVCodecParserContext \*s**：初始化过的AVCodecParserContext对象，决定了码流该以怎样的标准进行解析；
+- **AVCodecContext *avctx**：预先定义好的AVCodecContext对象；
+- **uint8_t \*\*poutbuf**：AVPacket::data的地址，保存解析完成的包数据；
+- **int \*poutbuf_size**：AVPacket的实际数据长度；如果没解析出完整的一个包，这个值为0；
+- **const uint8_t \*buf, int buf_size**：输入参数，缓存的地址和长度；
+- **int64_t pts, int64_t dts**：显示和解码的时间戳；
+- **nt64_t pos** ：码流中的位置；
+- 返回值为解析所使用的比特位的长度；
+
+具体的调用方式为：
+
+	len = av_parser_parse2(ctx.pCodecParserCtx, ctx.pCodecContext, 
+							&(ctx.pkt.data), &(ctx.pkt.size), 
+							pDataPtr, uDataSize, 
+							AV_NOPTS_VALUE, AV_NOPTS_VALUE, AV_NOPTS_VALUE);
+
+如果参数poutbuf_size的值为0，那么应继续解析缓存中剩余的码流；如果缓存中的数据全部解析后依然未能找到一个完整的包，那么继续从输入文件中读取数据到缓存，继续解析操作，直到pkt.size不为0为止。
+
+在最终解析出一个完整的包之后，我们就可以调用解码API进行实际的解码过程了。解码过程调用的函数为avcodec\_decode_video2，该函数的声明为：
+
+	int avcodec_decode_video2(AVCodecContext *avctx, AVFrame *picture,
+                         int *got_picture_ptr,
+                         const AVPacket *avpkt);
+
+这个函数与前篇所遇到的编码函数avcodec\_encode_video2有些类似，只是参数的顺序略有不同，解码函数的输入输出参数与编码函数相比交换了位置。该函数各个参数的意义：
+
+- **AVCodecContext \*avctx**：编解码器上下文对象，在打开编解码器时生成；
+- **AVFrame \*picture**: 保存解码完成后的像素数据；我们只需要分配对象的空间，像素的空间codec会为我们分配好；
+- **int \*got_picture_ptr**: 标识位，如果为1，那么说明已经有一帧完整的像素帧可以输出了
+- **const AVPacket \*avpkt**: 前面解析好的码流包；
+
+实际调用的方法为：
+
+	int ret = avcodec_decode_video2(ctx.pCodecContext, ctx.frame, &got_picture, &(ctx.pkt));
+	if (ret < 0) 
+	{
+		printf("Decode Error.\n");
+		return ret;
+	}
+
+	if (got_picture) 
+	{
+		//获得一帧完整的图像，写出到输出文件
+		write_out_yuv_frame(ctx, inputoutput);
+		printf("Succeed to decode 1 frame!\n");
+	}
+
+最后，同编码器一样，解码过程的最后一帧可能也存在延迟。处理最后这一帧的方法也跟解码器类似：将AVPacket::data设为NULL，AVPacket::size设为0，然后在调用avcodec\_encode_video2完成最后的解码过程：
+
+	ctx.pkt.data = NULL;
+    ctx.pkt.size = 0;
+	while(1)
+	{
+		//将编码器中剩余的数据继续输出完
+		int ret = avcodec_decode_video2(ctx.pCodecContext, ctx.frame, &got_picture, &(ctx.pkt));
+		if (ret < 0) 
+		{
+			printf("Decode Error.\n");
+			return ret;
+		}
+
+		if (got_picture) 
+		{
+			write_out_yuv_frame(ctx, inputoutput);
+			printf("Flush Decoder: Succeed to decode 1 frame!\n");
+		}
+		else
+		{
+			break;
+		}
+	} //while(1)
+
+###(4). 收尾工作
+收尾工作主要包括关闭输入输出文件、关闭FFMpeg解码器各个组件。其中关闭解码器组件需要：
+	
+	avcodec_close(ctx.pCodecContext);
+	av_free(ctx.pCodecContext);
+	av_frame_free(&(ctx.frame));
 
 ##3、总结
 
