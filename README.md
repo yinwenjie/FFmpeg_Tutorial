@@ -359,6 +359,71 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 ###(2). 按照要求初始化需要的FFMpeg结构
 
+首先，所有涉及到编解码的的功能，都必须要注册音视频编解码器之后才能使用。注册编解码调用下面的函数：
+
+	avcodec_register_all();
+
+编解码器注册完成之后，根据指定的CODEC_ID查找指定的codec实例。CODEC_ID通常指定了编解码器的格式，在这里我们使用当前应用最为广泛的H.264格式为例。查找codec调用的函数为avcodec\_find_encoder，其声明格式为：
+
+	AVCodec *avcodec_find_encoder(enum AVCodecID id);
+
+该函数的输入参数为一个AVCodecID的枚举类型，返回值为一个指向AVCodec结构的指针，用于接收找到的编解码器实例。如果没有找到，那么该函数会返回一个空指针。调用方法如下：
+
+	/* find the mpeg1 video encoder */
+	ctx.codec = avcodec_find_encoder(AV_CODEC_ID_H264);	//根据CODEC_ID查找编解码器对象实例的指针
+	if (!ctx.codec) 
+	{
+		fprintf(stderr, "Codec not found\n");
+		return false;
+	}
+
+AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecContext实例需要我们前面查找到的AVCodec作为参数，调用的是avcodec\_alloc_context3函数。其声明方式为：
+
+	AVCodecContext *avcodec_alloc_context3(const AVCodec *codec);
+
+其特点同avcodec\_find_encoder类似，返回一个指向AVCodecContext实例的指针。如果分配失败，会返回一个空指针。调用方式为：
+
+	ctx.c = avcodec_alloc_context3(ctx.codec);			//分配AVCodecContext实例
+	if (!ctx.c)
+	{
+		fprintf(stderr, "Could not allocate video codec context\n");
+		return false;
+	}
+
+我们应该记得，在FFMpeg视频编码的实现中，AVCodecContext对象分配完成后，下一步实在该对象中设置编码的参数。而在解码器的实现中，基本不需要额外设置参数信息，因此这个对象更多地作为输出参数接收数据。因此对象分配完成后，不需要进一步的初始化操作。
+
+解码器与编码器实现中不同的一点在于，解码器的实现中需要额外的一个AVCodecParserContext结构，用于从码流中截取一个完整的NAL单元。因此我们需要分配一个AVCodecParserContext类型的对象，使用函数av\_parser_init，声明为：
+
+	AVCodecParserContext *av_parser_init(int codec_id);
+
+调用方式为：
+
+	ctx.pCodecParserCtx = av_parser_init(AV_CODEC_ID_H264);
+	if (!ctx.pCodecParserCtx)
+	{
+		printf("Could not allocate video parser context\n");
+		return false;
+	}
+
+随后，打开AVCodec对象，然后分配AVFrame对象：
+
+	//打开AVCodec对象
+	if (avcodec_open2(ctx.pCodecContext, ctx.pCodec, NULL) < 0)
+	{
+		fprintf(stderr, "Could not open codec\n");
+		return false;
+	}
+
+	//分配AVFrame对象
+	ctx.frame = av_frame_alloc();
+	if (!ctx.frame) 
+	{
+		fprintf(stderr, "Could not allocate video frame\n");
+		return false;
+	}
+
+###(3)、解码循环体
+
 ##3、总结
 
 ---
