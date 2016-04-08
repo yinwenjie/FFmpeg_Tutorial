@@ -12,6 +12,7 @@ extern "C"
 	#include "libavfilter/buffersrc.h"  
 	#include "libavutil/avutil.h"  
 	#include "libswscale/swscale.h"
+	#include "libswresample/swresample.h"
 
 	#include "libavutil/avassert.h"
 	#include "libavutil/channel_layout.h"
