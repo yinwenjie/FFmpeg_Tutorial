@@ -81,12 +81,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="CoderMuxer.cpp" />
+    <ClCompile Include="EncodingMuxingAudio.cpp" />
     <ClCompile Include="EncodingMuxingMain.cpp" />
+    <ClCompile Include="EncodingMuxingVideo.cpp" />
+    <ClCompile Include="Stream.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CoderMuxer.h" />
     <ClInclude Include="common.h" />
+    <ClInclude Include="EncodingMuxingAudio.h" />
     <ClInclude Include="EncodingMuxingHeader.h" />
+    <ClInclude Include="EncodingMuxingVideo.h" />
     <ClInclude Include="Stream.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
