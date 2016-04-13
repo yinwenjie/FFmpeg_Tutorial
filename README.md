@@ -534,3 +534,28 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 事实上，无论是mp4还是avi等文件格式，都由不同的标准格式，对于不同的格式并没有一种通用的解析方法。因此，FFMpeg专门定义了一个库来处理设计文件封装格式的功能，即libavformat。涉及文件的封装、解封装的问题，都可以通过调用libavformat的API实现。这里我们实现一个demo来处理音视频文件的解复用与解码的功能。
 
 ##1. FFMpeg解复用-解码器所包含的结构
+
+这一过程实际上包括了封装文件的解复用和音频/视频解码两个步骤，因此需要定义的结构体大致包括用于解码和解封装的部分。我们定义下面这样的一个结构体实现这个功能：
+
+	/*************************************************
+	Struct:			DemuxingVideoAudioContex
+	Description:	保存解复用器和解码器的上下文组件
+	*************************************************/
+	typedef struct
+	{
+		AVFormatContext *fmt_ctx;
+		AVCodecContext *video_dec_ctx, *audio_dec_ctx;
+		AVStream *video_stream, *audio_stream;
+		AVFrame *frame;
+		AVPacket pkt;
+	
+		int video_stream_idx, audio_stream_idx;
+		int width, height;
+	
+		uint8_t *video_dst_data[4];
+		int video_dst_linesize[4];
+		int video_dst_bufsize;
+		enum AVPixelFormat pix_fmt;
+	} DemuxingVideoAudioContex;
+
+这个结构体中的大部分数据类型我们在前面做编码/解码等功能时已经见到过，另外几个是涉及到视频文件的复用的，其中有：
