@@ -7,6 +7,7 @@ int Open_coder_muxer(AVOutputFormat **fmt, AVFormatContext **oc, const char *fil
 {
 	/* Initialize libavcodec, and register all codecs and formats. */
 	av_register_all();
+	avfilter_register_all();
 
 	/* allocate the output media context */
 	avformat_alloc_output_context2(oc, NULL, NULL, filename);
@@ -17,7 +18,7 @@ int Open_coder_muxer(AVOutputFormat **fmt, AVFormatContext **oc, const char *fil
 	}
 	if (!oc)
 	{
-		return 1;
+		return -1;
 	}
 
 	*fmt = (*oc)->oformat;

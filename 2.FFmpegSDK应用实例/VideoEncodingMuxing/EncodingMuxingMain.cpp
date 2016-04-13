@@ -2,6 +2,7 @@
 #include "CoderMuxer.h"
 #include "EncodingMuxingVideo.h"
 #include "EncodingMuxingAudio.h"
+#include "VideoFilter.h"
 
 
 static int hello(int argc, char **argv, AVDictionary *opt, const char **filename)
@@ -27,6 +28,8 @@ static int hello(int argc, char **argv, AVDictionary *opt, const char **filename
 	return 0;
 }
 
+const char *filter_descr = "drawtext=enable:fontfile=/Windows/Fonts/Tahoma.ttf:fontcolor='Red':fontsize=24: text='HONEYWELL'";  
+
 /*************************************************
 Function:		main
 Description:	入口点函数
@@ -49,8 +52,12 @@ int main(int argc, char **argv)
 	AVFormatContext *oc;
 	AVCodec *audio_codec = NULL, *video_codec = NULL;
 
-	Open_coder_muxer(&fmt, &oc, filename);
-
+	if (Open_coder_muxer(&fmt, &oc, filename) < 0)
+	{
+		printf("Error: Open coder/muxer failed. Exit.\n");
+		exit(1);
+	}
+	
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
 	ret = Add_audio_video_streams(&video_st, &audio_st, oc, fmt, audio_codec, video_codec);
@@ -66,6 +73,12 @@ int main(int argc, char **argv)
 
 	if (have_audio)
 		Open_audio(oc, audio_codec, &audio_st, opt);
+
+	if (Init_video_filters(filter_descr, video_st.st->codec))
+	{
+		printf("Error: init video filter failed. Exit.\n");
+		exit(1);
+	}
 
 	av_dump_format(oc, 0, filename, 1);
 	/* open the output file, if needed */
@@ -90,9 +103,7 @@ int main(int argc, char **argv)
 	while (encode_video || encode_audio) 
 	{
 		/* select the stream to encode */
-		if (encode_video &&
-			(!encode_audio || av_compare_ts(video_st.next_pts, video_st.st->codec->time_base,
-			audio_st.next_pts, audio_st.st->codec->time_base) <= 0))
+		if (encode_video &&	(!encode_audio || av_compare_ts(video_st.next_pts, video_st.st->codec->time_base, audio_st.next_pts, audio_st.st->codec->time_base) <= 0))
 		{
 			encode_video = !Write_video_frame(oc, &video_st);
 		}
@@ -107,6 +118,10 @@ int main(int argc, char **argv)
 	* av_write_trailer() may try to use memory that was freed on
 	* av_codec_close(). */
 	av_write_trailer(oc);
+	printf("Procssing succeeded.\n");
+
+end:
+	Close_video_filters();
 
 	/* Close each codec. */
 	if (have_video)
@@ -120,7 +135,6 @@ int main(int argc, char **argv)
 
 	/* free the stream */
 	avformat_free_context(oc);
-
-	printf("Procssing succeeded.\n");
+	
 	return 0;
 }

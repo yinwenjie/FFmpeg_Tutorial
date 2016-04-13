@@ -59,7 +59,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>avutil.lib;avformat.lib;avcodec.lib;swresample.lib;swscale.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>avutil.lib;avformat.lib;avcodec.lib;swresample.lib;swscale.lib;avfilter.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -85,6 +85,7 @@
     <ClCompile Include="EncodingMuxingMain.cpp" />
     <ClCompile Include="EncodingMuxingVideo.cpp" />
     <ClCompile Include="Stream.cpp" />
+    <ClCompile Include="VideoFilter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CoderMuxer.h" />
@@ -93,6 +94,7 @@
     <ClInclude Include="EncodingMuxingHeader.h" />
     <ClInclude Include="EncodingMuxingVideo.h" />
     <ClInclude Include="Stream.h" />
+    <ClInclude Include="VideoFilter.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
