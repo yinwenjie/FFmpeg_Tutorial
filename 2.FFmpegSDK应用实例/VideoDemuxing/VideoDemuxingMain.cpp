@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 	va_ctx.pkt.size = 0;
 	
 	/* read frames from the file */
-	while (av_read_frame(va_ctx.fmt_ctx, &va_ctx.pkt) >= 0)		//从输入程序中读取一个包的数据
+	while (av_read_frame(va_ctx.fmt_ctx, &va_ctx.pkt) >= 0)		//从输入文件中读取一个包的数据
 	{
 		AVPacket orig_pkt = va_ctx.pkt;
 		do 

@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoDemuxing", "VideoDemux
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoEncodingMuxing", "VideoEncodingMuxing\VideoEncodingMuxing.vcxproj", "{3A2123E5-E350-44A8-99DF-D1D81BB2DC92}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoWatermark", "VideoWatermark\VideoWatermark.vcxproj", "{A14F861A-5C65-47EE-BA8A-93B022CD6D7F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -31,6 +33,10 @@ Global
 		{3A2123E5-E350-44A8-99DF-D1D81BB2DC92}.Debug|Win32.Build.0 = Debug|Win32
 		{3A2123E5-E350-44A8-99DF-D1D81BB2DC92}.Release|Win32.ActiveCfg = Release|Win32
 		{3A2123E5-E350-44A8-99DF-D1D81BB2DC92}.Release|Win32.Build.0 = Release|Win32
+		{A14F861A-5C65-47EE-BA8A-93B022CD6D7F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A14F861A-5C65-47EE-BA8A-93B022CD6D7F}.Debug|Win32.Build.0 = Debug|Win32
+		{A14F861A-5C65-47EE-BA8A-93B022CD6D7F}.Release|Win32.ActiveCfg = Release|Win32
+		{A14F861A-5C65-47EE-BA8A-93B022CD6D7F}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
