@@ -578,8 +578,17 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 该函数的各个参数的作用为：
 
-- **ps**：根据输入文件接收与格式相关的上下文信息；
+- **ps**：根据输入文件接收与格式相关的上下文信息；可以指向NULL，那么AVFormatContext类型的实例将由该函数进行分配。
 - **url**：视频url或者文件路径；
 - **fmt**：强制输入格式，可设置为NULL以自动检测；
 - **options**：保存文件格式无法识别的信息；
+- **返回值**：成功返回0，失败则返回负的错误码；
+
+该函数的调用方式为：
+
+	if (avformat_open_input(&(va_ctx.fmt_ctx), files.src_filename, NULL, NULL) < 0)
+	{
+		fprintf(stderr, "Could not open source file %s\n", files.src_filename);
+		return -1;
+	}
 
