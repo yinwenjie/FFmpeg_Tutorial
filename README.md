@@ -578,7 +578,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 该函数的各个参数的作用为：
 
-- **ps**：根据输入文件接收与格式相关的上下文信息；可以指向NULL，那么AVFormatContext类型的实例将由该函数进行分配。
+- **ps**：根据输入文件接收与格式相关的句柄信息；可以指向NULL，那么AVFormatContext类型的实例将由该函数进行分配。
 - **url**：视频url或者文件路径；
 - **fmt**：强制输入格式，可设置为NULL以自动检测；
 - **options**：保存文件格式无法识别的信息；
@@ -589,6 +589,19 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	if (avformat_open_input(&(va_ctx.fmt_ctx), files.src_filename, NULL, NULL) < 0)
 	{
 		fprintf(stderr, "Could not open source file %s\n", files.src_filename);
+		return -1;
+	}
+
+打开文件后，调用avformat\_find_stream_info函数获取文件中的流信息。该函数的声明为：
+
+	int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options);
+
+该函数的第一个参数即前面的文件句柄，第二个参数也是用于保存无法识别的信息的AVDictionary的结构，通常可设为NULL。调用方式如：
+
+	/* retrieve stream information */
+	if (avformat_find_stream_info(va_ctx.fmt_ctx, NULL) < 0) 
+	{
+		fprintf(stderr, "Could not find stream information\n");
 		return -1;
 	}
 
