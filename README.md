@@ -559,3 +559,27 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	} DemuxingVideoAudioContex;
 
 这个结构体中的大部分数据类型我们在前面做编码/解码等功能时已经见到过，另外几个是涉及到视频文件的复用的，其中有：
+
+- AVFormatContext：用于处理音视频封装格式的上下文信息。
+- AVStream：表示音频或者视频流的结构。
+- AVPixelFormat：枚举类型，表示图像像素的格式，最常用的是AV_PIX_FMT_YUV420P
+
+##2、FFMpeg解复用-解码的过程
+
+###(1)、相关结构的初始化
+
+与使用FFMpeg进行其他操作一样，首先需注册FFMpeg组件：
+
+	av_register_all();
+
+随后，我们需要打开待处理的音视频文件。然而在此我们不使用打开文件的fopen函数，而是使用avformat\_open_input函数。该函数不但会打开输入文件，而且可以根据输入文件读取相应的格式信息。该函数的声明如下：
+
+	int avformat_open_input(AVFormatContext **ps, const char *url, AVInputFormat *fmt, AVDictionary **options);
+
+该函数的各个参数的作用为：
+
+- **ps**：根据输入文件接收与格式相关的上下文信息；
+- **url**：视频url或者文件路径；
+- **fmt**：强制输入格式，可设置为NULL以自动检测；
+- **options**：保存文件格式无法识别的信息；
+

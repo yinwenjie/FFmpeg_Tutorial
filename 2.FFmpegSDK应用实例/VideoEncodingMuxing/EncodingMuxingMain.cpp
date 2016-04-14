@@ -61,11 +61,14 @@ int main(int argc, char **argv)
 
 	 /* Now that all the parameters are set, we can open the audio and
      * video codecs and allocate the necessary encode buffers. */
-    if (have_video)
-        Open_video(oc, video_codec, &video_st, opt);
-
+	if (have_video)
+	{
+		Open_video(oc, video_codec, &video_st, opt);
+	}
 	if (have_audio)
+	{
 		Open_audio(oc, audio_codec, &audio_st, opt);
+	}		
 
 	av_dump_format(oc, 0, filename, 1);
 	/* open the output file, if needed */
@@ -110,9 +113,13 @@ int main(int argc, char **argv)
 
 	/* Close each codec. */
 	if (have_video)
+	{
 		Close_stream(oc, &video_st);
+	}	
 	if (have_audio)
+	{
 		Close_stream(oc, &audio_st);
+	}
 
 	if (!(fmt->flags & AVFMT_NOFILE))
 		/* Close the output file. */
