@@ -5,9 +5,7 @@
 
 
 /* Add an output stream. */
-static void add_stream(OutputStream *ost, AVFormatContext *oc,
-	AVCodec **codec,
-enum AVCodecID codec_id)
+static void add_stream(OutputStream *ost, AVFormatContext *oc, 	AVCodec **codec, enum AVCodecID codec_id)
 {
 	AVCodecContext *c;
 	int i;

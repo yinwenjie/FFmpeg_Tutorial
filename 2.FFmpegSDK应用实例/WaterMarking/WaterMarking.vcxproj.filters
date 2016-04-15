@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Application">
+      <UniqueIdentifier>{04d2c111-1e5e-4200-ab71-c7b0df5663e8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Demuxing">
+      <UniqueIdentifier>{181820da-e284-4c61-8771-a0a06cbaaae7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Filter">
+      <UniqueIdentifier>{4141a054-86c7-4547-b70d-fd9da92a7791}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Decodeing">
+      <UniqueIdentifier>{26e852c3-de80-422b-9c6e-933533df1f4f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Encodeing">
+      <UniqueIdentifier>{fbcab038-1093-4a1d-9662-050cfdddcb5b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="common.h">
+      <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="IOFile.h">
+      <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="DemuxingContext.h">
+      <Filter>Demuxing</Filter>
+    </ClInclude>
+    <ClInclude Include="VideoDemuxing.h">
+      <Filter>Demuxing</Filter>
+    </ClInclude>
+    <ClInclude Include="VideoFilter.h">
+      <Filter>Filter</Filter>
+    </ClInclude>
+    <ClInclude Include="DecodeFilterVideo.h">
+      <Filter>Decodeing</Filter>
+    </ClInclude>
+    <ClInclude Include="VideoEncoding.h">
+      <Filter>Encodeing</Filter>
+    </ClInclude>
+    <ClInclude Include="VideoMuxing.h">
+      <Filter>Encodeing</Filter>
+    </ClInclude>
+    <ClInclude Include="VideoEncodingMuxingHeader.h">
+      <Filter>Encodeing</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="WaterMardingMain.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="DemuxingContext.cpp">
+      <Filter>Demuxing</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoDemuxing.cpp">
+      <Filter>Demuxing</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoFilter.cpp">
+      <Filter>Filter</Filter>
+    </ClCompile>
+    <ClCompile Include="DecodeFilterVideo.cpp">
+      <Filter>Decodeing</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoEncoding.cpp">
+      <Filter>Encodeing</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoMuxing.cpp">
+      <Filter>Encodeing</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
