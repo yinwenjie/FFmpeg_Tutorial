@@ -605,3 +605,174 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		return -1;
 	}
 
+获取文件中的流信息后，下一步则是获取文件中的音频和视频流，并准备对音频和视频信息进行解码。获取文件中的流使用av\_find\_best\_stream函数，其声明如：
+
+	int av_find_best_stream(AVFormatContext *ic,
+                        enum AVMediaType type,
+                        int wanted_stream_nb,
+                        int related_stream,
+                        AVCodec **decoder_ret,
+                        int flags);
+
+其中各个参数的意义：
+
+- **ic**：视频文件句柄；
+- **type**：表示数据的类型，常用的有AVMEDIA_TYPE_VIDEO表示视频，AVMEDIA_TYPE_AUDIO表示音频等；
+- **wanted_stream_nb**：我们期望获取到的数据流的数量，设置为-1使用自动获取；
+- **related_stream**：获取相关的音视频流，如果没有则设为-1；
+- **decoder_ret**：返回这一路数据流的解码器；
+- **flags**：未定义；
+- 返回值：函数执行成功返回流的数量，失败则返回负的错误码；
+
+在函数执行成功后，便可调用avcodec\_find_decoder和avcodec\_open2打开解码器准备解码音视频流。该部分的代码实现如：
+
+	static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ctx, enum AVMediaType type)
+	{
+		int ret, stream_index;
+		AVStream *st;
+		AVCodecContext *dec_ctx = NULL;
+		AVCodec *dec = NULL;
+		AVDictionary *opts = NULL;
+
+		ret = av_find_best_stream(va_ctx.fmt_ctx, type, -1, -1, NULL, 0);
+		if (ret < 0) 
+		{
+			fprintf(stderr, "Could not find %s stream in input file '%s'\n", av_get_media_type_string(type), files.src_filename);
+			return ret;
+		} 
+		else 
+		{
+			stream_index = ret;
+			st = va_ctx.fmt_ctx->streams[stream_index];
+
+			/* find decoder for the stream */
+			dec_ctx = st->codec;
+			dec = avcodec_find_decoder(dec_ctx->codec_id);
+			if (!dec) 
+			{
+				fprintf(stderr, "Failed to find %s codec\n", av_get_media_type_string(type));
+				return AVERROR(EINVAL);
+			}
+
+			/* Init the decoders, with or without reference counting */
+			av_dict_set(&opts, "refcounted_frames", files.refcount ? "1" : "0", 0);
+			if ((ret = avcodec_open2(dec_ctx, dec, &opts)) < 0) 
+			{
+				fprintf(stderr, "Failed to open %s codec\n", av_get_media_type_string(type));
+				return ret;
+			}
+
+			switch (type)
+			{
+			case AVMEDIA_TYPE_VIDEO:
+				va_ctx.video_stream_idx = stream_index;
+				va_ctx.video_stream = va_ctx.fmt_ctx->streams[stream_index];
+				va_ctx.video_dec_ctx = va_ctx.video_stream->codec;
+				break;
+			case AVMEDIA_TYPE_AUDIO:
+				va_ctx.audio_stream_idx = stream_index;
+				va_ctx.audio_stream = va_ctx.fmt_ctx->streams[stream_index];
+				va_ctx.audio_dec_ctx = va_ctx.audio_stream->codec;
+				break;
+			default:
+				fprintf(stderr, "Error: unsupported MediaType: %s\n", av_get_media_type_string(type));
+				return -1;
+			}
+		}
+
+		return 0;
+	}
+
+整体初始化的函数代码为：
+
+	int InitDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx)
+	{
+		int ret = 0, width, height;
+
+		/* register all formats and codecs */
+		av_register_all();
+
+		/* open input file, and allocate format context */
+		if (avformat_open_input(&(va_ctx.fmt_ctx), files.src_filename, NULL, NULL) < 0)
+		{
+			fprintf(stderr, "Could not open source file %s\n", files.src_filename);
+			return -1;
+		}
+
+		/* retrieve stream information */
+		if (avformat_find_stream_info(va_ctx.fmt_ctx, NULL) < 0) 
+		{
+			fprintf(stderr, "Could not find stream information\n");
+			return -1;
+		}
+
+		if (open_codec_context(files, va_ctx, AVMEDIA_TYPE_VIDEO) >= 0) 
+		{
+			files.video_dst_file = fopen(files.video_dst_filename, "wb");
+			if (!files.video_dst_file) 
+			{
+				fprintf(stderr, "Could not open destination file %s\n", files.video_dst_filename);
+				return -1;
+			}
+	
+			/* allocate image where the decoded image will be put */
+			va_ctx.width = va_ctx.video_dec_ctx->width;
+			va_ctx.height = va_ctx.video_dec_ctx->height;
+			va_ctx.pix_fmt = va_ctx.video_dec_ctx->pix_fmt;
+			ret = av_image_alloc(va_ctx.video_dst_data, va_ctx.video_dst_linesize, va_ctx.width, va_ctx.height, va_ctx.pix_fmt, 1);
+			if (ret < 0) 
+			{
+				fprintf(stderr, "Could not allocate raw video buffer\n");
+				return -1;
+			}
+			va_ctx.video_dst_bufsize = ret;
+		}
+
+		if (open_codec_context(files, va_ctx, AVMEDIA_TYPE_AUDIO) >= 0) 
+		{
+			files.audio_dst_file = fopen(files.audio_dst_filename, "wb");
+			if (!files.audio_dst_file) 
+			{
+				fprintf(stderr, "Could not open destination file %s\n", files.audio_dst_filename);
+				return -1;
+			}
+		}
+	
+		if (va_ctx.video_stream)
+		{
+			printf("Demuxing video from file '%s' into '%s'\n", files.src_filename, files.video_dst_filename);
+		}
+	
+		if (va_ctx.audio_stream)
+		{
+			printf("Demuxing audio from file '%s' into '%s'\n", files.src_filename, files.audio_dst_filename);
+		}
+	
+		/* dump input information to stderr */
+		av_dump_format(va_ctx.fmt_ctx, 0, files.src_filename, 0);
+
+		if (!va_ctx.audio_stream && !va_ctx.video_stream) 
+		{
+			fprintf(stderr, "Could not find audio or video stream in the input, aborting\n");
+			return -1;
+		}
+
+		return 0;
+	}
+
+随后要做的，是分配AVFrame和初始化AVPacket对象：
+
+	va_ctx.frame = av_frame_alloc();			//分配AVFrame结构对象
+	if (!va_ctx.frame)
+	{
+		fprintf(stderr, "Could not allocate frame\n");
+		ret = AVERROR(ENOMEM);
+		goto end;
+	}
+
+	/* initialize packet, set data to NULL, let the demuxer fill it */
+	av_init_packet(&va_ctx.pkt);				//初始化AVPacket对象
+	va_ctx.pkt.data = NULL;
+	va_ctx.pkt.size = 0;
+
+###(2)、循环解析视频文件的包数据
