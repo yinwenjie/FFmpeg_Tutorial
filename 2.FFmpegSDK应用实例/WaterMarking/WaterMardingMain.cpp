@@ -5,6 +5,8 @@
 #include "DecodeFilterVideo.h"
 #include "VideoEncoding.h"
 
+const int c_maxDecodedFrames = 500;
+
 /*************************************************
 Function:		hello
 Description:	输出提示信息和命令行格式
@@ -29,7 +31,7 @@ static int hello(IOFileName &files, int argc, char **argv)
 	return 0;
 }
 
-const char *filter_descr = "drawtext=enable:fontfile=/Windows/Fonts/Tahoma.ttf:fontcolor='Red':fontsize=24: text='HONEYWELL'"; 
+const char *filter_descr = "drawtext=enable:fontfile=/Windows/Fonts/calibrib.ttf:fontcolor='Red':fontsize=24: text='HONEYWELL'"; 
 
 /*************************************************
 Function:		main
@@ -37,7 +39,7 @@ Description:	入口点函数
 *************************************************/
 int main(int argc, char **argv)
 {
-	int ret = 0, gotframe = 0;
+	int ret = 0, gotframe = 0, frameIdx = 0;
 	IOFileName files = {NULL};
 	DemuxingVideoAudioContex demux_ctx = {NULL};
 	EncodingContext enc_ctx = {NULL};
@@ -63,8 +65,9 @@ int main(int argc, char **argv)
 		printf("Error: init video filter failed. Exit.\n");
 		goto end;
 	}
+	av_dump_format(enc_ctx.oc, 0, files.video_dst_filename, 1);
 
-	while (av_read_frame(demux_ctx.fmt_ctx, &demux_ctx.pkt) >= 0)		//从输入程序中读取一个包的数据
+	while (av_read_frame(demux_ctx.fmt_ctx, &demux_ctx.pkt) >= 0 && (frameIdx++ < c_maxDecodedFrames))		//从输入程序中读取一个包的数据
 	{
 		AVPacket orig_pkt = demux_ctx.pkt;
 		do 

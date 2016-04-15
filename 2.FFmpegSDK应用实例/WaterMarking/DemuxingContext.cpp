@@ -106,24 +106,10 @@ int InitDemuxContext(IOFileName &files, DemuxingVideoAudioContex &va_ctx)
 		va_ctx.video_dst_bufsize = ret;
 	}
 
-	if (open_codec_context(files, va_ctx, AVMEDIA_TYPE_AUDIO) >= 0) 
-	{
-		files.audio_dst_file = fopen(files.audio_dst_filename, "wb");
-		if (!files.audio_dst_file) 
-		{
-			fprintf(stderr, "Could not open destination file %s\n", files.audio_dst_filename);
-			return -1;
-		}
-	}
 
 	if (va_ctx.video_stream)
 	{
 		printf("Demuxing video from file '%s' into '%s'\n", files.src_filename, files.video_dst_filename);
-	}
-
-	if (va_ctx.audio_stream)
-	{
-		printf("Demuxing audio from file '%s' into '%s'\n", files.src_filename, files.audio_dst_filename);
 	}
 
 	/* dump input information to stderr */
