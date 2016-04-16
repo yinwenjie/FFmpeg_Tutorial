@@ -111,7 +111,6 @@ static void fill_yuv_image(AVFrame *pict, int frame_index,
 	}
 }
 
-
 static AVFrame *get_video_frame(OutputStream *ost)
 {
 	AVCodecContext *c = ost->st->codec;
@@ -151,7 +150,12 @@ static AVFrame *get_video_frame(OutputStream *ost)
 	}
 	else 
 	{
+#if YUV
 		fill_yuv_image(ost->frame, ost->next_pts, c->width, c->height);
+#else
+		
+#endif
+		
 	}
 
 	ost->frame->pts = ost->next_pts++;

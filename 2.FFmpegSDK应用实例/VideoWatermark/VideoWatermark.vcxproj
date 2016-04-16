@@ -10,6 +10,17 @@
       <Platform>Win32</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DemuxerDecoder.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="VideoFilter.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="common.h" />
+    <ClInclude Include="DemuxerDecoder.h" />
+    <ClInclude Include="IOFile.h" />
+    <ClInclude Include="VideoFilter.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{A14F861A-5C65-47EE-BA8A-93B022CD6D7F}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
@@ -77,22 +88,6 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="DecodeFilterVideo.cpp" />
-    <ClCompile Include="DemuxingContext.cpp" />
-    <ClCompile Include="RemuxingVideo.cpp" />
-    <ClCompile Include="VideoFilter.cpp" />
-    <ClCompile Include="VideoWatermarkMain.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="common.h" />
-    <ClInclude Include="DecodeFilterVideo.h" />
-    <ClInclude Include="DemuxingContext.h" />
-    <ClInclude Include="IOFile.h" />
-    <ClInclude Include="RemuxingVideo.h" />
-    <ClInclude Include="VideoFilter.h" />
-    <ClInclude Include="VideoWatermarkHeader.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

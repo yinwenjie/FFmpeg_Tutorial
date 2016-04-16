@@ -5,7 +5,9 @@
 #include "DecodeFilterVideo.h"
 #include "VideoEncoding.h"
 
-const int c_maxDecodedFrames = 500;
+#define TWO_STEP 0
+
+const int c_maxDecodedFrames = 1000;
 
 /*************************************************
 Function:		hello
@@ -25,13 +27,18 @@ static int hello(IOFileName &files, int argc, char **argv)
 	}
 
 	files.src_filename = argv[1];
-	files.video_dst_filename = argv[2];
 
-	printf("Watermarking %s to %s.\n", files.src_filename, files.video_dst_filename);
+#if TWO_STEP
+	files.dst_filename = "temp.yuv";
+#else
+	files.dst_filename = argv[2];
+#endif
+
+	printf("Watermarking %s to %s.\n", files.src_filename, files.dst_filename);
 	return 0;
 }
 
-const char *filter_descr = "drawtext=enable:fontfile=/Windows/Fonts/calibrib.ttf:fontcolor='Red':fontsize=24: text='HONEYWELL'"; 
+const char *filter_descr = "drawtext=enable:fontfile=arial.ttf:fontcolor='Red':fontsize=24: text='HONEYWELL'"; 
 
 /*************************************************
 Function:		main
@@ -53,7 +60,7 @@ int main(int argc, char **argv)
 	if (Application_demuxing_start(files, demux_ctx) < 0)
 	{
 		printf("Error: Demuxing context initialization failed.\n");
-		goto end;
+		goto decode_end;
 	}
 	if (Application_encoding_start(files, enc_ctx, demux_ctx))
 	{
@@ -63,13 +70,17 @@ int main(int argc, char **argv)
 	if (Init_video_filters(filter_descr, demux_ctx.video_dec_ctx))
 	{
 		printf("Error: init video filter failed. Exit.\n");
-		goto end;
+		goto decode_end;
 	}
-	av_dump_format(enc_ctx.oc, 0, files.video_dst_filename, 1);
+
+	if (Prepare_to_write_output_file(files, enc_ctx) < 0)
+	{
+		fprintf(stderr, "Could not open output file: '%s'.\n", files.dst_filename);
+		goto decode_end;
+	}
 
 	while (av_read_frame(demux_ctx.fmt_ctx, &demux_ctx.pkt) >= 0 && (frameIdx++ < c_maxDecodedFrames))		//从输入程序中读取一个包的数据
 	{
-		AVPacket orig_pkt = demux_ctx.pkt;
 		do 
 		{
 			ret = Decode_this_packet_to_frame(files, demux_ctx, &gotframe, 0);
@@ -78,11 +89,15 @@ int main(int argc, char **argv)
 				break;
 			}
 
+			if (gotframe)
+			{
+//				Encode_frame_to_packet(enc_ctx, demux_ctx);
+				av_frame_unref(demux_ctx.frame);
+			}
 			demux_ctx.pkt.data += ret;
 			demux_ctx.pkt.size -= ret;
 		}
 		while (demux_ctx.pkt.size > 0);
-		av_packet_unref(&orig_pkt);
 	}
 
 	demux_ctx.pkt.data = NULL;
@@ -93,7 +108,9 @@ int main(int argc, char **argv)
 	}
 	while (gotframe);
 
-end:
+decode_end:
 	Application_demuxing_end(files, demux_ctx);
+	
+end:
 	return 0;
 }

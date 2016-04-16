@@ -3,19 +3,19 @@
 #include "VideoFilter.h"
 
 
-int Decode_this_packet_to_frame(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_frame, int cached)
+int Decode_this_packet_to_frame(IOFileName &files, DemuxingVideoAudioContex &demux_ctx, int *got_frame, int cached)
 {
 	int ret = 0;
-	int decoded = va_ctx.pkt.size;
+	int decoded = demux_ctx.pkt.size;
 	static int video_frame_count = 0;
 	static int audio_frame_count = 0;
 
 	*got_frame = 0;
 
-	if (va_ctx.pkt.stream_index == va_ctx.video_stream_idx)
+	if (demux_ctx.pkt.stream_index == demux_ctx.video_stream_idx)
 	{
 		/* decode video frame */
-		ret = avcodec_decode_video2(va_ctx.video_dec_ctx, va_ctx.frame, got_frame, &va_ctx.pkt);
+		ret = avcodec_decode_video2(demux_ctx.video_dec_ctx, demux_ctx.frame, got_frame, &demux_ctx.pkt);
 		if (ret < 0)
 		{
 			printf("Error decoding video frame (%d)\n", ret);
@@ -24,30 +24,24 @@ int Decode_this_packet_to_frame(IOFileName &files, DemuxingVideoAudioContex &va_
 
 		if (*got_frame)
 		{
-			printf("video_frame%s n:%d coded_n:%d pts:%s\n", cached ? "(cached)" : "", video_frame_count++, va_ctx.frame->coded_picture_number, va_ctx.frame->pts);
+			printf("video_frame%s n:%d coded_n:%d pts:%s\n", cached ? "(cached)" : "", video_frame_count++, demux_ctx.frame->coded_picture_number, demux_ctx.frame->pts);
 			
-			if (Push_into_filter_graph(va_ctx.frame) < 0)
+			if (Push_into_filter_graph(demux_ctx.frame) < 0)
 			{
 				return -1;
 			}
 
-			Get_filtered_frame(va_ctx.frame);
+			Get_filtered_frame(demux_ctx.frame);
 
 			/* copy decoded frame to destination buffer:
 			* this is required since rawvideo expects non aligned data */
-			av_image_copy(va_ctx.video_dst_data, va_ctx.video_dst_linesize,
-				(const uint8_t **)(va_ctx.frame->data), va_ctx.frame->linesize,
-				va_ctx.pix_fmt, va_ctx.width, va_ctx.height);
+			av_image_copy(demux_ctx.video_dst_data, demux_ctx.video_dst_linesize,
+				(const uint8_t **)(demux_ctx.frame->data), demux_ctx.frame->linesize,
+				demux_ctx.pix_fmt, demux_ctx.width, demux_ctx.height);
 
 			/* write to rawvideo file */
-			fwrite(va_ctx.video_dst_data[0], 1, va_ctx.video_dst_bufsize, files.video_dst_file);
+			fwrite(demux_ctx.video_dst_data[0], 1, demux_ctx.video_dst_bufsize, files.temp_file);
 		}
 	}
-
-	if (*got_frame && files.refcount)
-	{
-		av_frame_unref(va_ctx.frame);
-	}
-
 	return decoded;
 }

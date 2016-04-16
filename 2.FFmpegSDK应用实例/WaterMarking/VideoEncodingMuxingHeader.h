@@ -2,7 +2,7 @@
 #define _VIDEO_ENCODING_MUXING_HEADER_
 #include "common.h"
 
-typedef struct OutputStream 
+typedef struct _OutputStream 
 {
 	AVStream *st;
 
@@ -25,6 +25,7 @@ typedef struct _EncodingContext
 	AVCodec *video_codec;
 	AVOutputFormat *fmt;
 	AVFormatContext *oc;
+	AVPacket outPacket;
 } EncodingContext;
 
 #endif

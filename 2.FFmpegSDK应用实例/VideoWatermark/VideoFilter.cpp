@@ -7,7 +7,9 @@ AVFilterContext *buffersrc_ctx;
 AVFilterGraph *filter_graph;  
 static int video_stream_index = -1; 
 
-int Init_video_filters(const char *filters_descr, AVCodecContext *pCodecCtx)
+const char *filter_descr = "drawtext=enable:fontfile=arial.ttf:fontcolor='Red':fontsize=24: text='HONEYWELL'"; 
+
+int Init_video_filters(const AVCodecContext *pCodecCtx)
 {
 	char args[512];  
 	int ret;  
@@ -60,7 +62,7 @@ int Init_video_filters(const char *filters_descr, AVCodecContext *pCodecCtx)
 	inputs->pad_idx    = 0;  
 	inputs->next       = NULL;  
 
-	if ((ret = avfilter_graph_parse_ptr(filter_graph, filters_descr, &inputs, &outputs, NULL)) < 0)  
+	if ((ret = avfilter_graph_parse_ptr(filter_graph, filter_descr, &inputs, &outputs, NULL)) < 0)  
 	{
 		return ret;  
 	}
@@ -102,4 +104,14 @@ int Get_filtered_frame(AVFrame *pFrame)
 	}
 
 	return 1;
+}
+
+void AVFrame_filter_callback(AVFrame *frame)
+{
+	if (Push_into_filter_graph(frame) < 0)
+	{
+		return;
+	}
+
+	Get_filtered_frame(frame);
 }

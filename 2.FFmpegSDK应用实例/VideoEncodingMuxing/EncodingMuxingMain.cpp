@@ -4,6 +4,7 @@
 #include "EncodingMuxingAudio.h"
 #include "VideoFilter.h"
 
+#define YUV 1
 
 static int hello(int argc, char **argv, AVDictionary *opt, const char **filename)
 {
