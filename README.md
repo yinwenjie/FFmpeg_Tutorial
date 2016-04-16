@@ -776,3 +776,5 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	va_ctx.pkt.size = 0;
 
 ###(2)、循环解析视频文件的包数据
+
+循环解析视频文件的代码段如下：
