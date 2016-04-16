@@ -27,6 +27,9 @@
     <ClCompile Include="VideoFilter.cpp">
       <Filter>VideoFilter</Filter>
     </ClCompile>
+    <ClCompile Include="MuxerEncoder.cpp">
+      <Filter>MuxerEncoder</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">
@@ -40,6 +43,9 @@
     </ClInclude>
     <ClInclude Include="VideoFilter.h">
       <Filter>VideoFilter</Filter>
+    </ClInclude>
+    <ClInclude Include="MuxerEncoder.h">
+      <Filter>MuxerEncoder</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -80,7 +80,7 @@ void Close_video_filters()
 	avfilter_graph_free(&filter_graph); 
 }
 
-int Push_into_filter_graph(AVFrame *pFrame)
+int push_into_filter_graph(AVFrame *pFrame)
 {
 	int ret = av_buffersrc_add_frame(buffersrc_ctx, pFrame) < 0;
 	if (ret < 0)
@@ -91,7 +91,7 @@ int Push_into_filter_graph(AVFrame *pFrame)
 	return ret;
 }
 
-int Get_filtered_frame(AVFrame *pFrame)
+int get_filtered_frame(AVFrame *pFrame)
 {
 	int ret = 0;
 	while (1)
@@ -108,10 +108,10 @@ int Get_filtered_frame(AVFrame *pFrame)
 
 void AVFrame_filter_callback(AVFrame *frame)
 {
-	if (Push_into_filter_graph(frame) < 0)
+	if (push_into_filter_graph(frame) < 0)
 	{
 		return;
 	}
 
-	Get_filtered_frame(frame);
+	get_filtered_frame(frame);
 }
