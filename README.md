@@ -776,3 +776,120 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	va_ctx.pkt.size = 0;
 
 ###(2)、循环解析视频文件的包数据
+
+解析视频文件的循环代码段为：
+
+	/* read frames from the file */
+	while (av_read_frame(va_ctx.fmt_ctx, &va_ctx.pkt) >= 0)		//从输入程序中读取一个包的数据
+	{
+		AVPacket orig_pkt = va_ctx.pkt;
+		do 
+		{
+			ret = Decode_packet(files, va_ctx, &got_frame, 0);	//解码这个包
+			if (ret < 0)
+				break;
+			va_ctx.pkt.data += ret;
+			va_ctx.pkt.size -= ret;
+		} while (va_ctx.pkt.size > 0);
+		av_packet_unref(&orig_pkt);
+	}
+
+这部分代码逻辑上非常简单，首先调用av\_read_frame函数，从文件中读取一个packet的数据，并实现了一个Decode\_packet对这个packet进行解码。Decode\_packet函数的实现如下：
+
+	int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_frame, int cached)
+	{
+		int ret = 0;
+		int decoded = va_ctx.pkt.size;
+		static int video_frame_count = 0;
+		static int audio_frame_count = 0;
+	
+		*got_frame = 0;
+	
+		if (va_ctx.pkt.stream_index == va_ctx.video_stream_idx)
+		{
+			/* decode video frame */
+			ret = avcodec_decode_video2(va_ctx.video_dec_ctx, va_ctx.frame, got_frame, &va_ctx.pkt);
+			if (ret < 0)
+			{
+				printf("Error decoding video frame (%d)\n", ret);
+				return ret;
+			}
+	
+			if (*got_frame)
+			{
+				if (va_ctx.frame->width != va_ctx.width || va_ctx.frame->height != va_ctx.height ||
+					va_ctx.frame->format != va_ctx.pix_fmt)
+				{
+					/* To handle this change, one could call av_image_alloc again and
+					* decode the following frames into another rawvideo file. */
+					printf("Error: Width, height and pixel format have to be "
+						"constant in a rawvideo file, but the width, height or "
+						"pixel format of the input video changed:\n"
+						"old: width = %d, height = %d, format = %s\n"
+						"new: width = %d, height = %d, format = %s\n",
+						va_ctx.width, va_ctx.height, av_get_pix_fmt_name((AVPixelFormat)(va_ctx.pix_fmt)),
+						va_ctx.frame->width, va_ctx.frame->height,
+						av_get_pix_fmt_name((AVPixelFormat)va_ctx.frame->format));
+					return -1;
+				}
+	
+				printf("video_frame%s n:%d coded_n:%d pts:%s\n", cached ? "(cached)" : "", video_frame_count++, va_ctx.frame->coded_picture_number, va_ctx.frame->pts);
+	
+				/* copy decoded frame to destination buffer:
+				* this is required since rawvideo expects non aligned data */
+				av_image_copy(va_ctx.video_dst_data, va_ctx.video_dst_linesize,
+					(const uint8_t **)(va_ctx.frame->data), va_ctx.frame->linesize,
+					va_ctx.pix_fmt, va_ctx.width, va_ctx.height);
+	
+				/* write to rawvideo file */
+				fwrite(va_ctx.video_dst_data[0], 1, va_ctx.video_dst_bufsize, files.video_dst_file);
+			}
+		}
+		else if (va_ctx.pkt.stream_index == va_ctx.audio_stream_idx)
+		{
+			/* decode audio frame */
+			ret = avcodec_decode_audio4(va_ctx.audio_dec_ctx, va_ctx.frame, got_frame, &va_ctx.pkt);
+			if (ret < 0)
+			{
+				printf("Error decoding audio frame (%s)\n", ret);
+				return ret;
+			}
+			/* Some audio decoders decode only part of the packet, and have to be
+			* called again with the remainder of the packet data.
+			* Sample: fate-suite/lossless-audio/luckynight-partial.shn
+			* Also, some decoders might over-read the packet. */
+			decoded = FFMIN(ret, va_ctx.pkt.size);
+	
+			if (*got_frame)
+			{
+				size_t unpadded_linesize = va_ctx.frame->nb_samples * av_get_bytes_per_sample((AVSampleFormat)va_ctx.frame->format);
+				printf("audio_frame%s n:%d nb_samples:%d pts:%s\n",
+					cached ? "(cached)" : "",
+					audio_frame_count++, va_ctx.frame->nb_samples,
+					va_ctx.frame->pts);
+	
+				/* Write the raw audio data samples of the first plane. This works
+				* fine for packed formats (e.g. AV_SAMPLE_FMT_S16). However,
+				* most audio decoders output planar audio, which uses a separate
+				* plane of audio samples for each channel (e.g. AV_SAMPLE_FMT_S16P).
+				* In other words, this code will write only the first audio channel
+				* in these cases.
+				* You should use libswresample or libavfilter to convert the frame
+				* to packed data. */
+				fwrite(va_ctx.frame->extended_data[0], 1, unpadded_linesize, files.audio_dst_file);
+			}
+		}
+	
+			/* If we use frame reference counting, we own the data and need
+			* to de-reference it when we don't use it anymore */
+			if (*got_frame && files.refcount)
+				av_frame_unref(va_ctx.frame);
+		
+			return decoded;
+	}
+
+在该函数中，首先对读取到的packet中的stream_index分别于先前获取的音频和视频的stream_index进行对比来确定是音频还是视频流。而后分别调用相应的解码函数进行解码，以视频流为例，判断当前stream为视频流后，调用avcodec\_decode_video2函数将流数据解码为像素数据，并在获取完整的一帧之后，将其写出到输出文件中。
+
+##3、总结
+
+相对于前文讲述过的解码H.264格式裸码流，解封装+解码过程看似多了一个步骤，然而在实现起来实际上并无过多差别。这主要是由于FFMpeg中的多个API已经很好地实现了封装文件的解析和读取过程，如打开文件我们使用avformat\_open_input代替fopen，读取数据包使用av\_read_frame代替fread，其他方面只需要多一步判断封装文件中数据流的类型即可，剩余部分与裸码流的解码并无太多差别。
