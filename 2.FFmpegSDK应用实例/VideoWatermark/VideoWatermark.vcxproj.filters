@@ -30,6 +30,9 @@
     <ClCompile Include="MuxerEncoder.cpp">
       <Filter>MuxerEncoder</Filter>
     </ClCompile>
+    <ClCompile Include="Log.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">
@@ -46,6 +49,9 @@
     </ClInclude>
     <ClInclude Include="MuxerEncoder.h">
       <Filter>MuxerEncoder</Filter>
+    </ClInclude>
+    <ClInclude Include="Log.h">
+      <Filter>Application</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

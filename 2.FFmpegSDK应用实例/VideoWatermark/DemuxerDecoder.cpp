@@ -15,7 +15,7 @@ static int		video_dst_bufsize;
 static int		video_stream_idx = -1;
 static int		refcount = 0;
 static int		input_packet_count = 0;
-
+static int		input_frame_count = 0;
 static FILE		*video_dst_file = NULL;
 
 //**************************************************************************
@@ -30,6 +30,10 @@ static int decode_packet(int *got_frame, int cached)
 	*got_frame = 0;
 	if (pkt.stream_index == video_stream_idx) 
 	{
+		InputTextLogOut("Read packet:", input_packet_count++);
+		InputTextLogOut("\t\tPacket pts:", pkt.pts);
+		InputTextLogOut("\n");
+
 		/* decode video frame */
 		ret = avcodec_decode_video2(video_dec_ctx, frame, got_frame, &pkt);
 		if (ret < 0) 
@@ -243,6 +247,8 @@ int DecodeOutFrames(const int yuv_out, void (*AVFrame_callback)(AVFrame *frame),
 				fwrite(video_dst_data[0], 1, video_dst_bufsize, video_dst_file);
 			}
 
+			InputTextLogOut("***********************************\nDecoded frame out:", input_frame_count++);
+			InputTextLogOut("\n***********************************\n");
 //			av_frame_unref(frame);
 		}
 	} 

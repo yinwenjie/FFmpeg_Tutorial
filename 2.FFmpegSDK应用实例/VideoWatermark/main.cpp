@@ -5,7 +5,7 @@
 #include "MuxerEncoder.h"
 
 const int c_maxDecodedFrames = 2000;
-const int c_outputTempYUV = 0;
+const int c_outputTempYUV = 1;
 
 /*************************************************
 Function:		hello
@@ -31,10 +31,6 @@ static int hello(IOFileName &files, int argc, char **argv)
 	return 0;
 }
 
-void test_AVFrame_callback(AVFrame *frame)
-{
-	printf("test_AVFrame_callback is called!\n");
-}
 
 /*************************************************
 Function:		main
@@ -51,6 +47,9 @@ int main(int argc, char **argv)
 		printf("Error: Command line format error.\n");
 		return -1;
 	}
+
+	InputLogInit();
+	OutputLogInit();
 
 	//×¢²áFFMpeg×é¼þ
 	av_register_all();
@@ -86,6 +85,8 @@ int main(int argc, char **argv)
 	}
 
 end:
+	InputLogEnd();
+	OutputLogEnd();
 	CloseDemuxerDecoder();
 	Close_video_filters();
 	CloseMuxerEncoder();

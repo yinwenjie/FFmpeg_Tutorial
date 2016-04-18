@@ -30,6 +30,7 @@ int have_video = 0, encode_video = 0;
 int frame_pts = 0, frame_dts = 0; 
 
 static int output_packet_count = 0;
+static int output_frame_count = 0;
 
 static int add_stream(OutputStream *ost, AVFormatContext *oc, AVCodec **codec, const AVCodecContext *pCodecCtx, enum AVCodecID codec_id);
 static int open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg);
@@ -106,7 +107,7 @@ void CloseMuxerEncoder()
 
 	/* free the stream */
 	avformat_free_context(oc);
-		printf("**************************\nTotal num of packets in output file; %d\n**************************\n", output_packet_count);
+	printf("**************************\nTotal num of packets in output file; %d\n**************************\n", output_packet_count);
 }
 
 //**************************************************************************
@@ -273,6 +274,9 @@ int EncodeOneFrame()
 
 	frame = video_st.frame;
 
+	OutputTextLogOut("***********************************\nEncoded frame in:", output_frame_count++);
+	OutputTextLogOut("\n***********************************\n");
+
 	av_init_packet(&pkt);
 
 	/* encode the image */
@@ -285,7 +289,9 @@ int EncodeOneFrame()
 
 	if (got_packet) 
 	{
-		output_packet_count++;
+		OutputTextLogOut("Write packet:", output_packet_count++);
+		OutputTextLogOut("\t\tPacket pts:", pkt.pts);
+		OutputTextLogOut("\n");
 		ret = write_frame(oc, &c->time_base, video_st.st, &pkt);
 	} 
 	else 
