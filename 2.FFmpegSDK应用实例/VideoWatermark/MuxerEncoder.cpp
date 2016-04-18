@@ -27,10 +27,12 @@ static AVDictionary		*opt = NULL;
 
 const char *filename;
 int have_video = 0, encode_video = 0;
+int frame_pts = 0, frame_dts = 0; 
+
+static int output_packet_count = 0;
 
 static int add_stream(OutputStream *ost, AVFormatContext *oc, AVCodec **codec, const AVCodecContext *pCodecCtx, enum AVCodecID codec_id);
 static int open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg);
-static int write_video_frame(AVFormatContext *oc, OutputStream *ost);
 static void close_stream(AVFormatContext *oc, OutputStream *ost);
 
 //**************************************************************************
@@ -54,6 +56,7 @@ int InitMuxerEncoder(const char *dst_filename, const AVCodecContext *pCodecCtx)
 	}
 
 	fmt = oc->oformat;
+	fmt->video_codec = pCodecCtx->codec_id;
 
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
@@ -103,15 +106,9 @@ void CloseMuxerEncoder()
 
 	/* free the stream */
 	avformat_free_context(oc);
+		printf("**************************\nTotal num of packets in output file; %d\n**************************\n", output_packet_count);
 }
 
-void EncodeFrames()
-{
-	while (encode_video)
-	{
-		encode_video = !write_video_frame(oc, &video_st);
-	}
-}
 //**************************************************************************
 //---------------------------------Ë½ÓÐº¯Êý---------------------------------
 //**************************************************************************
@@ -186,6 +183,10 @@ static AVFrame *alloc_picture(enum AVPixelFormat pix_fmt, int width, int height)
 		exit(1);
 	}
 
+	if (av_frame_is_writable(picture))
+	{
+		memset(picture->data[0], width * height, 128);
+	}
 	return picture;
 }
 
@@ -205,8 +206,8 @@ static int open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AV
 		fprintf(stderr, "Could not open video codec: %d\n", ret);
 		return -1;
 	}
-
-	/* allocate and init a re-usable frame */
+/*
+	// allocate and init a re-usable frame 
 	ost->frame = alloc_picture(c->pix_fmt, c->width, c->height);
 	if (!ost->frame) 
 	{
@@ -224,83 +225,8 @@ static int open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AV
 			return -1;
 		}
 	}
-
+*/
 	return 0;
-}
-
-
-/* Prepare a dummy image. */
-static void fill_yuv_image(AVFrame *pict, int frame_index,
-                           int width, int height)
-{
-    int x, y, i, ret;
-
-    /* when we pass a frame to the encoder, it may keep a reference to it
-     * internally;
-     * make sure we do not overwrite it here
-     */
-    ret = av_frame_make_writable(pict);
-    if (ret < 0)
-        exit(1);
-
-    i = frame_index;
-
-    /* Y */
-    for (y = 0; y < height; y++)
-        for (x = 0; x < width; x++)
-            pict->data[0][y * pict->linesize[0] + x] = x + y + i * 3;
-
-    /* Cb and Cr */
-    for (y = 0; y < height / 2; y++) {
-        for (x = 0; x < width / 2; x++) {
-            pict->data[1][y * pict->linesize[1] + x] = 128 + y + i * 2;
-            pict->data[2][y * pict->linesize[2] + x] = 64 + x + i * 5;
-        }
-    }
-}
-
-static AVFrame *get_video_frame(OutputStream *ost)
-{
-    AVCodecContext *c = ost->st->codec;
-
-    /* check if we want to generate more frames */
-	AVRational r = { 1, 1 };
-    if (av_compare_ts(ost->next_pts, ost->st->codec->time_base, STREAM_DURATION, r) >= 0)
-	{
-        return NULL;
-	}
-
-    if (c->pix_fmt != AV_PIX_FMT_YUV420P) 
-	{
-        /* as we only generate a YUV420P picture, we must convert it
-         * to the codec pixel format if needed */
-        if (!ost->sws_ctx) 
-		{
-            ost->sws_ctx = sws_getContext(c->width, c->height,
-                                          AV_PIX_FMT_YUV420P,
-                                          c->width, c->height,
-                                          c->pix_fmt,
-                                          SCALE_FLAGS, NULL, NULL, NULL);
-            if (!ost->sws_ctx) 
-			{
-                fprintf(stderr,
-                        "Could not initialize the conversion context\n");
-                exit(1);
-            }
-        }
-        fill_yuv_image(ost->tmp_frame, ost->next_pts, c->width, c->height);
-        sws_scale(ost->sws_ctx,
-                  (const uint8_t * const *)ost->tmp_frame->data, ost->tmp_frame->linesize,
-                  0, c->height, ost->frame->data, ost->frame->linesize);
-    } 
-	else 
-	{
-        fill_yuv_image(ost->frame, ost->next_pts, c->width, c->height);
-    }
-
-    ost->frame->pts = ost->next_pts++;
-
-    return ost->frame;
 }
 
 static int write_frame(AVFormatContext *fmt_ctx, const AVRational *time_base, AVStream *st, AVPacket *pkt)
@@ -313,60 +239,26 @@ static int write_frame(AVFormatContext *fmt_ctx, const AVRational *time_base, AV
 	return av_interleaved_write_frame(fmt_ctx, pkt);
 }
 
-static int write_video_frame(AVFormatContext *oc, OutputStream *ost)
-{
-	int ret;
-	AVCodecContext *c;
-	AVFrame *frame;
-	int got_packet = 0;
-	AVPacket pkt = { 0 };
-
-	c = ost->st->codec;
-
-	frame = get_video_frame(ost);
-
-	av_init_packet(&pkt);
-
-	/* encode the image */
-	ret = avcodec_encode_video2(c, &pkt, frame, &got_packet);
-	if (ret < 0) 
-	{
-		fprintf(stderr, "Error encoding video frame: %d\n", ret);
-		return -1;
-	}
-
-	if (got_packet) 
-	{
-		ret = write_frame(oc, &c->time_base, ost->st, &pkt);
-	} 
-	else 
-	{
-		ret = 0;
-	}
-
-	if (ret < 0) 
-	{
-		fprintf(stderr, "Error while writing video frame: %s\n", ret);
-		exit(1);
-	}
-
-	return (frame || got_packet) ? 0 : 1;
-}
-
 static void close_stream(AVFormatContext *oc, OutputStream *ost)
 {
 	avcodec_close(ost->st->codec);
-	av_frame_free(&ost->frame);
-	av_frame_free(&ost->tmp_frame);
+//	av_frame_free(&ost->frame);
+//	av_frame_free(&ost->tmp_frame);
 	sws_freeContext(ost->sws_ctx);
 	swr_free(&ost->swr_ctx);
 }
 
 int FetchAVFrameToEncoder(AVFrame *src)
 {
-	int ret = av_frame_copy(video_st.frame, src);
+// 	int ret = av_frame_copy(video_st.frame, src);
+// 
+// 	av_frame_copy_props(video_st.frame, src);
+// 
+// 	video_st.frame->pts = video_st.frame->pkt_pts;
 
-	return ret;
+	video_st.frame = src;
+
+	return 0;
 }
 
 int EncodeOneFrame()
@@ -393,6 +285,7 @@ int EncodeOneFrame()
 
 	if (got_packet) 
 	{
+		output_packet_count++;
 		ret = write_frame(oc, &c->time_base, video_st.st, &pkt);
 	} 
 	else 
@@ -406,6 +299,7 @@ int EncodeOneFrame()
 		return -1;
 	}
 
+	av_frame_unref(frame);
 	return (frame || got_packet) ? 0 : 1;
 }
 

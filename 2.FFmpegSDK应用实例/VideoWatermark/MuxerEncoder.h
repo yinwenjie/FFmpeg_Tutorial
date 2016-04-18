@@ -3,8 +3,6 @@
 
 int InitMuxerEncoder(const char *dst_filename, const AVCodecContext *pCodecCtx);
 
-void EncodeFrames();
-
 int EncodeOneFrame();
 
 void CloseMuxerEncoder();

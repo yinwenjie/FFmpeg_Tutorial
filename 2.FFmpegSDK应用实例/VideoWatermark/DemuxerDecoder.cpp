@@ -14,6 +14,7 @@ static int      video_dst_linesize[4];
 static int		video_dst_bufsize;
 static int		video_stream_idx = -1;
 static int		refcount = 0;
+static int		input_packet_count = 0;
 
 static FILE		*video_dst_file = NULL;
 
@@ -192,7 +193,16 @@ int InitFramePacket()
 int ReadFramesFromFile()
 {
 	int ret = av_read_frame(fmt_ctx, &pkt);
-	return ret >= 0;
+
+	if (ret >= 0)
+	{
+		input_packet_count++;
+		return 1;
+	} 
+	else
+	{
+		return 0;
+	}
 }
 
 //解码出各帧图像
@@ -212,6 +222,7 @@ int DecodeOutFrames(const int yuv_out, void (*AVFrame_callback)(AVFrame *frame),
 
 		if (got_frame)
 		{
+			frame->pts = frame->pkt_dts = frame->pkt_pts = pkt.dts;
 			if (AVFrame_callback != NULL)
 			{
 				//AVFrame回调函数
@@ -232,7 +243,7 @@ int DecodeOutFrames(const int yuv_out, void (*AVFrame_callback)(AVFrame *frame),
 				fwrite(video_dst_data[0], 1, video_dst_bufsize, video_dst_file);
 			}
 
-			av_frame_unref(frame);
+//			av_frame_unref(frame);
 		}
 	} 
 	while (pkt.size > 0);
@@ -252,6 +263,8 @@ void CloseDemuxerDecoder()
 	}
 	av_frame_free(&frame);
 	av_free(video_dst_data[0]);
+
+	printf("**************************\nTotal num of packets in input file; %d\n**************************\n", input_packet_count);
 }
 
 const AVCodecContext* GetAVCodecContextAddress()

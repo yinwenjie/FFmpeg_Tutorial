@@ -5,7 +5,7 @@
 #include "MuxerEncoder.h"
 
 const int c_maxDecodedFrames = 2000;
-const int c_outputTempYUV = 1;
+const int c_outputTempYUV = 0;
 
 /*************************************************
 Function:		hello
@@ -82,11 +82,6 @@ int main(int argc, char **argv)
 		if (DecodeOutFrames(c_outputTempYUV, AVFrame_filter_callback, FetchAVFrameToEncoder))
 		{
 			EncodeOneFrame();
-		}
-
-		if (frameCnt++ > c_maxDecodedFrames)
-		{
-			break;
 		}
 	}
 
