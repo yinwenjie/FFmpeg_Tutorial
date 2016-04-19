@@ -77,8 +77,8 @@ int main(int argc, char **argv)
 
 		if (got_output) 
 		{
-			//获得一个完整的编码帧
-			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
+			//获得一个完整的码流包
+			printf("Write packets %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
 
 		if (got_output) 
 		{
-			printf("Write frame %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
+			printf("Write packets %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
