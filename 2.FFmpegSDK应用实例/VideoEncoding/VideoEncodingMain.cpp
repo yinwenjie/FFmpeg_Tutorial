@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 	
 	
 	CodecCtx ctx = { NULL, NULL, NULL};
-	int frameIdx, ret, got_output;
+	int frameIdx, packetIdx = 0, ret, got_output;
 
 	Open_file(io_param);						//打开输入输出文件
 	Open_encoder(ctx, io_param);				//根据输入参数设置并打开编码器各个部件
@@ -74,11 +74,11 @@ int main(int argc, char **argv)
 			fprintf(stderr, "Error encoding frame\n");
 			exit(1);
 		}
-
+		printf("Encode frame index: %d, frame pts: %d.\n", frameIdx, ctx.frame->pts);
 		if (got_output) 
 		{
 			//获得一个完整的码流包
-			printf("Write packets %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
+			printf("Write packets %3d (size=%5d). Packet pts: %d\n", packetIdx++, ctx.pkt.size, ctx.pkt.pts);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
 
 		if (got_output) 
 		{
-			printf("Write packets %3d (size=%5d)\n", frameIdx, ctx.pkt.size);
+			printf("Cached frames: Write packets %3d (size=%5d). Packet pts: %d\n", packetIdx++, ctx.pkt.size, ctx.pkt.pts);
 			fwrite(ctx.pkt.data, 1, ctx.pkt.size, io_param.pFout);
 			av_packet_unref(&(ctx.pkt));
 		}
