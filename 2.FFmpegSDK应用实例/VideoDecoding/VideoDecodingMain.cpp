@@ -104,6 +104,8 @@ int main(int argc, char **argv)
 				continue;
 			}
 
+			printf("Parse 1 packet. Packet pts: %d.\n", ctx.pkt.pts);
+
 			//根据AVCodecContext的设置，解析AVPacket中的码流，输出到AVFrame
 			int ret = avcodec_decode_video2(ctx.pCodecContext, ctx.frame, &got_picture, &(ctx.pkt));
 			if (ret < 0) 
