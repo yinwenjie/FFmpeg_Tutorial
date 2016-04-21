@@ -13,4 +13,6 @@ void CloseDemuxerDecoder();
 
 const AVCodecContext* GetAVCodecContextAddress();
 
+const AVStream* GetInputVideoStreamStruct();
+
 #endif

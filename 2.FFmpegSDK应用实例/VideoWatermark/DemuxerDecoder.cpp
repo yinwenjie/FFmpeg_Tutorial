@@ -277,3 +277,8 @@ const AVCodecContext* GetAVCodecContextAddress()
 {
 	return video_dec_ctx;
 }
+
+const AVStream* GetInputVideoStreamStruct()
+{
+	return video_stream;
+}

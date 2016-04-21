@@ -19,6 +19,17 @@ typedef struct OutputStream
 	struct SwrContext *swr_ctx;
 } OutputStream;
 
+#define DESIGNATED_FRAME_RATE 1
+
+#define STREAM_DURATION   10.0
+#define STREAM_PIX_FMT    AV_PIX_FMT_YUV420P /* default pix_fmt */
+
+#if DESIGNATED_FRAME_RATE
+
+#define STREAM_FRAME_RATE 10000 /* 25 images/s */
+
+#endif
+
 static OutputStream		video_st = { 0 };
 static AVOutputFormat	*fmt;
 static AVFormatContext	*oc;
@@ -39,7 +50,7 @@ static void close_stream(AVFormatContext *oc, OutputStream *ost);
 //**************************************************************************
 //---------------------------------½Ó¿Úº¯Êý---------------------------------
 //**************************************************************************
-int InitMuxerEncoder(const char *dst_filename, const AVCodecContext *pCodecCtx)
+int InitMuxerEncoder(const char *dst_filename, const AVCodecContext *pCodecCtx, const AVStream *pInputVideoStream)
 {
 	int ret = 0;
 	filename = dst_filename;
@@ -61,9 +72,20 @@ int InitMuxerEncoder(const char *dst_filename, const AVCodecContext *pCodecCtx)
 
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
+	AVRational r = {1, 1000};
     if (fmt->video_codec != AV_CODEC_ID_NONE) 
 	{
         add_stream(&video_st, oc, &video_codec, pCodecCtx, fmt->video_codec);
+
+#if (DESIGNATED_FRAME_RATE == 0)
+// 		AVRational stream_time_base = {avg_frame_rate.den, avg_frame_rate.num};
+// 		video_st.st->time_base = stream_time_base;
+// 		video_st.st->codec->time_base = stream_time_base;	
+		video_st.st->time_base = r;//pInputVideoStream->time_base;
+		video_st.st->avg_frame_rate = pInputVideoStream->avg_frame_rate;
+#endif
+		video_st.st->time_base = r;
+		video_st.st->avg_frame_rate = pInputVideoStream->avg_frame_rate;
         have_video = 1;
         encode_video = 1;
     }
@@ -135,7 +157,9 @@ static int add_stream(OutputStream *ost, AVFormatContext *oc, 	AVCodec **codec, 
 	ost->st->id = oc->nb_streams-1;
 	c = ost->st->codec;
 
+#if DESIGNATED_FRAME_RATE
 	AVRational r = { 1, STREAM_FRAME_RATE };
+#endif
 	switch ((*codec)->type) 
 	{
 		case AVMEDIA_TYPE_VIDEO:
@@ -143,8 +167,11 @@ static int add_stream(OutputStream *ost, AVFormatContext *oc, 	AVCodec **codec, 
 			c->bit_rate = pCodecCtx->bit_rate;
 			c->width    = pCodecCtx->width;
 			c->height   = pCodecCtx->height;
+			c->time_base = pCodecCtx->time_base;
+#if DESIGNATED_FRAME_RATE
 			ost->st->time_base = r;
 			c->time_base       = ost->st->time_base;
+#endif
 			c->gop_size      = pCodecCtx->gop_size; /* emit one intra frame every twelve frames at most */
 			c->pix_fmt       = STREAM_PIX_FMT;
 			break;
@@ -233,7 +260,7 @@ static int open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AV
 static int write_frame(AVFormatContext *fmt_ctx, const AVRational *time_base, AVStream *st, AVPacket *pkt)
 {
 	/* rescale output packet timestamp values from codec to stream timebase */
-	av_packet_rescale_ts(pkt, *time_base, st->time_base);
+//	av_packet_rescale_ts(pkt, *time_base, st->time_base);
 	pkt->stream_index = st->index;
 
 	/* Write the compressed frame to the media file. */
@@ -269,8 +296,10 @@ int EncodeOneFrame()
 	AVFrame *frame;
 	int got_packet = 0;
 	AVPacket pkt = { 0 };
+//	AVRational r = {1, 1000};
 
 	c = video_st.st->codec;
+//	c->time_base = r;
 
 	frame = video_st.frame;
 

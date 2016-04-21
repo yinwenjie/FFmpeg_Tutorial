@@ -5,7 +5,7 @@
 #include "MuxerEncoder.h"
 
 const int c_maxDecodedFrames = 2000;
-const int c_outputTempYUV = 1;
+const int c_outputTempYUV = 0;
 
 /*************************************************
 Function:		hello
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 		goto end;
 	}
 
-	if (InitMuxerEncoder(files.dst_filename, GetAVCodecContextAddress()))
+	if (InitMuxerEncoder(files.dst_filename, GetAVCodecContextAddress(), GetInputVideoStreamStruct()))
 	{
 		goto end;
 	}
