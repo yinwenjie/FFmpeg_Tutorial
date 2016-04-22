@@ -118,7 +118,7 @@ int main(int argc, char **argv)
 			{
 				//获得一帧完整的图像，写出到输出文件
 				write_out_yuv_frame(ctx, inputoutput);
-				printf("Succeed to decode 1 frame!\n");
+				printf("Succeed to decode 1 frame! Frame pts: %d\n", ctx.frame->pts);
 			}
 		} //while(uDataSize > 0)
 	}
