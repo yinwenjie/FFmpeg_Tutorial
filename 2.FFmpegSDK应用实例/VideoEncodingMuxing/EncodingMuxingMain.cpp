@@ -54,8 +54,6 @@ Description:	入口点函数
 *************************************************/
 int main(int argc, char **argv)
 {
-	const char *input_file_name = NULL;
-	const char *output_file_name = NULL;
 	AVDictionary *opt = NULL;
 	IOParam io = {NULL};
 	if (!hello(argc, argv, opt, io))
@@ -72,7 +70,7 @@ int main(int argc, char **argv)
 	AVFormatContext *oc;
 	AVCodec *audio_codec = NULL, *video_codec = NULL;
 
-	Open_coder_muxer(&fmt, &oc, output_file_name);
+	Open_coder_muxer(&fmt, &oc, io.output_file_name);
 
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
@@ -93,14 +91,14 @@ int main(int argc, char **argv)
 		Open_audio(oc, audio_codec, &audio_st, opt);
 	}		
 
-	av_dump_format(oc, 0, output_file_name, 1);
+	av_dump_format(oc, 0, io.output_file_name, 1);
 	/* open the output file, if needed */
 	if (!(fmt->flags & AVFMT_NOFILE))
 	{
-		ret = avio_open(&oc->pb, output_file_name, AVIO_FLAG_WRITE);
+		ret = avio_open(&oc->pb, io.output_file_name, AVIO_FLAG_WRITE);
 		if (ret < 0)
 		{
-			fprintf(stderr, "Could not open '%s': %d\n", output_file_name, ret);
+			fprintf(stderr, "Could not open '%s': %d\n", io.output_file_name, ret);
 			return 1;
 		}
 	}

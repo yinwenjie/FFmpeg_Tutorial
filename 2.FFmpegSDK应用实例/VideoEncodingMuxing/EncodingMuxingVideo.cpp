@@ -82,8 +82,7 @@ static int write_frame(AVFormatContext *fmt_ctx, const AVRational *time_base, AV
 }
 
 /* Prepare a dummy image. */
-static void fill_yuv_image(AVFrame *pict, int frame_index,
-	int width, int height)
+static void fill_yuv_image(AVFrame *pict, int frame_index, int width, int height)
 {
 	int x, y, i, ret;
 
@@ -93,18 +92,26 @@ static void fill_yuv_image(AVFrame *pict, int frame_index,
 	*/
 	ret = av_frame_make_writable(pict);
 	if (ret < 0)
+	{
 		exit(1);
+	}
 
 	i = frame_index;
 
 	/* Y */
 	for (y = 0; y < height; y++)
-	for (x = 0; x < width; x++)
-		pict->data[0][y * pict->linesize[0] + x] = x + y + i * 3;
+	{
+		for (x = 0; x < width; x++)
+		{
+			pict->data[0][y * pict->linesize[0] + x] = x + y + i * 3;
+		}
+	}
 
 	/* Cb and Cr */
-	for (y = 0; y < height / 2; y++) {
-		for (x = 0; x < width / 2; x++) {
+	for (y = 0; y < height / 2; y++) 
+	{
+		for (x = 0; x < width / 2; x++) 
+		{
 			pict->data[1][y * pict->linesize[1] + x] = 128 + y + i * 2;
 			pict->data[2][y * pict->linesize[2] + x] = 64 + x + i * 5;
 		}
@@ -119,32 +126,35 @@ static AVFrame *get_video_frame(OutputStream *ost)
 	/* check if we want to generate more frames */
 	{
 		AVRational r = { 1, 1 };
-		if (av_compare_ts(ost->next_pts, ost->st->codec->time_base,
-			STREAM_DURATION, r) >= 0)
+		if (av_compare_ts(ost->next_pts, ost->st->codec->time_base, STREAM_DURATION, r) >= 0)
+		{
 			return NULL;
+		}
 	}
 
-	if (c->pix_fmt != AV_PIX_FMT_YUV420P) {
+	if (c->pix_fmt != AV_PIX_FMT_YUV420P)
+	{
 		/* as we only generate a YUV420P picture, we must convert it
 		* to the codec pixel format if needed */
-		if (!ost->sws_ctx) {
+		if (!ost->sws_ctx) 
+		{
 			ost->sws_ctx = sws_getContext(c->width, c->height,
 				AV_PIX_FMT_YUV420P,
 				c->width, c->height,
 				c->pix_fmt,
 				SCALE_FLAGS, NULL, NULL, NULL);
-			if (!ost->sws_ctx) {
-				fprintf(stderr,
-					"Could not initialize the conversion context\n");
+
+			if (!ost->sws_ctx) 
+			{
+				fprintf(stderr, "Could not initialize the conversion context\n");
 				exit(1);
 			}
 		}
 		fill_yuv_image(ost->tmp_frame, ost->next_pts, c->width, c->height);
-		sws_scale(ost->sws_ctx,
-			(const uint8_t * const *)ost->tmp_frame->data, ost->tmp_frame->linesize,
-			0, c->height, ost->frame->data, ost->frame->linesize);
+		sws_scale(ost->sws_ctx, (const uint8_t * const *)ost->tmp_frame->data, ost->tmp_frame->linesize, 0, c->height, ost->frame->data, ost->frame->linesize);
 	}
-	else {
+	else 
+	{
 		fill_yuv_image(ost->frame, ost->next_pts, c->width, c->height);
 	}
 
@@ -169,19 +179,23 @@ int Write_video_frame(AVFormatContext *oc, OutputStream *ost)
 
 	/* encode the image */
 	ret = avcodec_encode_video2(c, &pkt, frame, &got_packet);
-	if (ret < 0) {
+	if (ret < 0) 
+	{
 		fprintf(stderr, "Error encoding video frame: %d\n", ret);
 		exit(1);
 	}
 
-	if (got_packet) {
+	if (got_packet)
+	{
 		ret = write_frame(oc, &c->time_base, ost->st, &pkt);
 	}
-	else {
+	else 
+	{
 		ret = 0;
 	}
 
-	if (ret < 0) {
+	if (ret < 0)
+	{
 		fprintf(stderr, "Error while writing video frame: %d\n", ret);
 		exit(1);
 	}
