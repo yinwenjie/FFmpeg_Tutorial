@@ -1,7 +1,7 @@
 #include "EncodingMuxingVideo.h"
 
-/**************************************************************/
-/* video output */
+
+FILE *g_inputYUVFile = NULL;
 
 static AVFrame *alloc_picture(enum AVPixelFormat pix_fmt, int width, int height)
 {
@@ -29,7 +29,7 @@ static AVFrame *alloc_picture(enum AVPixelFormat pix_fmt, int width, int height)
 	return picture;
 }
 
-void Open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg)
+void Open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg, IOParam &io)
 {
 	int ret;
 	AVCodecContext *c = ost->st->codec;
@@ -67,6 +67,14 @@ void Open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictio
 			exit(1);
 		}
 	}
+
+	//打开输入YUV文件
+	fopen_s(&g_inputYUVFile, io.input_file_name, "rb+");
+	if (g_inputYUVFile == NULL)
+	{
+		fprintf(stderr, "Open input yuv file failed.\n");
+		exit(1);
+	}
 }
 
 
@@ -81,7 +89,6 @@ static int write_frame(AVFormatContext *fmt_ctx, const AVRational *time_base, AV
 	return av_interleaved_write_frame(fmt_ctx, pkt);
 }
 
-/* Prepare a dummy image. */
 static void fill_yuv_image(AVFrame *pict, int frame_index, int width, int height)
 {
 	int x, y, i, ret;
@@ -101,19 +108,33 @@ static void fill_yuv_image(AVFrame *pict, int frame_index, int width, int height
 	/* Y */
 	for (y = 0; y < height; y++)
 	{
-		for (x = 0; x < width; x++)
+		ret = fread_s(&pict->data[0][y * pict->linesize[0]], pict->linesize[0], 1, width, g_inputYUVFile);
+		if (ret != width)
 		{
-			pict->data[0][y * pict->linesize[0] + x] = x + y + i * 3;
+			printf("Error: Read Y data error.\n");
+			exit(1);
 		}
 	}
 
-	/* Cb and Cr */
+	/* U */
 	for (y = 0; y < height / 2; y++) 
 	{
-		for (x = 0; x < width / 2; x++) 
+		ret = fread_s(&pict->data[1][y * pict->linesize[1]], pict->linesize[1], 1, width / 2, g_inputYUVFile);
+		if (ret != width / 2)
 		{
-			pict->data[1][y * pict->linesize[1] + x] = 128 + y + i * 2;
-			pict->data[2][y * pict->linesize[2] + x] = 64 + x + i * 5;
+			printf("Error: Read U data error.\n");
+			exit(1);
+		}
+	}
+
+	/* V */
+	for (y = 0; y < height / 2; y++) 
+	{
+		ret = fread_s(&pict->data[2][y * pict->linesize[2]], pict->linesize[2], 1, width / 2, g_inputYUVFile);
+		if (ret != width / 2)
+		{
+			printf("Error: Read V data error.\n");
+			exit(1);
 		}
 	}
 }
@@ -132,31 +153,7 @@ static AVFrame *get_video_frame(OutputStream *ost)
 		}
 	}
 
-	if (c->pix_fmt != AV_PIX_FMT_YUV420P)
-	{
-		/* as we only generate a YUV420P picture, we must convert it
-		* to the codec pixel format if needed */
-		if (!ost->sws_ctx) 
-		{
-			ost->sws_ctx = sws_getContext(c->width, c->height,
-				AV_PIX_FMT_YUV420P,
-				c->width, c->height,
-				c->pix_fmt,
-				SCALE_FLAGS, NULL, NULL, NULL);
-
-			if (!ost->sws_ctx) 
-			{
-				fprintf(stderr, "Could not initialize the conversion context\n");
-				exit(1);
-			}
-		}
-		fill_yuv_image(ost->tmp_frame, ost->next_pts, c->width, c->height);
-		sws_scale(ost->sws_ctx, (const uint8_t * const *)ost->tmp_frame->data, ost->tmp_frame->linesize, 0, c->height, ost->frame->data, ost->frame->linesize);
-	}
-	else 
-	{
-		fill_yuv_image(ost->frame, ost->next_pts, c->width, c->height);
-	}
+	fill_yuv_image(ost->frame, ost->next_pts, c->width, c->height);
 
 	ost->frame->pts = ost->next_pts++;
 

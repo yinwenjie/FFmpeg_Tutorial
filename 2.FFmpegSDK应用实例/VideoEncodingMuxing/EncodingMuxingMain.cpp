@@ -3,17 +3,6 @@
 #include "EncodingMuxingVideo.h"
 #include "EncodingMuxingAudio.h"
 
-/*************************************************
-	Struct:			IOParam
-	Description:	接收命令行参数
-*************************************************/
-typedef struct 
-{
-	const char *input_file_name;	//输入的像素文件名
-	const char *output_file_name;	//输出的封装视频文件名
-	int frame_width;				//视频帧宽度
-	int frame_height;				//视频帧高度
-} IOParam;
 
 /*************************************************
 	Function:		hello
@@ -74,7 +63,7 @@ int main(int argc, char **argv)
 
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
-	ret = Add_audio_video_streams(&video_st, &audio_st, oc, fmt, audio_codec, video_codec);
+	ret = Add_audio_video_streams(&video_st, &audio_st, oc, fmt, audio_codec, video_codec, io);
 	have_video = ret & HAVE_VIDEO;
 	encode_video = ret & ENCODE_VIDEO;
 	have_audio = ret & HAVE_AUDIO;
@@ -84,7 +73,7 @@ int main(int argc, char **argv)
      * video codecs and allocate the necessary encode buffers. */
 	if (have_video)
 	{
-		Open_video(oc, video_codec, &video_st, opt);
+		Open_video(oc, video_codec, &video_st, opt, io);
 	}
 	if (have_audio)
 	{

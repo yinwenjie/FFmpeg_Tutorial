@@ -5,9 +5,7 @@
 
 
 /* Add an output stream. */
-static void add_stream(OutputStream *ost, AVFormatContext *oc,
-	AVCodec **codec,
-enum AVCodecID codec_id)
+static void add_stream(OutputStream *ost, AVFormatContext *oc,	AVCodec **codec, enum AVCodecID codec_id)
 {
 	AVCodecContext *c;
 	int i;
@@ -83,7 +81,7 @@ enum AVCodecID codec_id)
 		c->time_base = ost->st->time_base;
 
 		c->gop_size = 12; /* emit one intra frame every twelve frames at most */
-		c->pix_fmt = STREAM_PIX_FMT;
+		c->pix_fmt = AV_PIX_FMT_YUV420P;
 		if (c->codec_id == AV_CODEC_ID_MPEG2VIDEO)
 		{
 			/* just for testing, we also add B frames */
@@ -108,12 +106,14 @@ enum AVCodecID codec_id)
 }
 
 
-int Add_audio_video_streams(OutputStream *video_st, OutputStream *audio_st, AVFormatContext *oc, AVOutputFormat *fmt, AVCodec *audio_codec, AVCodec *video_codec)
+int Add_audio_video_streams(OutputStream *video_st, OutputStream *audio_st, AVFormatContext *oc, AVOutputFormat *fmt, AVCodec *audio_codec, AVCodec *video_codec, IOParam &io)
 {
 	int ret = 0;
 	if (fmt->video_codec != AV_CODEC_ID_NONE)
 	{
 		add_stream(video_st, oc, &video_codec, fmt->video_codec);
+		video_st->st->codec->width = io.frame_width;
+		video_st->st->codec->height = io.frame_height;
 		ret |= HAVE_VIDEO;
 		ret |= ENCODE_VIDEO;
 	}

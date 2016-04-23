@@ -4,7 +4,9 @@
 #include "common.h"
 #include "Stream.h"
 
-void Open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg);
+typedef struct _IOParam IOParam;
+
+void Open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg, IOParam &io);
 
 int Write_video_frame(AVFormatContext *oc, OutputStream *ost);
 

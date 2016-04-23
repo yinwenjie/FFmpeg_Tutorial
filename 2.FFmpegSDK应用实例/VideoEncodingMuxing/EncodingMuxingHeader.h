@@ -21,4 +21,16 @@ extern "C"
 	#include "libavutil/timestamp.h"
 };  
 
+/*************************************************
+	Struct:			IOParam
+	Description:	接收命令行参数
+*************************************************/
+typedef struct _IOParam
+{
+	const char *input_file_name;	//输入的像素文件名
+	const char *output_file_name;	//输出的封装视频文件名
+	int frame_width;				//视频帧宽度
+	int frame_height;				//视频帧高度
+} IOParam;
+
 #endif

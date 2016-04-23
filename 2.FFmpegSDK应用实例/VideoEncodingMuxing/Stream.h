@@ -25,7 +25,7 @@ typedef struct OutputStream
 	struct SwrContext *swr_ctx;
 } OutputStream;
 
-int Add_audio_video_streams(OutputStream *video_st, OutputStream *audio_st, AVFormatContext *oc, AVOutputFormat *fmt, AVCodec *audio_codec, AVCodec *video_codec);
+int Add_audio_video_streams(OutputStream *video_st, OutputStream *audio_st, AVFormatContext *oc, AVOutputFormat *fmt, AVCodec *audio_codec, AVCodec *video_codec, IOParam &io);
 
 void Close_stream(AVFormatContext *oc, OutputStream *ost);
 
