@@ -24,6 +24,10 @@ static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ct
 	{
 		stream_index = ret;
 		st = va_ctx.fmt_ctx->streams[stream_index];
+		if (type == AVMEDIA_TYPE_VIDEO)
+		{
+			printf("Video stream time base: {%d ,%d}\n", st->time_base.num, st->time_base.den);
+		}
 
 		/* find decoder for the stream */
 		dec_ctx = st->codec;

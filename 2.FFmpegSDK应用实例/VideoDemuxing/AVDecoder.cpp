@@ -48,6 +48,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 
 	if (va_ctx.pkt.stream_index == va_ctx.video_stream_idx)
 	{
+		printf("Video packet pts: %d\n", va_ctx.pkt.pts);
 		/* decode video frame */
 		ret = avcodec_decode_video2(va_ctx.video_dec_ctx, va_ctx.frame, got_frame, &va_ctx.pkt);
 		if (ret < 0)
