@@ -3,28 +3,49 @@
 #include "EncodingMuxingVideo.h"
 #include "EncodingMuxingAudio.h"
 
-
-static int hello(int argc, char **argv, AVDictionary *opt, const char **filename)
+/*************************************************
+	Struct:			IOParam
+	Description:	接收命令行参数
+*************************************************/
+typedef struct 
 {
-	if (argc < 2) 
+	const char *input_file_name;	//输入的像素文件名
+	const char *output_file_name;	//输出的封装视频文件名
+	int frame_width;				//视频帧宽度
+	int frame_height;				//视频帧高度
+} IOParam;
+
+/*************************************************
+	Function:		hello
+	Description:	解析命令行传入的参数
+	Calls:			无
+	Called By:		main
+	Input:			(in)argc : 默认命令行参数
+					(in)argv : 默认命令行参数					
+	Output:			(out)io_param : 解析命令行的结果
+	Return:			true : 命令行解析正确
+					false : 命令行解析错误
+*************************************************/
+static bool hello(int argc, char **argv, AVDictionary *opt, IOParam &ioParam)
+{
+	if (argc < 3) 
 	{
-		printf("usage: %s output_file\n"
+		printf("usage: %s output_file input_file frame_width frame_height\n"
 			"API example program to output a media file with libavformat.\n"
 			"This program generates a synthetic audio and video stream, encodes and\n"
 			"muxes them into a file named output_file.\n"
 			"The output format is automatically guessed according to the file extension.\n"
 			"Raw images can also be output by using '%%d' in the filename.\n"
 			"\n", argv[0]);
-		return 1;
+		return false;
 	}
 
-	*filename = argv[1];
-	if (argc > 3 && !strcmp(argv[2], "-flags")) 
-	{
-		av_dict_set(&opt, argv[2]+1, argv[3], 0);
-	}
+	ioParam.output_file_name = argv[1];
+	ioParam.input_file_name = argv[2];
+	ioParam.frame_width = atoi(argv[3]);
+	ioParam.frame_height = atoi(argv[4]);
 
-	return 0;
+	return true;
 }
 
 /*************************************************
@@ -33,9 +54,11 @@ Description:	入口点函数
 *************************************************/
 int main(int argc, char **argv)
 {
-	const char *filename = NULL;
+	const char *input_file_name = NULL;
+	const char *output_file_name = NULL;
 	AVDictionary *opt = NULL;
-	if (hello(argc, argv, opt, &filename))
+	IOParam io = {NULL};
+	if (!hello(argc, argv, opt, io))
 	{
 		return 1;
 	}
@@ -49,7 +72,7 @@ int main(int argc, char **argv)
 	AVFormatContext *oc;
 	AVCodec *audio_codec = NULL, *video_codec = NULL;
 
-	Open_coder_muxer(&fmt, &oc, filename);
+	Open_coder_muxer(&fmt, &oc, output_file_name);
 
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
@@ -70,14 +93,14 @@ int main(int argc, char **argv)
 		Open_audio(oc, audio_codec, &audio_st, opt);
 	}		
 
-	av_dump_format(oc, 0, filename, 1);
+	av_dump_format(oc, 0, output_file_name, 1);
 	/* open the output file, if needed */
 	if (!(fmt->flags & AVFMT_NOFILE))
 	{
-		ret = avio_open(&oc->pb, filename, AVIO_FLAG_WRITE);
+		ret = avio_open(&oc->pb, output_file_name, AVIO_FLAG_WRITE);
 		if (ret < 0)
 		{
-			fprintf(stderr, "Could not open '%s': %d\n", filename, ret);
+			fprintf(stderr, "Could not open '%s': %d\n", output_file_name, ret);
 			return 1;
 		}
 	}
@@ -93,9 +116,7 @@ int main(int argc, char **argv)
 	while (encode_video || encode_audio) 
 	{
 		/* select the stream to encode */
-		if (encode_video &&
-			(!encode_audio || av_compare_ts(video_st.next_pts, video_st.st->codec->time_base,
-			audio_st.next_pts, audio_st.st->codec->time_base) <= 0))
+		if (encode_video && (!encode_audio || av_compare_ts(video_st.next_pts, video_st.st->codec->time_base, audio_st.next_pts, audio_st.st->codec->time_base) <= 0))
 		{
 			encode_video = !Write_video_frame(oc, &video_st);
 		}
