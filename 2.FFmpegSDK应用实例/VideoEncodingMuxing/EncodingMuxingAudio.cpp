@@ -109,8 +109,7 @@ static AVFrame *get_audio_frame(OutputStream *ost)
 	{
 		AVRational r = { 1, 1 };
 		/* check if we want to generate more frames */
-		if (av_compare_ts(ost->next_pts, ost->st->codec->time_base,
-			STREAM_DURATION, r) >= 0)
+		if (av_compare_ts(ost->next_pts, ost->st->codec->time_base,	STREAM_DURATION, r) >= 0)
 			return NULL;
 	}
 

@@ -53,6 +53,7 @@ int main(int argc, char **argv)
 	int ret;
 	int have_video = 0, have_audio = 0;
 	int encode_video = 0, encode_audio = 0;
+	int videoFrameIdx = 0, audioFrameIdx = 0;
 
 	OutputStream video_st = { 0 }, audio_st = { 0 };
 	AVOutputFormat *fmt;
@@ -106,10 +107,26 @@ int main(int argc, char **argv)
 		if (encode_video && (!encode_audio || av_compare_ts(video_st.next_pts, video_st.st->codec->time_base, audio_st.next_pts, audio_st.st->codec->time_base) <= 0))
 		{
 			encode_video = !Write_video_frame(oc, &video_st);
+			if (encode_video)
+			{
+				printf("Write %d video frame.\n", videoFrameIdx++);
+			}
+			else
+			{
+				printf("Video ended, exit.\n");
+			}
 		}
 		else 
 		{
 			encode_audio = !Write_audio_frame(oc, &audio_st);
+			if (encode_audio)
+			{
+				printf("Write %d audio frame.\n", audioFrameIdx++);
+			}
+			else
+			{
+				printf("Audio ended, exit.\n");
+			}
 		}
 	}
 
