@@ -1,11 +1,6 @@
 #include "EncodingMuxingAudio.h"
 
-/**************************************************************/
-/* audio output */
-
-static AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt,
-	uint64_t channel_layout,
-	int sample_rate, int nb_samples)
+static AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t channel_layout,	int sample_rate, int nb_samples)
 {
 	AVFrame *frame = av_frame_alloc();
 	int ret;
@@ -48,7 +43,8 @@ void Open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictio
 	av_dict_copy(&opt, opt_arg, 0);
 	ret = avcodec_open2(c, codec, &opt);
 	av_dict_free(&opt);
-	if (ret < 0) {
+	if (ret < 0) 
+	{
 		fprintf(stderr, "Could not open audio codec: %d\n", ret);
 		exit(1);
 	}
@@ -64,14 +60,13 @@ void Open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictio
 	else
 		nb_samples = c->frame_size;
 
-	ost->frame = alloc_audio_frame(c->sample_fmt, c->channel_layout,
-		c->sample_rate, nb_samples);
-	ost->tmp_frame = alloc_audio_frame(AV_SAMPLE_FMT_S16, c->channel_layout,
-		c->sample_rate, nb_samples);
+	ost->frame = alloc_audio_frame(c->sample_fmt, c->channel_layout, c->sample_rate, nb_samples);
+	ost->tmp_frame = alloc_audio_frame(AV_SAMPLE_FMT_S16, c->channel_layout, c->sample_rate, nb_samples);
 
 	/* create resampler context */
 	ost->swr_ctx = swr_alloc();
-	if (!ost->swr_ctx) {
+	if (!ost->swr_ctx) 
+	{
 		fprintf(stderr, "Could not allocate resampler context\n");
 		exit(1);
 	}
@@ -85,7 +80,8 @@ void Open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictio
 	av_opt_set_sample_fmt(ost->swr_ctx, "out_sample_fmt", c->sample_fmt, 0);
 
 	/* initialize the resampling context */
-	if ((ret = swr_init(ost->swr_ctx)) < 0) {
+	if ((ret = swr_init(ost->swr_ctx)) < 0)
+	{
 		fprintf(stderr, "Failed to initialize the resampling context\n");
 		exit(1);
 	}
@@ -118,7 +114,8 @@ static AVFrame *get_audio_frame(OutputStream *ost)
 			return NULL;
 	}
 
-	for (j = 0; j < frame->nb_samples; j++) {
+	for (j = 0; j < frame->nb_samples; j++)
+	{
 		v = (int)(sin(ost->t) * 10000);
 		for (i = 0; i < ost->st->codec->channels; i++)
 			*q++ = v;
@@ -146,11 +143,11 @@ int Write_audio_frame(AVFormatContext *oc, OutputStream *ost)
 
 	frame = get_audio_frame(ost);
 
-	if (frame) {
+	if (frame)
+	{
 		/* convert samples from native format to destination codec format, using the resampler */
 		/* compute destination number of samples */
-		dst_nb_samples = av_rescale_rnd(swr_get_delay(ost->swr_ctx, c->sample_rate) + frame->nb_samples,
-			c->sample_rate, c->sample_rate, AV_ROUND_UP);
+		dst_nb_samples = av_rescale_rnd(swr_get_delay(ost->swr_ctx, c->sample_rate) + frame->nb_samples, c->sample_rate, c->sample_rate, AV_ROUND_UP);
 		av_assert0(dst_nb_samples == frame->nb_samples);
 
 		/* when we pass a frame to the encoder, it may keep a reference to it
@@ -165,7 +162,8 @@ int Write_audio_frame(AVFormatContext *oc, OutputStream *ost)
 		ret = swr_convert(ost->swr_ctx,
 			ost->frame->data, dst_nb_samples,
 			(const uint8_t **)frame->data, frame->nb_samples);
-		if (ret < 0) {
+		if (ret < 0)
+		{
 			fprintf(stderr, "Error while converting\n");
 			exit(1);
 		}
@@ -180,16 +178,18 @@ int Write_audio_frame(AVFormatContext *oc, OutputStream *ost)
 	}
 
 	ret = avcodec_encode_audio2(c, &pkt, frame, &got_packet);
-	if (ret < 0) {
+	if (ret < 0)
+	{
 		fprintf(stderr, "Error encoding audio frame: %d\n", ret);
 		exit(1);
 	}
 
-	if (got_packet) {
+	if (got_packet) 
+	{
 		ret = write_frame(oc, &c->time_base, ost->st, &pkt);
-		if (ret < 0) {
-			fprintf(stderr, "Error while writing audio frame: %d\n",
-				ret);
+		if (ret < 0) 
+		{
+			fprintf(stderr, "Error while writing audio frame: %d\n", ret);
 			exit(1);
 		}
 	}
