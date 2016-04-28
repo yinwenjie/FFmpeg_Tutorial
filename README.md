@@ -903,3 +903,20 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 在进行音频和视频封装时，我们将实际操作一系列音频或视频流数据的生成和写入。所谓流，指的是一系列相关联的包的集合，这些包一般同属于一组按照时间先后顺序进行解码/渲染等处理的数据。在一个比较典型的视频文件中，我们通常至少会包含一个视频流和一个音频流。
 
 在FFMpeg中，表示音频流或视频流有一个专门的结构，即"AVStream"实现。该结构主要对音频和视频数据的处理进行管理和控制。另外，"AVFormatContext"结构也是必须的，因为它包含了控制输入和输出的信息。
+
+音频和视频数据封装为视频文件的主要步骤为：
+
+## 1. 相关数据结构的准备 
+
+首先，根据输出文件的格式获取AVFormatContext结构，获取AVFormatContext结构使用函数avformat\_alloc\_output\_context2实现。该函数的声明为：
+
+	int avformat_alloc_output_context2(AVFormatContext **ctx, AVOutputFormat *oformat, const char *format_name, const char *filename);
+
+其中：
+
+- ctx：输出到AVFormatContext结构的指针，如果函数失败则返回给该指针为NULL；
+- oformat：指定输出的AVOutputFormat类型，如果设为NULL则使用format_name和filename生成；
+- format_name：输出格式的名称，如果设为NULL则使用filename默认格式；
+- filename：目标文件名，如果不使用，可以设为NULL；
+
+分配AVFormatContext成功后，我们需要添加希望封装的数据流，一般是一路视频流+一路音频流（可能还有其他音频流和字幕流等）。
