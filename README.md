@@ -919,4 +919,15 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 - format_name：输出格式的名称，如果设为NULL则使用filename默认格式；
 - filename：目标文件名，如果不使用，可以设为NULL；
 
-分配AVFormatContext成功后，我们需要添加希望封装的数据流，一般是一路视频流+一路音频流（可能还有其他音频流和字幕流等）。
+分配AVFormatContext成功后，我们需要添加希望封装的数据流，一般是一路视频流+一路音频流（可能还有其他音频流和字幕流等）。添加流首先需要查找流所包含的媒体的编码器，这需要传入codec_id后使用avcodec\_find\_encoder函数实现，将查找到的编码器保存在AVCodec指针中。
+
+之后，调用avformat_new_stream函数向AVFormatContext结构中所代表的媒体文件中添加数据流。该函数的声明如下：
+
+	AVStream *avformat_new_stream(AVFormatContext *s, const AVCodec *c);
+
+其中各个参数的含义：
+
+- s：AVFormatContext结构，表示要封装生成的视频文件；
+- c：上一步根据codec_id产生的编码器指针；
+- 返回值：指向生成的stream对象的指针；如果失败则返回NULL指针。
+
