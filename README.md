@@ -1035,4 +1035,122 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 ## 2. 打开音视频
 
-打开音视频主要涉及到打开编码音视频数据所需要的编码器，以及分配相应的frame对象
+打开音视频主要涉及到打开编码音视频数据所需要的编码器，以及分配相应的frame对象。其中打开编码器如之前一样，调用avcodec\_open函数，分配frame对象调用av\_frame\_alloc以及av\_frame\_get\_buffer。分配frame对象的实现如下：
+
+	static AVFrame *alloc_picture(enum AVPixelFormat pix_fmt, int width, int height)
+	{
+		AVFrame *picture;
+		int ret;
+
+		picture = av_frame_alloc();
+		if (!picture)
+		{
+			return NULL;
+		}
+
+		picture->format = pix_fmt;
+		picture->width = width;
+		picture->height = height;
+	
+		/* allocate the buffers for the frame data */
+		ret = av_frame_get_buffer(picture, 32);
+		if (ret < 0)
+		{
+			fprintf(stderr, "Could not allocate frame data.\n");
+			exit(1);
+		}
+
+		return picture;
+	}
+
+而上层打开音视频部分的实现如：
+
+	void Open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg, IOParam &io)
+	{
+		int ret;
+		AVCodecContext *c = ost->st->codec;
+		AVDictionary *opt = NULL;
+	
+		av_dict_copy(&opt, opt_arg, 0);
+	
+		/* open the codec */
+		ret = avcodec_open2(c, codec, &opt);
+		av_dict_free(&opt);
+		if (ret < 0)
+		{
+			fprintf(stderr, "Could not open video codec: %d\n", ret);
+			exit(1);
+		}
+	
+		/* allocate and init a re-usable frame */
+		ost->frame = alloc_picture(c->pix_fmt, c->width, c->height);
+		if (!ost->frame)
+		{
+			fprintf(stderr, "Could not allocate video frame\n");
+			exit(1);
+		}
+	
+		/* If the output format is not YUV420P, then a temporary YUV420P
+		* picture is needed too. It is then converted to the required
+		* output format. */
+		ost->tmp_frame = NULL;
+		if (c->pix_fmt != AV_PIX_FMT_YUV420P)
+		{
+			ost->tmp_frame = alloc_picture(AV_PIX_FMT_YUV420P, c->width, c->height);
+			if (!ost->tmp_frame)
+			{
+				fprintf(stderr, "Could not allocate temporary picture\n");
+				exit(1);
+			}
+		}
+	
+		//打开输入YUV文件
+		fopen_s(&g_inputYUVFile, io.input_file_name, "rb+");
+		if (g_inputYUVFile == NULL)
+		{
+			fprintf(stderr, "Open input yuv file failed.\n");
+			exit(1);
+		}
+	}
+
+
+## 3. 打开输出文件并写入文件头
+
+如果判断需要写出文件的话，则需要打开输出文件。在这里，我们可以不再定义输出文件指针，并使用fopen打开，而是直接使用FFMpeg的API——avio\_open来实现输出文件的打开功能。该函数的声明如下：
+
+	int avio_open(AVIOContext **s, const char *url, int flags);
+
+该函数的输入参数为：
+
+- s：输出参数，返回一个AVIOContext；如果打开失败则返回NULL；
+- url：输出的url或者文件的完整路径；
+- flags：控制文件打开方式，如读方式、写方式和读写方式；
+
+实际的代码实现方式如下：
+
+	/* open the output file, if needed */
+	if (!(fmt->flags & AVFMT_NOFILE))
+	{
+		ret = avio_open(&oc->pb, io.output_file_name, AVIO_FLAG_WRITE);
+		if (ret < 0)
+		{
+			fprintf(stderr, "Could not open '%s': %d\n", io.output_file_name, ret);
+			return 1;
+		}
+	}
+
+写入文件头操作是生成视频文件中极为重要的一步，而实现过程却非常简单，只需要通过函数avformat\_write_header即可，该函数的声明为：
+
+	int avformat_write_header(AVFormatContext *s, AVDictionary **options);
+
+其输入参数实际上重要的只有第一个，即标记输出文件的句柄对象指针；options用于保存无法识别的设置项，可以传入一个空指针。其返回值表示写文件头成功与否，成功则返回0，失败则返回负的错误码。
+
+实现方式如：
+
+	/* Write the stream header, if any. */
+	ret = avformat_write_header(oc, &opt);
+	if (ret < 0)
+	{
+		fprintf(stderr, "Error occurred when opening output file: %d\n",ret);
+		return 1;
+	}
