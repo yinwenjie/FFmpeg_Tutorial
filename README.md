@@ -1281,3 +1281,77 @@ av\_packet_rescale_ts函数的作用为不同time_base度量之间的转换，�
 	int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt);
 
 该函数的声明也很简单，第一个参数是之前打开并写入文件头的文件句柄，第二个参数是写入文件的packet。返回值为错误码，成功返回0，失败则返回一个负值。
+
+Write\_video_frame函数的整体实现如：
+
+	int Write_video_frame(AVFormatContext *oc, OutputStream *ost)
+	{
+		int ret;
+		AVCodecContext *c;
+		AVFrame *frame;
+		int got_packet = 0;
+		AVPacket pkt = { 0 };
+	
+		c = ost->st->codec;
+	
+		frame = get_video_frame(ost);
+	
+		av_init_packet(&pkt);
+	
+		/* encode the image */
+		ret = avcodec_encode_video2(c, &pkt, frame, &got_packet);
+		if (ret < 0) 
+		{
+			fprintf(stderr, "Error encoding video frame: %d\n", ret);
+			exit(1);
+		}
+	
+		if (got_packet)
+		{
+			ret = write_frame(oc, &c->time_base, ost->st, &pkt);
+		}
+		else 
+		{
+			ret = 0;
+		}
+	
+		if (ret < 0)
+		{
+			fprintf(stderr, "Error while writing video frame: %d\n", ret);
+			exit(1);
+		}
+	
+		return (frame || got_packet) ? 0 : 1;
+	}
+
+以上是写入一帧视频数据的方法，写入音频的方法于此大同小异。整个编码封装的循环上层实现如：
+
+	while (encode_video || encode_audio) 
+	{
+		/* select the stream to encode */
+		if (encode_video && (!encode_audio || av_compare_ts(video_st.next_pts, video_st.st->codec->time_base, audio_st.next_pts, audio_st.st->codec->time_base) <= 0))
+		{
+			encode_video = !Write_video_frame(oc, &video_st);
+			if (encode_video)
+			{
+				printf("Write %d video frame.\n", videoFrameIdx++);
+			}
+			else
+			{
+				printf("Video ended, exit.\n");
+			}
+		}
+		else 
+		{
+			encode_audio = !Write_audio_frame(oc, &audio_st);
+			if (encode_audio)
+			{
+				printf("Write %d audio frame.\n", audioFrameIdx++);
+			}
+			else
+			{
+				printf("Audio ended, exit.\n");
+			}
+		}
+	}
+
