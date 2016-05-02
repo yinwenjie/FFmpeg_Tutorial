@@ -1355,3 +1355,32 @@ Write\_video_frame函数的整体实现如：
 		}
 	}
 
+##5. 写入文件尾，并进行收尾工作
+
+写入文件尾的数据同写文件头一样简单，只需要调用函数av\_write_trailer即可实现：
+	
+	int av_write_trailer(AVFormatContext *s);
+
+该函数只有一个参数即视频文件的句柄，当返回值为0时表示函数执行成功。
+
+整个流程的收尾工作包括关闭文件中的数据流、关闭输出文件和释放AVCodecContext对象。其中关闭数据流的实现方式如：
+
+	void Close_stream(AVFormatContext *oc, OutputStream *ost)
+	{
+		avcodec_close(ost->st->codec);
+		av_frame_free(&ost->frame);
+		av_frame_free(&ost->tmp_frame);
+		sws_freeContext(ost->sws_ctx);
+		swr_free(&ost->swr_ctx);
+	}
+
+关闭输出文件和释放AVCodecContext对象：
+
+	if (!(fmt->flags & AVFMT_NOFILE))
+		/* Close the output file. */
+		avio_closep(&oc->pb);
+
+	/* free the stream */
+	avformat_free_context(oc);
+
+至此，整个处理流程便结束了。正确设置输入的YUV文件就可以获取封装好的音视频文件。
