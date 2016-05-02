@@ -1154,3 +1154,130 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		fprintf(stderr, "Error occurred when opening output file: %d\n",ret);
 		return 1;
 	}
+
+##4. 编码和封装循环
+
+以视频流为例。编解码循环的过程实际上可以封装在一个函数Write\_video_frame中。该函数从逻辑上可以分为3个部分：获取原始视频信号、视频编码、写入输出文件。
+
+### (1) 读取原始视频数据
+
+这一部分主要实现根据时长判断是否需要继续进行处理、读取视频到AVFrame和设置pts。其中时长判断部分根据pts和AVCodecContext的time_base判断。实现如下：
+
+	AVCodecContext *c = ost->st->codec;
+
+	/* check if we want to generate more frames */
+	{
+		AVRational r = { 1, 1 };
+		if (av_compare_ts(ost->next_pts, ost->st->codec->time_base, STREAM_DURATION, r) >= 0)
+		{
+			return NULL;
+		}
+	}
+
+读取视频到AVFrame我们定义一个fill\_yuv_image函数实现：
+
+	static void fill_yuv_image(AVFrame *pict, int frame_index, int width, int height)
+	{
+		int x, y, i, ret;
+	
+		/* when we pass a frame to the encoder, it may keep a reference to it
+		* internally;
+		* make sure we do not overwrite it here
+		*/
+		ret = av_frame_make_writable(pict);
+		if (ret < 0)
+		{
+			exit(1);
+		}
+	
+		i = frame_index;
+	
+		/* Y */
+		for (y = 0; y < height; y++)
+		{
+			ret = fread_s(&pict->data[0][y * pict->linesize[0]], pict->linesize[0], 1, width, g_inputYUVFile);
+			if (ret != width)
+			{
+				printf("Error: Read Y data error.\n");
+				exit(1);
+			}
+		}
+	
+		/* U */
+		for (y = 0; y < height / 2; y++) 
+		{
+			ret = fread_s(&pict->data[1][y * pict->linesize[1]], pict->linesize[1], 1, width / 2, g_inputYUVFile);
+			if (ret != width / 2)
+			{
+				printf("Error: Read U data error.\n");
+				exit(1);
+			}
+		}
+	
+		/* V */
+		for (y = 0; y < height / 2; y++) 
+		{
+			ret = fread_s(&pict->data[2][y * pict->linesize[2]], pict->linesize[2], 1, width / 2, g_inputYUVFile);
+			if (ret != width / 2)
+			{
+				printf("Error: Read V data error.\n");
+				exit(1);
+			}
+		}
+	}
+
+然后进行pts的设置，很简单，就是上一个frame的pts递增1：
+
+	ost->frame->pts = ost->next_pts++;
+
+整个获取视频信号的实现如：
+
+	static AVFrame *get_video_frame(OutputStream *ost)
+	{
+		AVCodecContext *c = ost->st->codec;
+	
+		/* check if we want to generate more frames */
+		{
+			AVRational r = { 1, 1 };
+			if (av_compare_ts(ost->next_pts, ost->st->codec->time_base, STREAM_DURATION, r) >= 0)
+			{
+				return NULL;
+			}
+		}
+	
+		fill_yuv_image(ost->frame, ost->next_pts, c->width, c->height);
+	
+		ost->frame->pts = ost->next_pts++;
+	
+		return ost->frame;
+	}
+
+### (2) 视频编码
+
+视频编码的方式同之前几次使用的方式相同，即调用avcodec\_encode_video2，实现方法如：
+	
+	/* encode the image */
+	ret = avcodec_encode_video2(c, &pkt, frame, &got_packet);
+	if (ret < 0) 
+	{
+		fprintf(stderr, "Error encoding video frame: %d\n", ret);
+		exit(1);
+	}
+
+### (3) 写出编码后的数据到输出视频文件
+
+这部分的实现过程很简单，方式如下：
+
+	/* rescale output packet timestamp values from codec to stream timebase */
+	av_packet_rescale_ts(pkt, *time_base, st->time_base);
+	pkt->stream_index = st->index;
+
+	/* Write the compressed frame to the media file. */
+	//	log_packet(fmt_ctx, pkt);
+	return av_interleaved_write_frame(fmt_ctx, pkt);
+
+av\_packet_rescale_ts函数的作用为不同time_base度量之间的转换，在这里起到的作用是将AVCodecContext的time_base转换为AVStream中的time_base。av\_interleaved_write_frame函数的作用是写出AVPacket到输出文件。该函数的声明为：
+
+	int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt);
+
+该函数的声明也很简单，第一个参数是之前打开并写入文件头的文件句柄，第二个参数是写入文件的packet。返回值为错误码，成功返回0，失败则返回一个负值。
