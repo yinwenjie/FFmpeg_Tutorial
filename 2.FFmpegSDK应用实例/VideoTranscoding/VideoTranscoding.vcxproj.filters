@@ -5,10 +5,16 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
+    <Filter Include="FileIO">
+      <UniqueIdentifier>{573609cc-d815-4751-a569-a1ce5fe8b812}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="VideoTranscodingMain.cpp">
       <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="FileIO.cpp">
+      <Filter>FileIO</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -17,6 +23,9 @@
     </ClInclude>
     <ClInclude Include="common.h">
       <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="FileIO.h">
+      <Filter>FileIO</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
