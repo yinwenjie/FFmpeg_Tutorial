@@ -1,18 +1,29 @@
 #include "common.h"
 
-static int  hello(int argc, char **argv, FileInOut &files)
+/*************************************************
+	Function:		hello
+	Description:	解析命令行传入的参数
+	Calls:			无
+	Called By:		main
+	Input:			(in)argc : 默认命令行参数
+					(in)argv : 默认命令行参数					
+	Output:			(out)files : 输入输出文件对象
+	Return:			true : 命令行解析正确
+					false : 命令行解析错误
+*************************************************/
+static bool  hello(int argc, char **argv, FileInOut &files)
 {
 	printf("FFMpeg Trans Coding Demo:\nCommand line format: %s inputFileName outputFileName.\n", argv[0]);
 	if (argc != 3)
 	{
 		printf("Command line parameters error. Please re-check.\n");
-		return -1; 
+		return false; 
 	}
 
 	files.inputFileName = argv[1];
 	files.outputFileName = argv[2];
 
-	return 0;
+	return true;
 }
 
 

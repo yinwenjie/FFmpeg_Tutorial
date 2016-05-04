@@ -3,5 +3,6 @@
 
 #include "VideoTranscodingHeader.h"
 #include "FileIO.h"
+#include "TranscodingContext.h"
 
 #endif
