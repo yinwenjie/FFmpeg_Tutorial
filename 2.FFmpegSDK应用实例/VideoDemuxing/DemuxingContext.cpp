@@ -1,11 +1,6 @@
 #include "DemuxingContext.h"
 
 
-/* Enable or disable frame reference counting. You are not supposed to support
- * both paths in your application but pick the one most appropriate to your
- * needs. Look for the use of refcount in this example to see what are the
- * differences of API usage between them. */
-
 static int open_codec_context(IOFileName &files, DemuxingVideoAudioContex &va_ctx, enum AVMediaType type)
 {
 	int ret, stream_index;
