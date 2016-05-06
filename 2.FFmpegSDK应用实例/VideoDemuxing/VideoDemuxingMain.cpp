@@ -74,7 +74,6 @@ int main(int argc, char **argv)
 	/* read frames from the file */
 	while (av_read_frame(va_ctx.fmt_ctx, &va_ctx.pkt) >= 0)		//从输入程序中读取一个包的数据
 	{
-		AVPacket orig_pkt = va_ctx.pkt;
 		do 
 		{
 			ret = Decode_packet(files, va_ctx, &got_frame, 0);	//解码这个包
@@ -83,7 +82,6 @@ int main(int argc, char **argv)
 			va_ctx.pkt.data += ret;
 			va_ctx.pkt.size -= ret;
 		} while (va_ctx.pkt.size > 0);
-		av_packet_unref(&orig_pkt);
 	}
 
 	/* flush cached frames */
