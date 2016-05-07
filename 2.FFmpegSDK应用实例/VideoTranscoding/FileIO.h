@@ -7,4 +7,6 @@ typedef struct _FileInOut
 	const char *outputFileName;
 } FileInOut;
 
+bool Open_input_file(FileInOut &files);
+
 #endif

@@ -36,8 +36,10 @@ int main(int argc, char **argv)
 	FileInOut files = { NULL };
 	if (hello(argc, argv, files))
 	{
+		printf("Error: Command line parameters error.\n");
 		return -1;
 	}
+
 
 	return 0;
 }
