@@ -4,21 +4,12 @@
 static AVFormatContext *ifmt_ctx = NULL;
 static AVFormatContext *ofmt_ctx = NULL;
 
-/*************************************************
-	Function:		Open_input_file
-	Description:	打开输入文件
-	Calls:			无
-	Called By:		main
-	Input:			(in) FileInOut &files : 输入和输出文件名									
-	Output:			无
-	Return:			true : 打开文件成功
-					false : 打开文件失败
-*************************************************/
+
 bool Open_input_file(FileInOut &files)
 {
 	int ret = 0;
 	
-	//打开输出文件，并查找其中的流信息
+	//打开输入文件，并查找其中的流信息
 	if ((ret = avformat_open_input(&ifmt_ctx, files.inputFileName, NULL, NULL)) < 0)
 	{
 		printf("Error: Open input file failed.\n");
@@ -49,4 +40,14 @@ bool Open_input_file(FileInOut &files)
 	}
 
 	return true;
+}
+
+bool Open_output_file(FileInOut &files)
+{
+	AVStream *out_stream;
+	AVStream *in_stream;
+	AVCodecContext *dec_ctx, *enc_ctx;
+	AVCodec *encoder;
+
+
 }
