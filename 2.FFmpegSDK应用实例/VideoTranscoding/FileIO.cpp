@@ -144,3 +144,12 @@ bool Open_output_file(FileInOut &files, TranscodingContext &trans_ctx)
 
 	return true;
 }
+
+bool Read_packets_from_input_file(TranscodingContext &trans_ctx)
+{
+	int ret = av_read_frame(trans_ctx.ifmt_ctx, &(trans_ctx.packet));
+	if (ret < 0)
+	{
+		return false;
+	}
+}

@@ -58,7 +58,10 @@ int main(int argc, char **argv)
 	/* read all packets */
 	while (1) 
 	{
-
+		if (!Read_packets_from_input_file(transCtx))
+		{
+			break;
+		}
 	}
 
 	return 0;
