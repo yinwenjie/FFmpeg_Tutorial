@@ -6,6 +6,9 @@ typedef struct _TranscodingContext
 	AVPacket packet;
 	AVFrame *frame;
 	unsigned int stream_index;;
+
+	AVFormatContext *ifmt_ctx;
+	AVFormatContext *ofmt_ctx;
 } TranscodingContext;
 
 #endif

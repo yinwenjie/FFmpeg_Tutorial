@@ -43,16 +43,22 @@ int main(int argc, char **argv)
 	TranscodingContext transCtx = {NULL};
 	Init_transcoder(transCtx);
 
-	if (!Open_input_file(files))
+	if (!Open_input_file(files, transCtx))
 	{
 		printf("Error: Open input file failed.\n");
 		return -1;
 	}
 
-	if (!Open_output_file(files))
+	if (!Open_output_file(files, transCtx))
 	{
 		printf("Error: Open output file failed.\n");
 		return -1;
+	}
+
+	/* read all packets */
+	while (1) 
+	{
+
 	}
 
 	return 0;

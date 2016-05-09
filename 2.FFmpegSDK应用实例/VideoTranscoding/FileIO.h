@@ -7,6 +7,7 @@ typedef struct _FileInOut
 	const char *outputFileName;
 } FileInOut;
 
+typedef struct _TranscodingContext TranscodingContext;
 /*************************************************
 	Function:		Open_input_file
 	Description:	打开输入文件
@@ -17,7 +18,7 @@ typedef struct _FileInOut
 	Return:			true : 打开文件成功
 					false : 打开文件失败
 *************************************************/
-bool Open_input_file(FileInOut &files);
+bool Open_input_file(FileInOut &files, TranscodingContext &trans_ctx);
 
 /*************************************************
 	Function:		Open_Output_file
@@ -29,6 +30,6 @@ bool Open_input_file(FileInOut &files);
 	Return:			true : 打开文件成功
 					false : 打开文件失败
 *************************************************/
-bool Open_output_file(FileInOut &files);
+bool Open_output_file(FileInOut &files, TranscodingContext &trans_ctx);
 
 #endif

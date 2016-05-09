@@ -1,21 +1,18 @@
 #include "common.h"
 #include "FileIO.h"
 
-static AVFormatContext *ifmt_ctx = NULL;
-static AVFormatContext *ofmt_ctx = NULL;
-
-
-bool Open_input_file(FileInOut &files)
+bool Open_input_file(FileInOut &files, TranscodingContext &trans_ctx)
 {
 	int ret = 0;
+
 	
 	//打开输入文件，并查找其中的流信息
-	if ((ret = avformat_open_input(&ifmt_ctx, files.inputFileName, NULL, NULL)) < 0)
+	if ((ret = avformat_open_input(&(trans_ctx.ifmt_ctx), files.inputFileName, NULL, NULL)) < 0)
 	{
 		printf("Error: Open input file failed.\n");
 		return false;
 	}
-	if ((ret = avformat_find_stream_info(ifmt_ctx, NULL)) < 0)
+	if ((ret = avformat_find_stream_info(trans_ctx.ifmt_ctx, NULL)) < 0)
 	{
 		printf("Error: Cannot find stream info.\n");
 		return false;
@@ -24,9 +21,9 @@ bool Open_input_file(FileInOut &files)
 	//打开输入视频文件中的各种解码器
 	AVStream *stream = NULL;
 	AVCodecContext *codecCtx = NULL;
-	for (int streamIdx = 0; streamIdx < ifmt_ctx->nb_streams; streamIdx++)
+	for (int streamIdx = 0; streamIdx < trans_ctx.ifmt_ctx->nb_streams; streamIdx++)
 	{
-		stream = ifmt_ctx->streams[streamIdx];
+		stream = trans_ctx.ifmt_ctx->streams[streamIdx];
 		codecCtx = stream->codec;
 
 		if (codecCtx->codec_type == AVMEDIA_TYPE_VIDEO || codecCtx->codec_type == AVMEDIA_TYPE_AUDIO)
@@ -42,7 +39,7 @@ bool Open_input_file(FileInOut &files)
 	return true;
 }
 
-bool Open_output_file(FileInOut &files)
+bool Open_output_file(FileInOut &files, TranscodingContext &trans_ctx)
 {
 	int ret = 0;
 	AVStream *out_stream;
@@ -51,23 +48,23 @@ bool Open_output_file(FileInOut &files)
 	AVCodec *encoder;
 
 	//
-	avformat_alloc_output_context2(&ofmt_ctx, NULL, NULL, files.outputFileName);
-	if (!ofmt_ctx)
+	avformat_alloc_output_context2(&(trans_ctx.ofmt_ctx), NULL, NULL, files.outputFileName);
+	if (!trans_ctx.ofmt_ctx)
 	{
 		printf("Error: Allocating output file format failed.\n");
 		return false;
 	}
 
-	for (int stream_idx = 0; stream_idx < ifmt_ctx->nb_streams; stream_idx++)
+	for (int stream_idx = 0; stream_idx < trans_ctx.ifmt_ctx->nb_streams; stream_idx++)
 	{
-		out_stream = avformat_new_stream(ofmt_ctx, NULL);
+		out_stream = avformat_new_stream(trans_ctx.ofmt_ctx, NULL);
 		if (!out_stream)
 		{
 			printf("Error: Adding new stream failed.\n");
 			return false;
 		}
 
-		in_stream = ifmt_ctx->streams[stream_idx];
+		in_stream = trans_ctx.ifmt_ctx->streams[stream_idx];
 		dec_ctx = in_stream->codec;
 		enc_ctx = out_stream->codec;
 
@@ -113,7 +110,7 @@ bool Open_output_file(FileInOut &files)
 		}
 		else
 		{
-			ret = avcodec_copy_context(ofmt_ctx->streams[stream_idx]->codec,	ifmt_ctx->streams[stream_idx]->codec);
+			ret = avcodec_copy_context(trans_ctx.ofmt_ctx->streams[stream_idx]->codec,	trans_ctx.ifmt_ctx->streams[stream_idx]->codec);
 			if (ret < 0) 
 			{
 				printf("Error: Copying stream context failed\n");
@@ -121,16 +118,16 @@ bool Open_output_file(FileInOut &files)
 			}
 		}
 
-		if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+		if (trans_ctx.ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
 		{
 			enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 		}
 	}
-	av_dump_format(ofmt_ctx, 0, files.outputFileName, 1);
+	av_dump_format(trans_ctx.ofmt_ctx, 0, files.outputFileName, 1);
 
-	if (!(ofmt_ctx->oformat->flags & AVFMT_NOFILE)) 
+	if (!(trans_ctx.ofmt_ctx->oformat->flags & AVFMT_NOFILE)) 
 	{
-		ret = avio_open(&ofmt_ctx->pb, files.outputFileName, AVIO_FLAG_WRITE);
+		ret = avio_open(&(trans_ctx.ofmt_ctx->pb), files.outputFileName, AVIO_FLAG_WRITE);
 		if (ret < 0) 
 		{
 			printf("Error: Could not open output file '%s'", files.outputFileName);
@@ -138,7 +135,7 @@ bool Open_output_file(FileInOut &files)
 		}
 	}
 
-	ret = avformat_write_header(ofmt_ctx, NULL);
+	ret = avformat_write_header(trans_ctx.ofmt_ctx, NULL);
 	if (ret < 0) 
 	{
 		printf("Error: Error occurred when opening output file\n");
