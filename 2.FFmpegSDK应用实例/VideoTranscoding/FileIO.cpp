@@ -73,15 +73,15 @@ bool Open_output_file(FileInOut &files)
 
 		if (dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO || dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO)
 		{
-			encoder = avcodec_find_encoder(dec_ctx->codec_id);
-			if (!encoder) 
-			{
-				printf("Error: Necessary encoder not found\n");
-				return -1;
-			}
-
 			if (dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) 
 			{
+				encoder = avcodec_find_encoder(AV_CODEC_ID_HEVC);
+				if (!encoder) 
+				{
+					printf("Error: Necessary encoder not found\n");
+					return false;
+				}
+
 				enc_ctx->height = dec_ctx->height;
 				enc_ctx->width = dec_ctx->width;
 				enc_ctx->sample_aspect_ratio = dec_ctx->sample_aspect_ratio;
@@ -90,6 +90,13 @@ bool Open_output_file(FileInOut &files)
 			}
 			else 
 			{
+				encoder = avcodec_find_encoder(dec_ctx->codec_id);
+				if (!encoder) 
+				{
+					printf("Error: Necessary encoder not found\n");
+					return false;
+				}
+
 				enc_ctx->sample_rate = dec_ctx->sample_rate;
 				enc_ctx->channel_layout = dec_ctx->channel_layout;
 				enc_ctx->channels = av_get_channel_layout_nb_channels(enc_ctx->channel_layout);
@@ -101,16 +108,16 @@ bool Open_output_file(FileInOut &files)
 			if (ret < 0) 
 			{
 				printf("Error: Cannot open video encoder for stream #%u\n");
-				return ret;
+				return false;
 			}
 		}
 		else
 		{
-			ret = avcodec_copy_context(ofmt_ctx->streams[i]->codec,	ifmt_ctx->streams[i]->codec);
+			ret = avcodec_copy_context(ofmt_ctx->streams[stream_idx]->codec,	ifmt_ctx->streams[stream_idx]->codec);
 			if (ret < 0) 
 			{
 				printf("Error: Copying stream context failed\n");
-				return ret;
+				return false;
 			}
 		}
 
@@ -127,7 +134,7 @@ bool Open_output_file(FileInOut &files)
 		if (ret < 0) 
 		{
 			printf("Error: Could not open output file '%s'", files.outputFileName);
-			return ret;
+			return false;
 		}
 	}
 
@@ -135,8 +142,8 @@ bool Open_output_file(FileInOut &files)
 	if (ret < 0) 
 	{
 		printf("Error: Error occurred when opening output file\n");
-		return ret;
+		return false;
 	}
 
-	return 0;
+	return true;
 }

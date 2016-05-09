@@ -34,12 +34,26 @@ Description:	入口点函数
 int main(int argc, char **argv)
 {
 	FileInOut files = { NULL };
-	if (hello(argc, argv, files))
+	if (!hello(argc, argv, files))
 	{
 		printf("Error: Command line parameters error.\n");
 		return -1;
 	}
 
+	TranscodingContext transCtx = {NULL};
+	Init_transcoder(transCtx);
+
+	if (!Open_input_file(files))
+	{
+		printf("Error: Open input file failed.\n");
+		return -1;
+	}
+
+	if (!Open_output_file(files))
+	{
+		printf("Error: Open output file failed.\n");
+		return -1;
+	}
 
 	return 0;
 }
