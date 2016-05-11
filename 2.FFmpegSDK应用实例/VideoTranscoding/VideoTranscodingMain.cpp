@@ -34,6 +34,9 @@ Description:	入口点函数
 int main(int argc, char **argv)
 {
 	FileInOut files = { NULL };
+	unsigned int stream_index = 0;
+	enum AVMediaType mediaType = AVMEDIA_TYPE_UNKNOWN;
+
 	if (!hello(argc, argv, files))
 	{
 		printf("Error: Command line parameters error.\n");
@@ -62,6 +65,9 @@ int main(int argc, char **argv)
 		{
 			break;
 		}
+
+		stream_index = transCtx.packet.stream_index;
+		mediaType = transCtx.ifmt_ctx->streams[stream_index]->codec->codec_type;
 	}
 
 	return 0;
