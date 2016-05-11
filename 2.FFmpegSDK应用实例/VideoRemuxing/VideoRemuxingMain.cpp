@@ -39,5 +39,25 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	AVOutputFormat *ofmt = NULL;
+	AVFormatContext *ifmt_ctx = NULL, *ofmt_ctx = NULL;
+	AVPacket pkt;
+	int ret = 0;
+
 	av_register_all();
+
+	if ((ret = avformat_open_input(&ifmt_ctx, io_param.inputName, NULL, NULL)) < 0)
+	{
+		printf("Error: Open input file failed.\n");
+		goto end;
+	}
+	if ((ret = avformat_find_stream_info(ifmt_ctx, NULL)) < 0)
+	{
+		printf("Error: Failed to retrieve input stream information.\n");
+		goto end;
+	}
+	av_dump_format(ifmt_ctx, 0, io_param.inputName, 0);
+
+end:
+	return 0;
 }
