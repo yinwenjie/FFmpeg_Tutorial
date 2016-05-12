@@ -58,6 +58,14 @@ int main(int argc, char **argv)
 	}
 	av_dump_format(ifmt_ctx, 0, io_param.inputName, 0);
 
+	avformat_alloc_output_context2(&ofmt_ctx, NULL, NULL, io_param.outputName);
+	if (!ofmt_ctx)
+	{
+		printf("Error: Could not create output context.\n");
+		goto end;
+	}
+	ofmt = ofmt_ctx->oformat;
+
 end:
 	return 0;
 }
