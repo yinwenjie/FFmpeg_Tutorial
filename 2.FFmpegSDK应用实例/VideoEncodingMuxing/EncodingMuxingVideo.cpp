@@ -199,3 +199,53 @@ int Write_video_frame(AVFormatContext *oc, OutputStream *ost)
 
 	return (frame || got_packet) ? 0 : 1;
 }
+
+int Add_video_stream(AVStream **videoStream, AVFormatContext *oc, AVCodec **codec, enum AVCodecID codec_id)
+{
+	AVCodecContext *codecCtx = NULL;
+
+	//查找编解码器
+	if(!(*codec = avcodec_find_encoder(codec_id)))
+	{
+		printf("Error: Failed to find encoder while adding video stream.\n");
+		return 0;
+	}
+
+	//生成视频流AVStream结构
+	if (!(*videoStream = avformat_new_stream(oc, *codec)))
+	{
+		printf("Error: Failed to generate video stream while adding video stream.\n");
+		return 0;
+	}
+
+	(*videoStream)->id = oc->nb_streams -1;
+	codecCtx = (*videoStream)->codec;
+	codecCtx->codec_id = codec_id;
+
+	if (oc->oformat->flags & AVFMT_GLOBALHEADER)
+	{
+		codecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+	}
+
+	return 1;
+}
+
+void Set_video_stream(AVStream **videoStream, const VideoEncodingParam &encParam)
+{
+	AVCodecContext *codecCtx = (*videoStream)->codec;
+
+	codecCtx->bit_rate = encParam.bitRate;
+	codecCtx->width = encParam.frameWidth;
+	codecCtx->height = encParam.frameHeight;
+	codecCtx->gop_size = encParam.gopSize;
+	if (codecCtx->codec_id == AV_CODEC_ID_MPEG2VIDEO)
+	{
+		codecCtx->max_b_frames = encParam.maxBFrames;
+	}
+	if (codecCtx->codec_id == AV_CODEC_ID_MPEG1VIDEO)
+	{
+		codecCtx->mb_decision = encParam.maxBFrames;
+	}
+
+	(*videoStream)->time_base = encParam.timeBase;
+}

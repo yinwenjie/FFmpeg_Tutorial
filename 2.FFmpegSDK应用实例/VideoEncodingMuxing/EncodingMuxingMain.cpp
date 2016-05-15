@@ -59,8 +59,19 @@ int main(int argc, char **argv)
 	AVOutputFormat *fmt;
 	AVFormatContext *oc;
 	AVCodec *audio_codec = NULL, *video_codec = NULL;
+	AVStream *audioStream = NULL, *videoStream = NULL;
 
 	Open_coder_muxer(&fmt, &oc, io.output_file_name);
+
+	//Ìí¼ÓÊÓÆµÁ÷
+	ret = Add_video_stream(&videoStream, oc, &video_codec, fmt->video_codec);
+	if (!ret)
+	{
+		printf("Adding video stream failed.\n");
+		return -1;
+	}
+	VideoEncodingParam encodingParam = {io.frame_width, io.frame_height, 400000, {1, STREAM_FRAME_RATE}, 12, 2, 2};
+	Set_video_stream(&videoStream, encodingParam);
 
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
