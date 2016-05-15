@@ -73,6 +73,15 @@ int main(int argc, char **argv)
 	VideoEncodingParam encodingParam = {io.frame_width, io.frame_height, 400000, {1, STREAM_FRAME_RATE}, 12, 2, 2};
 	Set_video_stream(&videoStream, encodingParam);
 
+	//Ìí¼ÓÒôÆµÁ÷
+	ret = Add_Audio_stream(&audioStream, oc, &audio_codec, fmt->audio_codec);
+	if (!ret)
+	{
+		printf("Adding audio stream failed.\n");
+		return -1;
+	}
+	Set_audio_stream(&audioStream, audio_codec);
+
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
 	ret = Add_audio_video_streams(&video_st, &audio_st, oc, fmt, audio_codec, video_codec, io);

@@ -8,4 +8,29 @@ void Open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictio
 
 int Write_audio_frame(AVFormatContext *oc, OutputStream *ost);
 
+/*************************************************
+	Function:		Add_Audio_stream
+	Description:	向打开文件中添加一路视频流
+	Calls:			无
+	Called By:		main
+	Input:			(in/out)audioStream : 待添加的视频流
+					(in/out)oc : 视频文件句柄
+					(in/out)codec：编码器实例
+					(in)codec_id：编码器ID
+	Output:			无
+	Return:			函数执行错误码
+*************************************************/
+int Add_Audio_stream(AVStream **audioStream, AVFormatContext *oc, AVCodec **codec, enum AVCodecID codec_id);
+
+
+/*************************************************
+	Function:		Set_audio_stream
+	Description:	设置视频码流的参数，全部采用默认设置
+	Calls:			无
+	Called By:		main
+	Input:			无
+	Output:			无
+	Return:			无
+*************************************************/
+void Set_audio_stream(AVStream **audioStream, const AVCodec *codec);
 #endif

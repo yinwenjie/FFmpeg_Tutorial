@@ -195,3 +195,71 @@ int Write_audio_frame(AVFormatContext *oc, OutputStream *ost)
 
 	return (frame || got_packet) ? 0 : 1;
 }
+
+int Add_Audio_stream(AVStream **audioStream, AVFormatContext *oc, AVCodec **codec, enum AVCodecID codec_id)
+{
+	AVCodecContext *codecCtx = NULL;
+
+	//查找编解码器
+	if(!(*codec = avcodec_find_encoder(codec_id)))
+	{
+		printf("Error: Failed to find encoder while adding video stream.\n");
+		return 0;
+	}
+
+	//生成音频流AVStream结构
+	if (!(*audioStream = avformat_new_stream(oc, *codec)))
+	{
+		printf("Error: Failed to generate audio stream while adding audio stream.\n");
+		return 0;
+	}
+	(*audioStream)->id = oc->nb_streams -1;
+	codecCtx = (*audioStream)->codec;
+	codecCtx->codec_id = codec_id;
+
+	if (oc->oformat->flags & AVFMT_GLOBALHEADER)
+	{
+		codecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+	}
+
+	return 1;
+}
+
+void Set_audio_stream(AVStream **audioStream, const AVCodec *codec)
+{
+	AVCodecContext *c = (*audioStream)->codec;
+
+	c->sample_fmt = codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+	c->bit_rate = 64000;
+	c->sample_rate = 44100;
+
+	if ( codec->supported_samplerates )
+	{
+		c->sample_rate = codec->supported_samplerates[0];
+		for (int i = 0; codec->supported_samplerates[i]; i++)
+		{
+			if (codec->supported_samplerates[i] == 44100)
+			{
+				c->sample_rate = 44100;
+			}
+		}
+	}
+
+	c->channels = av_get_channel_layout_nb_channels(c->channel_layout);
+	c->channel_layout = AV_CH_LAYOUT_STEREO;
+	if (codec->channel_layouts)
+	{
+		c->channel_layout = codec->channel_layouts[0];
+		for (int i = 0; codec->channel_layouts[i]; i++)
+		{
+			if (codec->channel_layouts[i] == AV_CH_LAYOUT_STEREO)
+			{
+				c->channel_layout = AV_CH_LAYOUT_STEREO;
+			}
+		}
+	}
+	c->channels = av_get_channel_layout_nb_channels(c->channel_layout);
+
+	AVRational r = { 1, c->sample_rate };
+	(*audioStream)->time_base = r;
+}
