@@ -17,7 +17,7 @@
 *************************************************/
 static bool hello(int argc, char **argv, AVDictionary *opt, IOParam &ioParam)
 {
-	if (argc < 3) 
+	if (argc < 5) 
 	{
 		printf("usage: %s output_file input_file frame_width frame_height\n"
 			"API example program to output a media file with libavformat.\n"
