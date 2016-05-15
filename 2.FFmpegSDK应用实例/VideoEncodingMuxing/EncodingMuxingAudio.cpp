@@ -263,3 +263,15 @@ void Set_audio_stream(AVStream **audioStream, const AVCodec *codec)
 	AVRational r = { 1, c->sample_rate };
 	(*audioStream)->time_base = r;
 }
+
+int Open_audio_stream(AVStream **audioStream, AVFrame **audioFrame, AVCodec *codec, IOParam io)
+{
+	AVCodecContext *c = (*audioStream)->codec;
+
+	int ret = avcodec_open2(c, codec, NULL);
+	if (ret < 0)
+	{
+		printf("Error: Could not open video encoder in stream #%d", (*audioStream)->id);
+		return 0;
+	}
+}

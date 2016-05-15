@@ -33,4 +33,17 @@ int Add_Audio_stream(AVStream **audioStream, AVFormatContext *oc, AVCodec **code
 	Return:			无
 *************************************************/
 void Set_audio_stream(AVStream **audioStream, const AVCodec *codec);
+
+/*************************************************
+	Function:		Open_audio_stream
+	Description:	打开音频流的codec、frame和文件
+	Calls:			无
+	Called By:		main
+	Input:			(int)codec : 分配完成的编码器
+	Output:			(in/out)audioStream : 待处理的视频流
+					(in/out)audioFrame : 保存音频数据的frame结构
+	Return:			函数执行错误码
+*************************************************/
+int Open_audio_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *codec, IOParam io);
+
 #endif

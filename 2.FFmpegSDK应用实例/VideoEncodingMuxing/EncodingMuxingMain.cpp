@@ -90,6 +90,13 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	//´ò¿ªÒôÆµÁ÷
+	if (!Open_audio_stream(&audioStream, &audioFrame, audio_codec, io))
+	{
+		printf("Opening audio stream failed.\n");
+		return -1;
+	}
+
 	//Discard the belowing:
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */

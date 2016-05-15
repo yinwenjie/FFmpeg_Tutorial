@@ -276,6 +276,8 @@ int Open_video_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *cod
 	if (g_inputYUVFile == NULL)
 	{
 		fprintf(stderr, "Open input yuv file failed.\n");
-		exit(1);
+		return 0;
 	}
+
+	return 1;
 }
