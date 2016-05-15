@@ -46,4 +46,6 @@ int Add_video_stream(AVStream **videoStream, AVFormatContext *oc, AVCodec **code
 *************************************************/
 void Set_video_stream(AVStream **videoStream, const VideoEncodingParam &encParam);
 
+int Open_video_stream();
+
 #endif

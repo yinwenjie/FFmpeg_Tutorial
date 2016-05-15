@@ -82,6 +82,7 @@ int main(int argc, char **argv)
 	}
 	Set_audio_stream(&audioStream, audio_codec);
 
+	//Discard the belowing:
 	/* Add the audio and video streams using the default format codecs
      * and initialize the codecs. */
 	ret = Add_audio_video_streams(&video_st, &audio_st, oc, fmt, audio_codec, video_codec, io);
