@@ -60,6 +60,7 @@ int main(int argc, char **argv)
 	AVFormatContext *oc;
 	AVCodec *audio_codec = NULL, *video_codec = NULL;
 	AVStream *audioStream = NULL, *videoStream = NULL;
+	AVFrame *videoFrame = NULL, *audioFrame = NULL;
 
 	Open_coder_muxer(&fmt, &oc, io.output_file_name);
 
@@ -81,6 +82,13 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	Set_audio_stream(&audioStream, audio_codec);
+
+	//打开视频流
+	if (!Open_video_stream(&videoStream, &videoFrame, video_codec, io))
+	{
+		printf("Opening video stream failed.\n");
+		return -1;
+	}
 
 	//Discard the belowing:
 	/* Add the audio and video streams using the default format codecs

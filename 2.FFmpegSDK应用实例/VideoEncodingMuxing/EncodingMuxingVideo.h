@@ -46,6 +46,16 @@ int Add_video_stream(AVStream **videoStream, AVFormatContext *oc, AVCodec **code
 *************************************************/
 void Set_video_stream(AVStream **videoStream, const VideoEncodingParam &encParam);
 
-int Open_video_stream();
+/*************************************************
+	Function:		Open_video_stream
+	Description:	打开视频流的codec、frame和文件
+	Calls:			无
+	Called By:		main
+	Input:			(int)codec : 分配完成的编码器
+	Output:			(in/out)videoStream : 待处理的视频流
+					(in/out)videoFrame : 保存像素数据的frame结构
+	Return:			函数执行错误码
+*************************************************/
+int Open_video_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *codec, IOParam io);
 
 #endif

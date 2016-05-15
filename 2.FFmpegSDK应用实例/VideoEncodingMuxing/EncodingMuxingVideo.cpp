@@ -234,6 +234,7 @@ void Set_video_stream(AVStream **videoStream, const VideoEncodingParam &encParam
 {
 	AVCodecContext *codecCtx = (*videoStream)->codec;
 
+	codecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
 	codecCtx->bit_rate = encParam.bitRate;
 	codecCtx->width = encParam.frameWidth;
 	codecCtx->height = encParam.frameHeight;
@@ -248,4 +249,33 @@ void Set_video_stream(AVStream **videoStream, const VideoEncodingParam &encParam
 	}
 
 	(*videoStream)->time_base = encParam.timeBase;
+}
+
+int Open_video_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *codec, IOParam io)
+{
+	AVCodecContext *codecCtx = (*videoStream)->codec;
+
+	//打开视频编码器
+	int ret = avcodec_open2(codecCtx, codec, NULL);
+	if (ret < 0)
+	{
+		printf("Error: Could not open video encoder in stream #%d", (*videoStream)->id);
+		return 0;
+	}
+
+	//分配frame结构
+	*videoFrame = alloc_picture(codecCtx->pix_fmt, codecCtx->width, codecCtx->height);
+	if (!(*videoFrame))
+	{
+		printf("Error: Could not alloc video frame");
+		return 0;
+	}
+
+	//打开输入yuv文件
+	fopen_s(&g_inputYUVFile, io.input_file_name, "rb+");
+	if (g_inputYUVFile == NULL)
+	{
+		fprintf(stderr, "Open input yuv file failed.\n");
+		exit(1);
+	}
 }
