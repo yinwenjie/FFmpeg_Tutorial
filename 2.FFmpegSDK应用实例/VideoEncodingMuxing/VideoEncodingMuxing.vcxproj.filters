@@ -21,18 +21,21 @@
     <ClCompile Include="CoderMuxer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Stream.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="EncodingMuxingVideo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="EncodingMuxingAudio.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Stream.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EncodingMuxingHeader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Stream.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="common.h">
@@ -45,9 +48,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="EncodingMuxingAudio.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Stream.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

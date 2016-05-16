@@ -20,6 +20,7 @@ typedef struct OutputStream
 	AVFrame *tmp_frame;
 
 	float t, tincr, tincr2;
+
 	struct SwsContext *sws_ctx;
 	struct SwrContext *swr_ctx;
 } OutputStream;

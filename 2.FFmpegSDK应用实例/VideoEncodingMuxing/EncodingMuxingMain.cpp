@@ -1,10 +1,8 @@
+#include "Stream.h"
 #include "CoderMuxer.h"
 #include "EncodingMuxingVideo.h"
 #include "EncodingMuxingAudio.h"
-#include "Stream.h"
 
-
-#define MAX_FRAMES_TO_ENCODED 300
 
 /*************************************************
 	Function:		hello
@@ -19,7 +17,7 @@
 *************************************************/
 static bool hello(int argc, char **argv, AVDictionary *opt, IOParam &ioParam)
 {
-	if (argc < 5) 
+	if (argc < 3) 
 	{
 		printf("usage: %s output_file input_file frame_width frame_height\n"
 			"API example program to output a media file with libavformat.\n"
@@ -54,95 +52,55 @@ int main(int argc, char **argv)
 
 	int ret;
 	int have_video = 0, have_audio = 0;
+	int encode_video = 0, encode_audio = 0;
 	int videoFrameIdx = 0, audioFrameIdx = 0;
-	OutputStream video_st = { 0 }, audio_st = { 0 };
 
-	int encode_video = 1, encode_audio = 1;
-	int64_t videoNextPts = 0, audioNextPts = 0;
+	OutputStream video_st = { 0 }, audio_st = { 0 };
 	AVOutputFormat *fmt;
 	AVFormatContext *oc;
 	AVCodec *audio_codec = NULL, *video_codec = NULL;
-	AVStream *audioStream = NULL, *videoStream = NULL;
-	AVFrame *videoFrame = NULL, *audioFrame = NULL;
 
 	Open_coder_muxer(&fmt, &oc, io.output_file_name);
 
-	//添加视频流
-	ret = Add_video_stream(&videoStream, oc, &video_codec, fmt->video_codec);
-	if (!ret)
-	{
-		printf("Adding video stream failed.\n");
-		return -1;
-	}
-	VideoEncodingParam encodingParam = {io.frame_width, io.frame_height, 400000, {1, STREAM_FRAME_RATE}, 12, 2, 2};
-	Set_video_stream(&videoStream, encodingParam);
+	/* Add the audio and video streams using the default format codecs
+     * and initialize the codecs. */
+	ret = Add_audio_video_streams(&video_st, &audio_st, oc, fmt, audio_codec, video_codec, io);
+	have_video = ret & HAVE_VIDEO;
+	encode_video = ret & ENCODE_VIDEO;
+	have_audio = ret & HAVE_AUDIO;
+	encode_audio = ret & ENCODE_AUDIO;
 
-	//添加音频流
-	ret = Add_Audio_stream(&audioStream, oc, &audio_codec, fmt->audio_codec);
-	if (!ret)
+	 /* Now that all the parameters are set, we can open the audio and
+     * video codecs and allocate the necessary encode buffers. */
+	if (have_video)
 	{
-		printf("Adding audio stream failed.\n");
-		return -1;
+		Open_video(oc, video_codec, &video_st, opt, io);
 	}
-	Set_audio_stream(&audioStream, audio_codec);
-
-	//打开视频流
-	if (!Open_video_stream(&videoStream, &videoFrame, video_codec, io))
+	if (have_audio)
 	{
-		printf("Opening video stream failed.\n");
-		return -1;
-	}
-
-	//打开音频流
-	if (!Open_audio_stream(&audioStream, &audioFrame, audio_codec, io))
-	{
-		printf("Opening audio stream failed.\n");
-		return -1;
-	}
+		Open_audio(oc, audio_codec, &audio_st, opt);
+	}		
 
 	av_dump_format(oc, 0, io.output_file_name, 1);
-
-	//打开输出文件
+	/* open the output file, if needed */
 	if (!(fmt->flags & AVFMT_NOFILE))
 	{
 		ret = avio_open(&oc->pb, io.output_file_name, AVIO_FLAG_WRITE);
 		if (ret < 0)
 		{
-			printf("Could not open '%s': %d\n", io.output_file_name, ret);
+			fprintf(stderr, "Could not open '%s': %d\n", io.output_file_name, ret);
 			return 1;
 		}
 	}
 
 	/* Write the stream header, if any. */
-	ret = avformat_write_header(oc, NULL);
+	ret = avformat_write_header(oc, &opt);
 	if (ret < 0)
 	{
 		fprintf(stderr, "Error occurred when opening output file: %d\n",ret);
 		return 1;
 	}
 
-	//写入音频和视频帧
-	for (; videoFrameIdx < MAX_FRAMES_TO_ENCODED; videoFrameIdx++)
-	{
-		Encode_video_frame(oc, &videoStream, &videoFrame, videoNextPts);
-	}
-
-	//写入文件尾结构
-	av_write_trailer(oc);
-
-	//关闭音视频流、输出文件、其他收尾工作
-	Close_video_stream(&videoStream, &videoFrame);
-	Close_audio_stream(&audioStream, &audioFrame);
-	if (!(fmt->flags & AVFMT_NOFILE))
-	{
-		avio_closep(&oc->pb);
-	}
-	avformat_free_context(oc);
-
-	printf("Procssing succeeded.\n");
-	return 0;
-
-	//Discard the belowing:
 	while (encode_video || encode_audio) 
 	{
 		/* select the stream to encode */
