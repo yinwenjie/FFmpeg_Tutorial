@@ -321,3 +321,89 @@ void Close_audio_stream(AVStream **audioStream, AVFrame **audioFrame)
 	sws_freeContext(g_audioContext.sws_ctx);
 	swr_free(&(g_audioContext.swr_ctx));
 }
+
+int Encode_audio_frame(AVFormatContext *oc, AVStream **audioStream, AVFrame **audioFrame, int64_t &audioNextPts)
+{
+	AVCodecContext *codecCtx = (*audioStream)->codec;
+	AVFrame *frame = *audioFrame;
+	int ret;
+	int got_packet;
+	int dst_nb_samples;
+
+	AVPacket pkt;
+	av_init_packet(&pkt);
+
+	//Ìî³äÒôÆµ²ÉÑù
+	int j, i, v;
+	int16_t *q = (int16_t*)frame->data[0];
+
+	{
+		AVRational r = { 1, 1 };
+		/* check if we want to generate more frames */
+		if (av_compare_ts(audioNextPts, codecCtx->time_base, STREAM_DURATION, r) >= 0)
+		{
+			frame = NULL;
+		}
+	}
+
+	if (frame)
+	{
+		for (j = 0; j < frame->nb_samples; j++)
+		{
+			v = (int)(sin(g_audioContext.t) * 10000);
+			for (i = 0; i < codecCtx->channels; i++)
+				*q++ = v;
+			g_audioContext.t += g_audioContext.tincr;
+			g_audioContext.tincr += g_audioContext.tincr2;
+		}
+
+		frame->pts = (audioNextPts += frame->nb_samples);
+
+		/* convert samples from native format to destination codec format, using the resampler */
+		/* compute destination number of samples */
+		dst_nb_samples = av_rescale_rnd(swr_get_delay(g_audioContext.swr_ctx, codecCtx->sample_rate) + frame->nb_samples, codecCtx->sample_rate, codecCtx->sample_rate, AV_ROUND_UP);
+		av_assert0(dst_nb_samples == frame->nb_samples);
+
+		/* when we pass a frame to the encoder, it may keep a reference to it
+		* internally;
+		* make sure we do not overwrite it here
+		*/
+		ret = av_frame_make_writable(frame);
+		if (ret < 0)
+			return -1;
+
+		/* convert to destination format */
+		ret = swr_convert(g_audioContext.swr_ctx, frame->data, dst_nb_samples,	(const uint8_t **)frame->data, frame->nb_samples);
+		if (ret < 0)
+		{
+			fprintf(stderr, "Error while converting\n");
+			return -1;
+		}
+		
+		{
+			AVRational r = { 1, codecCtx->sample_rate };
+			frame->pts = av_rescale_q(g_audioContext.samples_count, r, codecCtx->time_base);
+		}
+
+		g_audioContext.samples_count += dst_nb_samples;
+	}
+	
+	ret = avcodec_encode_audio2(codecCtx, &pkt, frame, &got_packet);
+	if (ret < 0)
+	{
+		fprintf(stderr, "Error encoding audio frame: %d\n", ret);
+		return -1;
+	}
+
+	if (got_packet) 
+	{
+		ret = write_frame(oc, &codecCtx->time_base, *audioStream, &pkt);
+		if (ret < 0) 
+		{
+			fprintf(stderr, "Error while writing audio frame: %d\n", ret);
+			return -1;
+		}
+	}
+
+	return (frame || got_packet) ? 0 : 1;
+}

@@ -64,10 +64,24 @@ int Open_video_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *cod
 	Calls:			无
 	Called By:		main
 	Input:			(in/out)videoStream : 要关闭的流结构
-					(int)videoFrame : 保存像素的帧结构
+					(in)videoFrame : 保存像素的帧结构
 	Output:			无
 	Return:			无
 *************************************************/
 void Close_video_stream(AVStream **videoStream, AVFrame **videoFrame);
+
+/*************************************************
+	Function:		Encode_video_frame
+	Description:	向视频文件中编码一帧视频数据
+	Calls:			无
+	Called By:		main
+	Input:			(in/out)oc : 视频文件句柄
+					(in/out)videoStream : 视频文件包含的视频流
+					(in/out)videoFrame：保存像素的frame结构
+					(in/out): 下一帧显示的pts
+	Output:			无
+	Return:			无
+*************************************************/
+int Encode_video_frame(AVFormatContext *oc, AVStream **videoStream, AVFrame **videoFrame, int64_t &videoNextPts);
 
 #endif

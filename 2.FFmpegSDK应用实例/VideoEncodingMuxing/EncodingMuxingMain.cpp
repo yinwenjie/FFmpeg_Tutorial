@@ -52,10 +52,11 @@ int main(int argc, char **argv)
 
 	int ret;
 	int have_video = 0, have_audio = 0;
-	int encode_video = 1, encode_audio = 1;
 	int videoFrameIdx = 0, audioFrameIdx = 0;
-
 	OutputStream video_st = { 0 }, audio_st = { 0 };
+
+	int encode_video = 1, encode_audio = 1;
+	int64_t videoNextPts = 0, audioNextPts = 0;
 	AVOutputFormat *fmt;
 	AVFormatContext *oc;
 	AVCodec *audio_codec = NULL, *video_codec = NULL;
@@ -119,9 +120,32 @@ int main(int argc, char **argv)
 	}
 
 	//写入音频和视频帧
-	while (encode_video || encode_audio) 
+	while (encode_video/* || encode_audio*/) 
 	{
-
+		if (encode_video && (!encode_audio || av_compare_ts(videoNextPts, videoStream->time_base, audioNextPts, audioStream->time_base) <= 0))
+		{
+			encode_video = !Encode_video_frame(oc, &videoStream, &videoFrame, videoNextPts);
+			if (encode_video)
+			{
+				printf("Encode video frame #%d\n", videoFrameIdx++);
+			}
+			else
+			{
+				printf("Video ended, exit.\n");
+			}
+		}
+// 		else
+// 		{
+// 			encode_audio = !Encode_audio_frame(oc, &audioStream, &audioFrame, audioNextPts);
+// 			if (encode_audio)
+// 			{
+// 				printf("Write %d audio frame.\n", audioFrameIdx++);
+// 			}
+// 			else
+// 			{
+// 				printf("Audio ended, exit.\n");
+// 			}
+// 		}
 	}
 
 	//写入文件尾结构

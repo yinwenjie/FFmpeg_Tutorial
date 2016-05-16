@@ -139,6 +139,25 @@ static void fill_yuv_image(AVFrame *pict, int frame_index, int width, int height
 	}
 }
 
+static AVFrame *get_video_frame(AVStream *videoStream, AVFrame *frame, int64_t &videoNextPts)
+{
+	AVCodecContext *c = videoStream->codec;
+
+	/* check if we want to generate more frames */
+	{
+		AVRational r = { 1, 1 };
+		if (av_compare_ts(videoNextPts, c->time_base, STREAM_DURATION, r) >= 0)
+		{
+			return NULL;
+		}
+	}
+
+	fill_yuv_image(frame, videoNextPts, c->width, c->height);
+
+	frame->pts = videoNextPts++;
+
+	return frame;
+}
 
 static AVFrame *get_video_frame(OutputStream *ost)
 {
@@ -286,4 +305,45 @@ void Close_video_stream(AVStream **videoStream, AVFrame **videoFrame)
 {
 	avcodec_close((*videoStream)->codec);
 	av_frame_free(videoFrame);
+}
+
+int Encode_video_frame(AVFormatContext *oc, AVStream **videoStream, AVFrame **videoFrame, int64_t &videoNextPts)
+{
+	AVFrame *frame = *videoFrame;
+	AVCodecContext *codecCtx = (*videoStream)->codec;
+	AVPacket pkt;
+	AVRational r = { 1, 1 };
+	int got_packet = 0, ret = 0;
+
+	if (av_compare_ts(videoNextPts, codecCtx->time_base, STREAM_DURATION, r) >= 0)
+	{
+		frame = NULL;
+	}
+	else
+	{
+		//读取像素数据到frame
+		fill_yuv_image(frame, videoNextPts, codecCtx->width, codecCtx->height);
+		frame->pts = videoNextPts++;
+	}
+
+	av_init_packet(&pkt);
+	ret = avcodec_encode_video2(codecCtx, &pkt, frame, &got_packet); 
+	if (ret < 0)
+	{
+		fprintf(stderr, "Error encoding video frame: %d\n", videoNextPts - 1);
+		return -1;
+	}
+
+	if (got_packet)
+	{
+		ret = write_frame(oc, &codecCtx->time_base, *videoStream, &pkt);
+	}
+
+	if (ret < 0)
+	{
+		fprintf(stderr, "Error while writing video frame: %d\n", ret);
+		return -1;
+	}
+
+	return (frame || got_packet) ? 0 : 1;
 }

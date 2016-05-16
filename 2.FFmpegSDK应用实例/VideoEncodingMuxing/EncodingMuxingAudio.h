@@ -73,4 +73,19 @@ int Open_audio_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *cod
 *************************************************/
 void Close_audio_stream(AVStream **audioStream, AVFrame **audioFrame);
 
+
+/*************************************************
+	Function:		Encode_audio_frame
+	Description:	向音频文件中编码一帧音频
+	Calls:			无
+	Called By:		main
+	Input:			(in/out)oc : 音频文件句柄
+					(in/out)audioStream : 音频文件包含的音频
+					(in/out)audioFrame：保存采样的frame结构
+					(in/out): 下一帧渲染的pts
+	Output:			无
+	Return:			无
+*************************************************/
+int Encode_audio_frame(AVFormatContext *oc, AVStream **audioStream, AVFrame **audioFrame, int64_t &audioNextPts);
+
 #endif
