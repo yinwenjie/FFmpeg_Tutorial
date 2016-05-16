@@ -4,6 +4,8 @@
 #include "Stream.h"
 
 
+#define MAX_FRAMES_TO_ENCODED 300
+
 /*************************************************
 	Function:		hello
 	Description:	解析命令行传入的参数
@@ -120,32 +122,9 @@ int main(int argc, char **argv)
 	}
 
 	//写入音频和视频帧
-	while (encode_video/* || encode_audio*/) 
+	for (; videoFrameIdx < MAX_FRAMES_TO_ENCODED; videoFrameIdx++)
 	{
-		if (encode_video && (!encode_audio || av_compare_ts(videoNextPts, videoStream->time_base, audioNextPts, audioStream->time_base) <= 0))
-		{
-			encode_video = !Encode_video_frame(oc, &videoStream, &videoFrame, videoNextPts);
-			if (encode_video)
-			{
-				printf("Encode video frame #%d\n", videoFrameIdx++);
-			}
-			else
-			{
-				printf("Video ended, exit.\n");
-			}
-		}
-// 		else
-// 		{
-// 			encode_audio = !Encode_audio_frame(oc, &audioStream, &audioFrame, audioNextPts);
-// 			if (encode_audio)
-// 			{
-// 				printf("Write %d audio frame.\n", audioFrameIdx++);
-// 			}
-// 			else
-// 			{
-// 				printf("Audio ended, exit.\n");
-// 			}
-// 		}
+		Encode_video_frame(oc, &videoStream, &videoFrame, videoNextPts);
 	}
 
 	//写入文件尾结构

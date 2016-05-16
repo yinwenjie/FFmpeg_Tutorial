@@ -309,7 +309,7 @@ void Close_video_stream(AVStream **videoStream, AVFrame **videoFrame)
 
 int Encode_video_frame(AVFormatContext *oc, AVStream **videoStream, AVFrame **videoFrame, int64_t &videoNextPts)
 {
-	AVFrame *frame = *videoFrame;
+/*	AVFrame *frame = *videoFrame;
 	AVCodecContext *codecCtx = (*videoStream)->codec;
 	AVPacket pkt;
 	AVRational r = { 1, 1 };
@@ -345,5 +345,33 @@ int Encode_video_frame(AVFormatContext *oc, AVStream **videoStream, AVFrame **vi
 		return -1;
 	}
 
-	return (frame || got_packet) ? 0 : 1;
+	return (frame || got_packet) ? 0 : 1;*/
+	int got_packet = 0;
+	AVPacket pkt = { 0 };
+	AVCodecContext *c = (*videoStream)->codec;
+	av_init_packet(&pkt);
+
+	fill_yuv_image(*videoFrame, videoNextPts, c->width, c->height);
+	/* encode the image */
+	int ret = avcodec_encode_video2(c, &pkt, *videoFrame, &got_packet);
+	if (ret < 0) 
+	{
+		fprintf(stderr, "Error encoding video frame: %d\n", ret);
+		exit(1);
+	}
+
+	if (got_packet)
+	{
+		ret = write_frame(oc, &c->time_base, *videoStream, &pkt);
+	}
+	else 
+	{
+		ret = 0;
+	}
+
+	if (ret < 0)
+	{
+		fprintf(stderr, "Error while writing video frame: %d\n", ret);
+		exit(1);
+	}
 }
