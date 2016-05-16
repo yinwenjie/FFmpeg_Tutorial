@@ -9,6 +9,20 @@ void Open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictio
 int Write_audio_frame(AVFormatContext *oc, OutputStream *ost);
 
 /*************************************************
+	Struct:		AudioSignalGenerator
+	Description:	生成音频数据的结构
+*************************************************/
+typedef struct _AudioSignalGenerator
+{
+	int samples_count;
+
+	float t, tincr, tincr2;
+	struct SwsContext *sws_ctx;
+	struct SwrContext *swr_ctx;
+
+}AudioSignalGenerator;
+
+/*************************************************
 	Function:		Add_Audio_stream
 	Description:	向打开文件中添加一路视频流
 	Calls:			无

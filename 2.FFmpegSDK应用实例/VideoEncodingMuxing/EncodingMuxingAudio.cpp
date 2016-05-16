@@ -1,5 +1,7 @@
 #include "EncodingMuxingAudio.h"
 
+static AudioSignalGenerator g_audioContext = {0};
+
 static AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t channel_layout,	int sample_rate, int nb_samples)
 {
 	AVFrame *frame = av_frame_alloc();
@@ -267,11 +269,46 @@ void Set_audio_stream(AVStream **audioStream, const AVCodec *codec)
 int Open_audio_stream(AVStream **audioStream, AVFrame **audioFrame, AVCodec *codec, IOParam io)
 {
 	AVCodecContext *c = (*audioStream)->codec;
-
+	int nb_samples = 0;
 	int ret = avcodec_open2(c, codec, NULL);
 	if (ret < 0)
 	{
 		printf("Error: Could not open video encoder in stream #%d", (*audioStream)->id);
 		return 0;
 	}
+
+	g_audioContext.t = 0;
+	g_audioContext.tincr = 2 * M_PI * 110.0 / c->sample_rate;
+	g_audioContext.tincr2 = 2 * M_PI * 110.0 / c->sample_rate / c->sample_rate;
+
+	if (c->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
+		nb_samples = 10000;
+	else
+		nb_samples = c->frame_size;
+
+	*audioFrame = alloc_audio_frame(c->sample_fmt, c->channel_layout, c->sample_rate, nb_samples);
+
+	g_audioContext.swr_ctx = swr_alloc();
+	if (!g_audioContext.swr_ctx)
+	{
+		printf("Error: Could not allocate resampler context.\n");
+		return 0;
+	}
+
+	/* set options */
+	av_opt_set_int(g_audioContext.swr_ctx, "in_channel_count", c->channels, 0);
+	av_opt_set_int(g_audioContext.swr_ctx, "in_sample_rate", c->sample_rate, 0);
+	av_opt_set_sample_fmt(g_audioContext.swr_ctx, "in_sample_fmt", AV_SAMPLE_FMT_S16, 0);
+	av_opt_set_int(g_audioContext.swr_ctx, "out_channel_count", c->channels, 0);
+	av_opt_set_int(g_audioContext.swr_ctx, "out_sample_rate", c->sample_rate, 0);
+	av_opt_set_sample_fmt(g_audioContext.swr_ctx, "out_sample_fmt", c->sample_fmt, 0);
+
+	/* initialize the resampling context */
+	if ((ret = swr_init(g_audioContext.swr_ctx)) < 0)
+	{
+		fprintf(stderr, "Failed to initialize the resampling context\n");
+		exit(1);
+	}
+
+	return 1;
 }
