@@ -1,7 +1,7 @@
-#include "Stream.h"
 #include "CoderMuxer.h"
 #include "EncodingMuxingVideo.h"
 #include "EncodingMuxingAudio.h"
+#include "Stream.h"
 
 
 /*************************************************
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 
 	int ret;
 	int have_video = 0, have_audio = 0;
-	int encode_video = 0, encode_audio = 0;
+	int encode_video = 1, encode_audio = 1;
 	int videoFrameIdx = 0, audioFrameIdx = 0;
 
 	OutputStream video_st = { 0 }, audio_st = { 0 };
@@ -97,46 +97,49 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	//Discard the belowing:
-	/* Add the audio and video streams using the default format codecs
-     * and initialize the codecs. */
-	ret = Add_audio_video_streams(&video_st, &audio_st, oc, fmt, audio_codec, video_codec, io);
-	have_video = ret & HAVE_VIDEO;
-	encode_video = ret & ENCODE_VIDEO;
-	have_audio = ret & HAVE_AUDIO;
-	encode_audio = ret & ENCODE_AUDIO;
-
-	 /* Now that all the parameters are set, we can open the audio and
-     * video codecs and allocate the necessary encode buffers. */
-	if (have_video)
-	{
-		Open_video(oc, video_codec, &video_st, opt, io);
-	}
-	if (have_audio)
-	{
-		Open_audio(oc, audio_codec, &audio_st, opt);
-	}		
-
 	av_dump_format(oc, 0, io.output_file_name, 1);
-	/* open the output file, if needed */
+
+	//打开输出文件
 	if (!(fmt->flags & AVFMT_NOFILE))
 	{
 		ret = avio_open(&oc->pb, io.output_file_name, AVIO_FLAG_WRITE);
 		if (ret < 0)
 		{
-			fprintf(stderr, "Could not open '%s': %d\n", io.output_file_name, ret);
+			printf("Could not open '%s': %d\n", io.output_file_name, ret);
 			return 1;
 		}
 	}
 
 	/* Write the stream header, if any. */
-	ret = avformat_write_header(oc, &opt);
+	ret = avformat_write_header(oc, NULL);
 	if (ret < 0)
 	{
 		fprintf(stderr, "Error occurred when opening output file: %d\n",ret);
 		return 1;
 	}
 
+	//写入音频和视频帧
+	while (encode_video || encode_audio) 
+	{
+
+	}
+
+	//写入文件尾结构
+	av_write_trailer(oc);
+
+	//关闭音视频流、输出文件、其他收尾工作
+	Close_video_stream(&videoStream, &videoFrame);
+	Close_audio_stream(&audioStream, &audioFrame);
+	if (!(fmt->flags & AVFMT_NOFILE))
+	{
+		avio_closep(&oc->pb);
+	}
+	avformat_free_context(oc);
+
+	printf("Procssing succeeded.\n");
+	return 0;
+
+	//Discard the belowing:
 	while (encode_video || encode_audio) 
 	{
 		/* select the stream to encode */

@@ -4,6 +4,7 @@
 #include "common.h"
 #include "Stream.h"
 
+
 void Open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictionary *opt_arg);
 
 int Write_audio_frame(AVFormatContext *oc, OutputStream *ost);
@@ -59,5 +60,17 @@ void Set_audio_stream(AVStream **audioStream, const AVCodec *codec);
 	Return:			函数执行错误码
 *************************************************/
 int Open_audio_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *codec, IOParam io);
+
+/*************************************************
+	Function:		Close_audio_stream
+	Description:	关闭音频流结构
+	Calls:			无
+	Called By:		main
+	Input:			(in/out)audioStream : 要关闭的流结构
+					(int)audioFrame : 保存像素的帧结构
+	Output:			无
+	Return:			无
+*************************************************/
+void Close_audio_stream(AVStream **audioStream, AVFrame **audioFrame);
 
 #endif

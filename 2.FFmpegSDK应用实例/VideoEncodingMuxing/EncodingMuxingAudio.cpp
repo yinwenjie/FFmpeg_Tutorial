@@ -312,3 +312,12 @@ int Open_audio_stream(AVStream **audioStream, AVFrame **audioFrame, AVCodec *cod
 
 	return 1;
 }
+
+void Close_audio_stream(AVStream **audioStream, AVFrame **audioFrame)
+{
+	avcodec_close((*audioStream)->codec);
+	av_frame_free(audioFrame);
+
+	sws_freeContext(g_audioContext.sws_ctx);
+	swr_free(&(g_audioContext.swr_ctx));
+}

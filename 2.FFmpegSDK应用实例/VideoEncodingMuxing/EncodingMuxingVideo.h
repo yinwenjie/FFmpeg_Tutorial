@@ -58,4 +58,16 @@ void Set_video_stream(AVStream **videoStream, const VideoEncodingParam &encParam
 *************************************************/
 int Open_video_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *codec, IOParam io);
 
+/*************************************************
+	Function:		Close_video_stream
+	Description:	关闭视频流结构
+	Calls:			无
+	Called By:		main
+	Input:			(in/out)videoStream : 要关闭的流结构
+					(int)videoFrame : 保存像素的帧结构
+	Output:			无
+	Return:			无
+*************************************************/
+void Close_video_stream(AVStream **videoStream, AVFrame **videoFrame);
+
 #endif

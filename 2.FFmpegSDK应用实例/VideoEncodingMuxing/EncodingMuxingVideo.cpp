@@ -1,5 +1,5 @@
 #include "EncodingMuxingVideo.h"
-
+#include "Stream.h"
 
 FILE *g_inputYUVFile = NULL;
 
@@ -280,4 +280,10 @@ int Open_video_stream(AVStream **videoStream, AVFrame **videoFrame, AVCodec *cod
 	}
 
 	return 1;
+}
+
+void Close_video_stream(AVStream **videoStream, AVFrame **videoFrame)
+{
+	avcodec_close((*videoStream)->codec);
+	av_frame_free(videoFrame);
 }
