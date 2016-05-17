@@ -53,21 +53,7 @@ void Open_video(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, AVDictio
 		fprintf(stderr, "Could not allocate video frame\n");
 		exit(1);
 	}
-
-	/* If the output format is not YUV420P, then a temporary YUV420P
-	* picture is needed too. It is then converted to the required
-	* output format. */
-	ost->tmp_frame = NULL;
-	if (c->pix_fmt != AV_PIX_FMT_YUV420P)
-	{
-		ost->tmp_frame = alloc_picture(AV_PIX_FMT_YUV420P, c->width, c->height);
-		if (!ost->tmp_frame)
-		{
-			fprintf(stderr, "Could not allocate temporary picture\n");
-			exit(1);
-		}
-	}
-
+		
 	//打开输入YUV文件
 	fopen_s(&g_inputYUVFile, io.input_file_name, "rb+");
 	if (g_inputYUVFile == NULL)
