@@ -129,11 +129,8 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-
-	/* Write the trailer, if any. The trailer must be written before you
-	* close the CodecContexts open when you wrote the header; otherwise
-	* av_write_trailer() may try to use memory that was freed on
-	* av_codec_close(). */
+	
+	//写入文件尾数据
 	av_write_trailer(oc);
 
 	/* Close each codec. */
@@ -147,10 +144,12 @@ int main(int argc, char **argv)
 	}
 
 	if (!(fmt->flags & AVFMT_NOFILE))
-		/* Close the output file. */
+	{
+		//关闭输出文件
 		avio_closep(&oc->pb);
+	}
 
-	/* free the stream */
+	//关闭输出文件的上下文句柄
 	avformat_free_context(oc);
 
 	printf("Procssing succeeded.\n");
