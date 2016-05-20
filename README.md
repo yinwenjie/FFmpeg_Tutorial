@@ -1389,3 +1389,77 @@ Write\_video_frame函数的整体实现如：
 #六、调用FFMpeg SDK实现视频文件的转封装
 
 有时候我们可能会面对这样的一种需求，即我们不需要对视频内的音频或视频信号进行什么实际的操作，只是希望能把文件的封装格式进行转换，例如从avi转换为mp4格式或者flv格式等。实际上，转封装不需要对内部的音视频进行解码，只需要根据从输入文件中获取包含的数据流添加到输出文件中，然后将输入文件中的数据包按照规定格式写入到输出文件中去。
+
+## 1、解析命令行参数
+
+如同之前的工程一样，我们使用命令行参数传入输入和输出的文件名。为此，我们定义了如下的结构体和函数来实现传入输入输出文件的过程：
+
+	typedef struct _IOFiles
+	{
+		const char *inputName;
+		const char *outputName;
+	} IOFiles;
+
+	static bool hello(int argc, char **argv, IOFiles &io_param)
+	{
+		printf("FFMpeg Remuxing Demo.\nCommand format: %s inputfile outputfile\n", argv[0]);
+		if (argc != 3)
+		{
+			printf("Error: command line error, please re-check.\n");
+			return false;
+		}
+	
+		io_param.inputName = argv[1];
+		io_param.outputName = argv[2];
+	
+		return true;
+	}
+
+在main函数执行时，调用hello函数解析命令行并保存到IOFiles结构中：
+
+	int main(int argc, char **argv)
+	{
+		IOFiles io_param;
+		if (!hello(argc, argv, io_param))
+		{
+			return -1;
+		}
+		//......
+	}
+
+## 2、所需要的结构与初始化操作
+
+为了实现视频文件的转封装操作，我们需要以下的结构：
+
+	AVOutputFormat *ofmt = NULL;
+	AVFormatContext *ifmt_ctx = NULL, *ofmt_ctx = NULL;
+	AVPacket pkt;
+
+然后所需要的初始化操作有打开输入视频文件、获取其中的流信息和获取输出文件的句柄：
+
+	av_register_all();
+
+	//按封装格式打开输入视频文件
+	if ((ret = avformat_open_input(&ifmt_ctx, io_param.inputName, NULL, NULL)) < 0)
+	{
+		printf("Error: Open input file failed.\n");
+		goto end;
+	}
+
+	//获取输入视频文件中的流信息
+	if ((ret = avformat_find_stream_info(ifmt_ctx, NULL)) < 0)
+	{
+		printf("Error: Failed to retrieve input stream information.\n");
+		goto end;
+	}
+	av_dump_format(ifmt_ctx, 0, io_param.inputName, 0);
+
+	//按照文件名获取输出文件的句柄
+	avformat_alloc_output_context2(&ofmt_ctx, NULL, NULL, io_param.outputName);
+	if (!ofmt_ctx)
+	{
+		printf("Error: Could not create output context.\n");
+		goto end;
+	}
+	ofmt = ofmt_ctx->oformat;
+

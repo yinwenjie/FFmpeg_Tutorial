@@ -46,11 +46,14 @@ int main(int argc, char **argv)
 
 	av_register_all();
 
+	//按封装格式打开输入视频文件
 	if ((ret = avformat_open_input(&ifmt_ctx, io_param.inputName, NULL, NULL)) < 0)
 	{
 		printf("Error: Open input file failed.\n");
 		goto end;
 	}
+
+	//获取输入视频文件中的流信息
 	if ((ret = avformat_find_stream_info(ifmt_ctx, NULL)) < 0)
 	{
 		printf("Error: Failed to retrieve input stream information.\n");
@@ -58,6 +61,7 @@ int main(int argc, char **argv)
 	}
 	av_dump_format(ifmt_ctx, 0, io_param.inputName, 0);
 
+	//按照文件名获取输出文件的句柄
 	avformat_alloc_output_context2(&ofmt_ctx, NULL, NULL, io_param.outputName);
 	if (!ofmt_ctx)
 	{
