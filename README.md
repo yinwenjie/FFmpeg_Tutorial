@@ -1463,3 +1463,26 @@ Write\_video_frame函数的整体实现如：
 	}
 	ofmt = ofmt_ctx->oformat;
 
+## 3、 向输出文件中添加Stream
+
+在我们获取到了输入文件中的流信息后，保持输入流中的codec不变，并以其为依据添加到输出文件中：
+
+	for (unsigned int i = 0; i < ifmt_ctx->nb_streams ; i++)
+	{
+		AVStream *inStream = ifmt_ctx->streams[i];
+		AVStream *outStream = avformat_new_stream(ofmt_ctx, inStream->codec->codec);
+		if (!outStream)
+		{
+			printf("Error: Could not allocate output stream.\n");
+			goto end;
+		}
+
+		ret = avcodec_copy_context(outStream->codec, inStream->codec);
+		outStream->codec->codec_tag = 0;
+		if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+		{
+			outStream->codec->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+		}
+	}
+
+	av_dump_format(ofmt_ctx, 0, io_param.outputName, 1);
