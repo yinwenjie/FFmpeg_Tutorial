@@ -1463,7 +1463,7 @@ Write\_video_frame函数的整体实现如：
 	}
 	ofmt = ofmt_ctx->oformat;
 
-## 3、 向输出文件中添加Stream
+## 3、 向输出文件中添加Stream并打开输出文件
 
 在我们获取到了输入文件中的流信息后，保持输入流中的codec不变，并以其为依据添加到输出文件中：
 
@@ -1486,3 +1486,86 @@ Write\_video_frame函数的整体实现如：
 	}
 
 	av_dump_format(ofmt_ctx, 0, io_param.outputName, 1);
+
+这里调用了函数avcodec\_copy_context函数，该函数的声明如下：
+
+	int avcodec_copy_context(AVCodecContext *dest, const AVCodecContext *src);
+
+该函数的作用是将src表示的AVCodecContext中的内容拷贝到dest中。
+
+随后，调用avio\_open函数打开输出文件：
+
+	av_dump_format(ofmt_ctx, 0, io_param.outputName, 1);
+
+	if (!(ofmt->flags & AVFMT_NOFILE))
+	{
+		ret = avio_open(&ofmt_ctx->pb, io_param.outputName, AVIO_FLAG_WRITE);
+		if (ret < 0)
+		{
+			printf("Error: Could not open output file.\n");
+			goto end;
+		}
+	}
+
+
+
+## 4、写入文件的音视频数据
+
+首先向输出文件中写入文件头:
+
+	ret = avformat_write_header(ofmt_ctx, NULL);
+	if (ret < 0) 
+	{
+		printf("Error: Could not write output file header.\n");
+		goto end;
+	}
+
+写入文件的视频和音频包数据，其实就是将音频和视频Packets从输入文件中读出来，正确设置pts和dts等时间量之后，再写入到输出文件中去：
+
+	while (1) 
+	{
+		AVStream *in_stream, *out_stream;
+
+		ret = av_read_frame(ifmt_ctx, &pkt);
+		if (ret < 0)
+			break;
+
+		in_stream  = ifmt_ctx->streams[pkt.stream_index];
+		out_stream = ofmt_ctx->streams[pkt.stream_index];
+		
+		/* copy packet */
+		pkt.pts = av_rescale_q_rnd(pkt.pts, in_stream->time_base, out_stream->time_base, (AVRounding)(AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX));
+		pkt.dts = av_rescale_q_rnd(pkt.dts, in_stream->time_base, out_stream->time_base, (AVRounding)(AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX));
+		pkt.duration = av_rescale_q(pkt.duration, in_stream->time_base, out_stream->time_base);
+		pkt.pos = -1;
+
+		ret = av_interleaved_write_frame(ofmt_ctx, &pkt);
+		if (ret < 0) 
+		{
+			fprintf(stderr, "Error muxing packet\n");
+			break;
+		}
+		av_free_packet(&pkt);
+	}
+
+最后要做的就是写入文件尾：
+
+	av_write_trailer(ofmt_ctx);
+
+## 5、 收尾工作
+
+写入输出文件完成后，需要对打开的结构进行关闭或释放等操作。主要有关闭输入输出文件、释放输出文件的句柄等：
+
+	avformat_close_input(&ifmt_ctx);
+
+	/* close output */
+	if (ofmt_ctx && !(ofmt->flags & AVFMT_NOFILE))
+		avio_closep(&ofmt_ctx->pb);
+
+	avformat_free_context(ofmt_ctx);
+
+	if (ret < 0 && ret != AVERROR_EOF) 
+	{
+		fprintf(stderr, "Error failed to write packet to output file.\n");
+		return 1;
+	}
