@@ -13,6 +13,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoTranscoding", "VideoTr
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoRemuxing", "VideoRemuxing\VideoRemuxing.vcxproj", "{A1204AEF-22FF-48FA-9F11-ABD93E627EC1}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoFiltering", "VideoFiltering\VideoFiltering.vcxproj", "{860F2FAC-FA99-45DA-91F0-DE8CC896B911}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -43,6 +45,10 @@ Global
 		{A1204AEF-22FF-48FA-9F11-ABD93E627EC1}.Debug|Win32.Build.0 = Debug|Win32
 		{A1204AEF-22FF-48FA-9F11-ABD93E627EC1}.Release|Win32.ActiveCfg = Release|Win32
 		{A1204AEF-22FF-48FA-9F11-ABD93E627EC1}.Release|Win32.Build.0 = Release|Win32
+		{860F2FAC-FA99-45DA-91F0-DE8CC896B911}.Debug|Win32.ActiveCfg = Debug|Win32
+		{860F2FAC-FA99-45DA-91F0-DE8CC896B911}.Debug|Win32.Build.0 = Debug|Win32
+		{860F2FAC-FA99-45DA-91F0-DE8CC896B911}.Release|Win32.ActiveCfg = Release|Win32
+		{860F2FAC-FA99-45DA-91F0-DE8CC896B911}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
