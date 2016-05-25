@@ -2,6 +2,7 @@
 #define _COMMON_H_
 
 #include "VideoFilterHeader.h"
+#include "VideoFilter.h"
 
 //输入输出文件结构
 typedef struct _IOFiles
