@@ -56,7 +56,7 @@ int main(int argc, char **argv)
 	}
 
 	av_register_all();
-	if (init_filters(filter_descr) < 0)
+	if (Init_filters(filter_descr) < 0)
 	{
 		return -1;
 	}	
