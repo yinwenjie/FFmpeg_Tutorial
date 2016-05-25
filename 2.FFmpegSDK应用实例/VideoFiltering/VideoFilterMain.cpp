@@ -46,7 +46,7 @@ Function:		main
 Description:	入口点函数
 *************************************************/
 const char *filter_descr = "movie=logo.png[wm];[in][wm]overlay=5:5[out]";
-
+#define TOTAL_FRAME_NUM 200
 int main(int argc, char **argv)
 {
 	IOFiles files = { NULL };
@@ -59,11 +59,19 @@ int main(int argc, char **argv)
 	if (init_filters(filter_descr) < 0)
 	{
 		return -1;
+	}	
+
+	for (int idx = 0; idx < TOTAL_FRAME_NUM; idx++)
+	{
+		AVFrame *frameIn = avframe_allocation(720, 480, AV_PIX_FMT_YUV420P);
+
+		Read_yuv_to_AVFrame(frameIn, &files.inputFile, 0);
+		Read_yuv_to_AVFrame(frameIn, &files.inputFile, 1);
+		Read_yuv_to_AVFrame(frameIn, &files.inputFile, 2);
+
+		Write_out_yuv(frameIn, &files.outputFile);
+		avframe_deallocation(frameIn);
 	}
-
-	AVFrame *frameIn = avframe_allocation(720, 480, AV_PIX_FMT_YUV420P);
-
-	avframe_deallocation(frameIn);
 
 	return 0;
 }
