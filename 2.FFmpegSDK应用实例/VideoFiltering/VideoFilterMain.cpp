@@ -24,6 +24,20 @@ static bool hello(int argc, char **argv, IOFiles &files)
 	files.inputName = argv[1];
 	files.outputName = argv[2];
 	files.logoName = argv[3];
+
+	fopen_s(&(files.inputFile), files.inputName, "rb+");
+	if (!(files.inputFile))
+	{
+		printf("Error: open input file failed.\n");
+		return false;
+	}
+	fopen_s(&(files.outputFile), files.outputName, "wb+");
+	if (!(files.outputFile))
+	{
+		printf("Error: open output file failed.\n");
+		return false;
+	}
+
 	return true;
 }
 
@@ -46,6 +60,10 @@ int main(int argc, char **argv)
 	{
 		return -1;
 	}
+
+	AVFrame *frameIn = avframe_allocation(720, 480, AV_PIX_FMT_YUV420P);
+
+	avframe_deallocation(frameIn);
 
 	return 0;
 }
