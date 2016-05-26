@@ -1,8 +1,5 @@
 #include "common.h"
 
-extern AVFilterContext *buffersrc_ctx;
-extern AVFilterContext *buffersink_ctx;
-
 /*************************************************
 	Function:		hello
 	Description:	解析命令行传入的参数
@@ -125,13 +122,18 @@ int main(int argc, char **argv)
 
 	while (1)
 	{
-		if( (ret = av_read_frame(fmt_ctx, &packet)) < 0 || frameIdx++ > TOTAL_FRAME_NUM)
+		if( (ret = av_read_frame(fmt_ctx, &packet)) < 0)
 		{
 			break;
 		}
 
 		if (packet.stream_index == video_stream_index)
 		{
+			if ( frameIdx > TOTAL_FRAME_NUM)
+			{
+				break;
+			}
+
 			if ( (ret = avcodec_decode_video2(dec_ctx, frameIn, &got_frame, &packet)) < 0 )
 			{
 				printf("Error: decode video frame failed.\n");
@@ -140,18 +142,14 @@ int main(int argc, char **argv)
 
 			if (got_frame)
 			{
-				frameIn->pts = av_frame_get_best_effort_timestamp(frameIn);
-
-				/* push the decoded frame into the filtergraph */
-				if (av_buffersrc_add_frame_flags(buffersrc_ctx, frameIn, AV_BUFFERSRC_FLAG_KEEP_REF) < 0) 
+				if (!Feed_filter_graph(frameIn))
 				{
-					printf( "Error while feeding the filtergraph\n");
 					break;
 				}
 
 				while (1) 
 				{
-					if ( (ret = av_buffersink_get_frame(buffersink_ctx, frameOut)) < 0)
+					if (!Get_buffersink_frame(frameOut))
 					{
 						break;
 					}
