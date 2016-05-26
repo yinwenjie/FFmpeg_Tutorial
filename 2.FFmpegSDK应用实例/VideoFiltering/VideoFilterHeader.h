@@ -13,6 +13,7 @@ extern "C"
 #include "libavutil/avutil.h"
 #include "libswscale/swscale.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/opt.h"
 };
 
 #endif

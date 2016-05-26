@@ -12,7 +12,6 @@ typedef struct _IOFiles
 	const char *outputName;
 	const char *logoName;
 
-	FILE *inputFile;
 	FILE *outputFile;
 } IOFiles;
 
