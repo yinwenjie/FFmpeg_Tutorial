@@ -94,7 +94,8 @@ static int open_input_file(const char *filename)
 Function:		main
 Description:	入口点函数
 *************************************************/
-const char *filter_descr = "movie=my_logo.png[wm];[in][wm]overlay=5:5[out]";
+//const char *filter_descr = "drawtext=fontfile=/Windows/Fonts/Tahoma.ttf:text='FFMpeg Video Filter -- Video Watermark':x=100:y=x/dar:fontsize=24:fontcolor=yellow";
+const char *filter_descr = "movie=logo.png[wm];[in][wm]overlay=5:5[out]";
 #define TOTAL_FRAME_NUM 200
 int main(int argc, char **argv)
 {
@@ -124,7 +125,7 @@ int main(int argc, char **argv)
 
 	while (1)
 	{
-		if( (ret = av_read_frame(fmt_ctx, &packet)) < 0)
+		if( (ret = av_read_frame(fmt_ctx, &packet)) < 0 || frameIdx++ > TOTAL_FRAME_NUM)
 		{
 			break;
 		}
