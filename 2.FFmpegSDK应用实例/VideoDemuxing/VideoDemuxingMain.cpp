@@ -2,7 +2,7 @@
 #include "DemuxingContext.h"
 #include "AVDecoder.h"
 
-
+#define MAX_NUM_TO_DECODE 300
 /*************************************************
 Function:		hello
 Description:	输出提示信息和命令行格式
@@ -47,7 +47,7 @@ Description:	入口点函数
 *************************************************/
 int main(int argc, char **argv)
 {
-	int ret = 0, got_frame;
+	int ret = 0, got_frame, frameNum = 0;
 	IOFileName files = {NULL};
 	DemuxingVideoAudioContex va_ctx = {NULL};
 
@@ -74,6 +74,10 @@ int main(int argc, char **argv)
 	/* read frames from the file */
 	while (av_read_frame(va_ctx.fmt_ctx, &va_ctx.pkt) >= 0)		//从输入程序中读取一个包的数据
 	{
+		if (frameNum++ > MAX_NUM_TO_DECODE)
+		{
+			break;
+		}
 		do 
 		{
 			ret = Decode_packet(files, va_ctx, &got_frame, 0);	//解码这个包
