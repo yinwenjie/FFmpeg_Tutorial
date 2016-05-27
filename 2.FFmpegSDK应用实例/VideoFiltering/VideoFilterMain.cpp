@@ -166,19 +166,49 @@ static void get_encoding_param(AVFormatContext *ifmt_ctx, EncodingParam *encodin
 	encodingParam->nGOPSize = in_ctx->gop_size;
 	encodingParam->nImageWidth = in_ctx->width;
 	encodingParam->nImageHeight = in_ctx->height;
+	encodingParam->time_base = in_ctx->time_base;
 }
 
 static int open_video_encoder(const EncodingParam *encodingParam, EncodingContext *encodingContext)
 {
-	
+	encodingContext->enc = avcodec_find_encoder(encodingParam->codec_id);
+	if (!encodingContext->enc)
+	{
+		printf("Error: Cannot find video encoder.\n");
+		return -1;
+	}
+
+	encodingContext->enc_ctx = avcodec_alloc_context3(encodingContext->enc);
+	if (!encodingContext->enc_ctx)
+	{
+		printf("Error: Cannot allocate video encoder context.\n");
+		return -1;
+	}
+
+	encodingContext->enc_ctx->width = encodingParam->nImageWidth;
+	encodingContext->enc_ctx->height = encodingParam->nImageHeight;
+	encodingContext->enc_ctx->bit_rate = encodingParam->nBitRate;
+	encodingContext->enc_ctx->time_base = encodingParam->time_base;
+	encodingContext->enc_ctx->gop_size = encodingParam->nGOPSize;
+	encodingContext->enc_ctx->max_b_frames = encodingParam->nMaxBFrames;
+	encodingContext->enc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+	av_opt_set(encodingContext->enc_ctx->priv_data, "preset", "slow", 0);
+
+	if (avcodec_open2(encodingContext->enc_ctx, encodingContext->enc, NULL) < 0)
+	{
+		printf("Error: Cannot open video encoder.\n");
+		return -1;
+	}
+
+	return 0;
 }
 
 /*************************************************
 Function:		main
 Description:	入口点函数
 *************************************************/
-//const char *filter_descr = "drawtext=fontfile=/Windows/Fonts/Tahoma.ttf:text='FFMpeg Video Filter -- Video Watermark':x=100:y=x/dar:fontsize=24:fontcolor=yellow";
-const char *filter_descr = "movie=logo.png[wm];[in][wm]overlay=5:5[out]";
+const char *filter_descr = "drawtext=fontfile=/Windows/Fonts/Tahoma.ttf:text='FFMpeg Video Filter -- Video Watermark':x=100:y=x/dar:fontsize=24:fontcolor=yellow";
+//const char *filter_descr = "movie=logo.png[wm];[in][wm]overlay=5:5[out]";
 #define TOTAL_FRAME_NUM 200
 int main(int argc, char **argv)
 {
@@ -200,7 +230,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	get_encoding_param(ifmt_ctx, &encodingParam);
+//	get_encoding_param(ifmt_ctx, &encodingParam);
 
 	if (Init_filters(filter_descr,dec_ctx) < 0)
 	{
@@ -212,10 +242,10 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (open_video_encoder(&encodingParam, &encodingContext) < 0)
-	{
-		return -1;
-	}
+// 	if (open_video_encoder(&encodingParam, &encodingContext) < 0)
+// 	{
+// 		return -1;
+// 	}
 
 	AVFrame *frameIn  = av_frame_alloc();
 	AVFrame *frameOut = av_frame_alloc();
@@ -260,22 +290,22 @@ int main(int argc, char **argv)
 					printf("Process %d frame!\n", frameIdx++);
 					Write_out_yuv(frameOut, &files.outputFile);
 					
-					{
-						int got_packet = 0;
-						av_init_packet(&outPacket);
-
-						/* encode the image */
-						ret = avcodec_encode_video2(enc_ctx, &outPacket, frameOut, &got_packet);
-						if (ret < 0) 
-						{
-							fprintf(stderr, "Error encoding video frame: %d\n", ret);
-							break;
-						}
-						if (got_packet)
-						{
-							//获得添加水印后的视频码流包
-						}
-					}
+// 					{
+// 						int got_packet = 0;
+// 						av_init_packet(&outPacket);
+// 
+// 						/* encode the image */
+// 						ret = avcodec_encode_video2(enc_ctx, &outPacket, frameOut, &got_packet);
+// 						if (ret < 0) 
+// 						{
+// 							fprintf(stderr, "Error encoding video frame: %d\n", ret);
+// 							break;
+// 						}
+// 						if (got_packet)
+// 						{
+// 							//获得添加水印后的视频码流包
+// 						}
+// 					}
 					
 					av_frame_unref(frameOut);
 				}
