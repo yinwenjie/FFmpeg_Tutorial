@@ -119,7 +119,13 @@ static int open_output_file(const char *filename)
 				return -1;
 			}
 
-			ret = avcodec_copy_context(outStream->codec, inStream->codec);
+			if (i == video_stream_index)
+			{
+				AVCodec *enc = avcodec_find_encoder(inStream->codec->codec_id);
+				outStream->codec->codec = enc;
+			}
+			ret = avcodec_copy_context(outStream->codec, inStream->codec);		
+
 			outStream->codec->codec_tag = 0;
 			if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
 			{
@@ -148,6 +154,19 @@ static int open_output_file(const char *filename)
 	}
 
 	return 0;
+}
+
+static int open_video_encoder()
+{
+	int ret = 0;
+	enc_ctx = ofmt_ctx->streams[video_stream_index]->codec;
+
+	/* init the video decoder */
+	if ((ret = avcodec_open2(enc_ctx, enc_ctx->codec, NULL)) < 0) 
+	{
+		printf("Error: Cannot open video decoder\n");
+		return ret;
+	}
 }
 
 /*************************************************
@@ -179,6 +198,11 @@ int main(int argc, char **argv)
 	}	
 
 	if (open_output_file("output.mp4") < 0)
+	{
+		return -1;
+	}
+
+	if (open_video_encoder() < 0)
 	{
 		return -1;
 	}
