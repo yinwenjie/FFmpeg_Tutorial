@@ -156,17 +156,21 @@ static int open_output_file(const char *filename)
 	return 0;
 }
 
-static int open_video_encoder()
+static void get_encoding_param(AVFormatContext *ifmt_ctx, EncodingParam *encodingParam)
 {
-	int ret = 0;
-	enc_ctx = ofmt_ctx->streams[video_stream_index]->codec;
+	AVCodecContext *in_ctx = ifmt_ctx->streams[video_stream_index]->codec;
 
-	/* init the video decoder */
-	if ((ret = avcodec_open2(enc_ctx, enc_ctx->codec, NULL)) < 0) 
-	{
-		printf("Error: Cannot open video decoder\n");
-		return ret;
-	}
+	encodingParam->codec_id = in_ctx->codec_id;
+	encodingParam->nBitRate = in_ctx->bit_rate;
+	encodingParam->nMaxBFrames = in_ctx->max_b_frames;
+	encodingParam->nGOPSize = in_ctx->gop_size;
+	encodingParam->nImageWidth = in_ctx->width;
+	encodingParam->nImageHeight = in_ctx->height;
+}
+
+static int open_video_encoder(const EncodingParam *encodingParam, EncodingContext *encodingContext)
+{
+	
 }
 
 /*************************************************
@@ -180,6 +184,10 @@ int main(int argc, char **argv)
 {
 	int ret = 0;
 	IOFiles files = { NULL };
+
+	EncodingContext encodingContext = {NULL};
+	EncodingParam encodingParam = {AV_CODEC_ID_NONE, -1, -1};
+
 	if (!hello(argc, argv, files))
 	{
 		return -1;
@@ -192,6 +200,8 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	get_encoding_param(ifmt_ctx, &encodingParam);
+
 	if (Init_filters(filter_descr,dec_ctx) < 0)
 	{
 		return -1;
@@ -202,7 +212,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (open_video_encoder() < 0)
+	if (open_video_encoder(&encodingParam, &encodingContext) < 0)
 	{
 		return -1;
 	}

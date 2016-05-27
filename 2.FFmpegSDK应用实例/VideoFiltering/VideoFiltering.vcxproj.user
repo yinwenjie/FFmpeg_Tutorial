@@ -3,6 +3,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LocalDebuggerWorkingDirectory>$(Configuration)\bin\</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>IMG_0874.MOV out.yuv my_logo.png</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>test.mp4 out.mp4 logo.png</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>

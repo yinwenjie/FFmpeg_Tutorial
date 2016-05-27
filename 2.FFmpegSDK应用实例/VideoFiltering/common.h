@@ -4,6 +4,7 @@
 #include "VideoFilterHeader.h"
 #include "VideoFilter.h"
 #include "ClassFrame.h"
+#include "Encoder.h"
 
 //输入输出文件结构
 typedef struct _IOFiles
