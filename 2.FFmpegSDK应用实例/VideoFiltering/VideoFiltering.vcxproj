@@ -79,10 +79,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Filter.cpp" />
+    <ClCompile Include="Frame.cpp" />
     <ClCompile Include="VideoFilteringMain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
+    <ClInclude Include="Filter.h" />
+    <ClInclude Include="Frame.h" />
+    <ClInclude Include="IOFiles.h" />
     <ClInclude Include="VideoFilteringHeader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
