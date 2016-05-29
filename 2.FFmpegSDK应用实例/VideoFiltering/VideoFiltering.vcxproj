@@ -81,6 +81,7 @@
   <ItemGroup>
     <ClCompile Include="Filter.cpp" />
     <ClCompile Include="Frame.cpp" />
+    <ClCompile Include="IOFiles.cpp" />
     <ClCompile Include="VideoFilteringMain.cpp" />
   </ItemGroup>
   <ItemGroup>

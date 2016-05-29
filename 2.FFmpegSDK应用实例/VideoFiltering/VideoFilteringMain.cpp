@@ -104,10 +104,46 @@ int main(int argc, char **argv)
 
 	Init_video_frame_in_out(&frame_in, &frame_out, &frame_buffer_in, &frame_buffer_out, frameWidth, frameHeight);
 
-	 while (1) 
-	 {
+	while (Read_yuv_data_to_buf(frame_buffer_in, files, &frame_in)) 
+	{
+		if (!Add_frame_to_filter(frame_in))
+		{
+			printf("Error while adding frame.\n");
+			return -1;
+		}
 
-	 }
+		if (!Get_frame_from_filter(&frame_out))
+		{
+			printf("Error while getting frame.\n");
+			return -1;
+		}
+
+		if(frame_out->format==AV_PIX_FMT_YUV420P)
+		{  
+			for(int i=0;i<frame_out->height;i++)
+			{  
+				fwrite(frame_out->data[0]+frame_out->linesize[0]*i,1,frame_out->width,files.oFile);  
+			}  
+			for(int i=0;i<frame_out->height/2;i++)
+			{  
+				fwrite(frame_out->data[1]+frame_out->linesize[1]*i,1,frame_out->width/2,files.oFile);  
+			}  
+			for(int i=0;i<frame_out->height/2;i++)
+			{  
+				fwrite(frame_out->data[2]+frame_out->linesize[2]*i,1,frame_out->width/2,files.oFile);  
+			}  
+		}  
+		printf("Process 1 frame!\n");  
+		av_frame_unref(frame_out);  
+	}
+
+	fclose(files.iFile);
+	fclose(files.oFile);
+
+	av_frame_free(&frame_in);
+	av_frame_free(&frame_out);
+
+	Close_video_filter();
 
 	return 0;
 }

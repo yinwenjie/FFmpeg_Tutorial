@@ -24,6 +24,9 @@
     <ClCompile Include="Frame.cpp">
       <Filter>Frame</Filter>
     </ClCompile>
+    <ClCompile Include="IOFiles.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VideoFilteringHeader.h">
