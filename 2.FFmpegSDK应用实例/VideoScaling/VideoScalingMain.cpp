@@ -43,6 +43,20 @@ static bool hello(int argc, char **argv, IOFiles &files)
 	return true;
 }
 
+/*************************************************
+	Function:		read_yuv_from_ifile
+	Description:	从输入文件中读取像素数据
+	Calls:			无
+	Called By:		main
+	Input:			(in)srcWidth : 输入图像的宽度
+					(in)srcHeight : 输入图像的的高度
+					(in)color_plane ：颜色分量：0——Y;1——U;2——V
+					(in)files : 包含输入文件的结构
+	Output:			(out)src_data : 保存输入数据的缓存
+					(out)src_linesize ：
+	Return:			true : 命令行解析正确
+					false : 命令行解析错误
+*************************************************/
 static int read_yuv_from_ifile(uint8_t *src_data[4], int src_linesize[4], int srcWidth, int srcHeight, int color_plane,IOFiles &files)
 {
 	int frame_height	= color_plane == 0 ? srcHeight : srcHeight / 2;
@@ -119,6 +133,7 @@ int main(int argc, char **argv)
 		goto end;
 	}
 		
+	//从输出frame中写出到输出文件
 	int dst_bufsize = ret;
 	for (int idx = 0; idx < MAX_FRAME_NUM; idx++)
 	{
