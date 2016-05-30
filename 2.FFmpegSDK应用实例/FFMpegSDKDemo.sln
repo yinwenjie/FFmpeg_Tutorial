@@ -13,6 +13,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoRemuxing", "VideoRemux
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoFiltering", "VideoFiltering\VideoFiltering.vcxproj", "{3EE94D57-261A-4843-9971-AA9C87E28EC5}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VideoScaling", "VideoScaling\VideoScaling.vcxproj", "{5A6055F3-6A57-431D-86BA-87E3E3618EFD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -40,9 +42,12 @@ Global
 		{A1204AEF-22FF-48FA-9F11-ABD93E627EC1}.Release|Win32.ActiveCfg = Release|Win32
 		{A1204AEF-22FF-48FA-9F11-ABD93E627EC1}.Release|Win32.Build.0 = Release|Win32
 		{3EE94D57-261A-4843-9971-AA9C87E28EC5}.Debug|Win32.ActiveCfg = Debug|Win32
-		{3EE94D57-261A-4843-9971-AA9C87E28EC5}.Debug|Win32.Build.0 = Debug|Win32
 		{3EE94D57-261A-4843-9971-AA9C87E28EC5}.Release|Win32.ActiveCfg = Release|Win32
 		{3EE94D57-261A-4843-9971-AA9C87E28EC5}.Release|Win32.Build.0 = Release|Win32
+		{5A6055F3-6A57-431D-86BA-87E3E3618EFD}.Debug|Win32.ActiveCfg = Debug|Win32
+		{5A6055F3-6A57-431D-86BA-87E3E3618EFD}.Debug|Win32.Build.0 = Debug|Win32
+		{5A6055F3-6A57-431D-86BA-87E3E3618EFD}.Release|Win32.ActiveCfg = Release|Win32
+		{5A6055F3-6A57-431D-86BA-87E3E3618EFD}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
