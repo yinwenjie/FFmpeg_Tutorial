@@ -1569,3 +1569,8 @@ Write\_video_frame函数的整体实现如：
 		fprintf(stderr, "Error failed to write packet to output file.\n");
 		return 1;
 	}
+
+---
+#七、 FFMpeg实现视频水印
+
+视频的水印通常指附加在原始视频上的可见或者不可见的，与原始视频无直接关联的标识。通常在有线电视画面上电视台的台标以及视频网站上的logo就是典型的视频水印的应用场景。通常实现视频水印可以通过FFMpeg提供的libavfilter库实现。libavfilter库实际上实现的是视频的滤镜功能，除了水印之外，还可以实现视频帧的灰度化、平滑、翻转、直方图均衡、裁剪等操作。
