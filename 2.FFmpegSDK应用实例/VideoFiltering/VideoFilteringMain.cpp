@@ -50,6 +50,15 @@ static int hello(int argc, char **argv, IOFiles &files)
 	return 0;
 }
 
+/*************************************************
+	Function:		setFilterDescr
+	Description:	根据索引设置Filter描述符
+	Calls:			无
+	Called By:		main
+	Input:			(in)idx : Filter的索引
+	Output:			(out)filter_descr : Filter描述符
+	Return:			无
+*************************************************/
 static void setFilterDescr(int idx, char **filter_descr)
 {
 	switch (idx)
@@ -86,57 +95,54 @@ int main(int argc, char **argv)
 
 	IOFiles files = {NULL};
 
+	//命令行解析
 	if (hello(argc, argv, files) < 0)
 	{
-		return -1;
+		goto end;
 	}
 
 	int frameWidth = files.frameWidth, frameHeight = files.frameHeight;
 
+	//设置Filter的内容
 	setFilterDescr(files.filterIdx, &filter_descr);
 
 	avfilter_register_all();
 	
+	//初始化Filter相关结构
 	if (ret = Init_video_filter(filter_descr, frameWidth, frameHeight))
 	{
-		return -1;
+		goto end;
 	}
 
+	//分配输入和输出frame和其存储空间
 	Init_video_frame_in_out(&frame_in, &frame_out, &frame_buffer_in, &frame_buffer_out, frameWidth, frameHeight);
 
 	while (Read_yuv_data_to_buf(frame_buffer_in, files, &frame_in)) 
 	{
+		//将输入frame添加到filter graph
 		if (!Add_frame_to_filter(frame_in))
 		{
 			printf("Error while adding frame.\n");
-			return -1;
+			goto end;
 		}
 
+		//从filter graph中获取输出frame
 		if (!Get_frame_from_filter(&frame_out))
 		{
 			printf("Error while getting frame.\n");
-			return -1;
+			goto end;
 		}
 
-		if(frame_out->format==AV_PIX_FMT_YUV420P)
-		{  
-			for(int i=0;i<frame_out->height;i++)
-			{  
-				fwrite(frame_out->data[0]+frame_out->linesize[0]*i,1,frame_out->width,files.oFile);  
-			}  
-			for(int i=0;i<frame_out->height/2;i++)
-			{  
-				fwrite(frame_out->data[1]+frame_out->linesize[1]*i,1,frame_out->width/2,files.oFile);  
-			}  
-			for(int i=0;i<frame_out->height/2;i++)
-			{  
-				fwrite(frame_out->data[2]+frame_out->linesize[2]*i,1,frame_out->width/2,files.oFile);  
-			}  
-		}  
+		//将输出frame写出到输出文件
+		Write_yuv_to_outfile(frame_out, files);
+
 		printf("Process 1 frame!\n");  
 		av_frame_unref(frame_out);  
 	}
 
+end:
+	
+	//关闭文件及相关结构
 	fclose(files.iFile);
 	fclose(files.oFile);
 

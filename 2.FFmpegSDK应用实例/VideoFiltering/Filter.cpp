@@ -4,6 +4,7 @@ AVFilterContext *buffersink_ctx;
 AVFilterContext *buffersrc_ctx;  
 AVFilterGraph *filter_graph;  
 
+//初始化video filter相关的结构
 int Init_video_filter(const char *filter_descr, int width, int height)
 {
 	char args[512];  
@@ -62,6 +63,7 @@ int Init_video_filter(const char *filter_descr, int width, int height)
 	return 0;
 }
 
+//将待处理的输入frame添加进filter graph
 bool Add_frame_to_filter(AVFrame *frameIn)
 {
 	if (av_buffersrc_add_frame(buffersrc_ctx, frameIn) < 0) 
@@ -72,6 +74,7 @@ bool Add_frame_to_filter(AVFrame *frameIn)
 	return true;
 }
 
+//从filter graph中获取输出frame
 int Get_frame_from_filter(AVFrame **frameOut)
 {
 	if (av_buffersink_get_frame(buffersink_ctx, *frameOut) < 0)
@@ -82,6 +85,7 @@ int Get_frame_from_filter(AVFrame **frameOut)
 	return true;
 }
 
+//关闭video filter相关结构
 void Close_video_filter()
 {
 	avfilter_graph_free(&filter_graph);

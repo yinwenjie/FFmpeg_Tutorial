@@ -1,5 +1,6 @@
 #include "common.h"
 
+//初始化输入输出frame对象和像素缓存
 void Init_video_frame_in_out(AVFrame **frameIn, AVFrame **frameOut, unsigned char **frame_buffer_in, unsigned char **frame_buffer_out, int frameWidth, int frameHeight)
 {
 	*frameIn = av_frame_alloc();  
