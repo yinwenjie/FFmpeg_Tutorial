@@ -109,7 +109,7 @@ ffmpeg.exe可谓是整个工程的核心所在，它的主要功能是完成音�
 
 视频由像素格式编码为码流格式是FFMpeg的一项基本功能。通常，视频编码器的输入视频通常为原始的图像像素值，输出格式为符合某种格式规定的二进制码流。
 
-##1、FFMpeg进行视频编码所需要的结构：
+###1、FFMpeg进行视频编码所需要的结构：
 
 - **AVCodec**：AVCodec结构保存了一个编解码器的实例，实现实际的编码功能。通常我们在程序中定义一个指向AVCodec结构的指针指向该实例。
 - **AVCodecContext**：AVCodecContext表示AVCodec所代表的上下文信息，保存了AVCodec所需要的一些参数。对于实现编码功能，我们可以在这个结构中设置我们指定的编码参数。通常也是定义一个指针指向AVCodecContext。
@@ -130,13 +130,13 @@ ffmpeg.exe可谓是整个工程的核心所在，它的主要功能是完成音�
 		AVPacket		pkt;		//码流包结构，包含编码码流数据
 	} CodecCtx;
 
-##2、FFMpeg编码的主要步骤：
+###2、FFMpeg编码的主要步骤：
 
-###(1)、输入编码参数
+####(1)、输入编码参数
 
 这一步我们可以设置一个专门的配置文件，并将参数按照某个事写入这个配置文件中，再在程序中解析这个配置文件获得编码的参数。如果参数不多的话，我们可以直接使用命令行将编码参数传入即可。
 
-###(2)、按照要求初始化需要的FFMpeg结构
+####(2)、按照要求初始化需要的FFMpeg结构
 
 首先，所有涉及到编解码的的功能，都必须要注册音视频编解码器之后才能使用。注册编解码调用下面的函数：
 
@@ -208,7 +208,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		return false;
 	}
 
-###(3)、编码循环体
+####(3)、编码循环体
 
 到此为止，我们的准备工作已经大致完成，下面开始执行实际编码的循环过程。用伪代码大致表示编码的流程为：
 
@@ -287,7 +287,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		}
 	} //for (frameIdx = 0; frameIdx < io_param.nTotalFrames; frameIdx++)
 
-###(4)、收尾处理
+####(4)、收尾处理
 
 如果我们就此结束编码器的整个运行过程，我们会发现，编码完成之后的码流对比原来的数据少了一帧。这是因为我们是根据读取原始像素数据结束来判断循环结束的，这样最后一帧还保留在编码器中尚未输出。所以在关闭整个解码过程之前，我们必须继续执行编码的操作，直到将最后一帧输出为止。执行这项操作依然调用avcodec\_encode_video2函数，只是表示AVFrame的参数设为NULL即可：
 
@@ -318,7 +318,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	av_freep(&(ctx.frame->data[0]));
 	av_frame_free(&(ctx.frame));
 
-##3、总结
+###3、总结
 
 使用FFMpeg进行视频编码的主要流程如：
 
@@ -328,11 +328,11 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 4. 关闭编码器组件：avcodec\_close，av\_free，av\_freep，av\_frame\_free
 
 ---
-#三、调用FFmpeg SDK对H.264格式的视频压缩码流进行解码
+##三、调用FFmpeg SDK对H.264格式的视频压缩码流进行解码
 
 经过了上篇调用FFMpeg SDK对视频进行编码的过程之后，我们可以比较容易地理解本篇的内容，即上一篇的逆过程——将H.264格式的裸码流解码为像素格式的图像信息。
 
-##1、FFMpeg视频解码器所包含的结构
+###1、FFMpeg视频解码器所包含的结构
 
 同FFMpeg编码器类似，FFMpeg解码器也需要编码时的各种结构，除此之外，解码器还需要另一个结构——编解码解析器——用于从码流中截取出一帧完整的码流数据单元。因此我们定义一个编解码上下文结构为：
 
@@ -351,13 +351,13 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	} CodecCtx;
 
 
-##2、FFMpeg进行解码操作的主要步骤
+###2、FFMpeg进行解码操作的主要步骤
 
-###(1). 参数传递和解析
+####(1). 参数传递和解析
 
 同编码器类似，解码器也需要传递参数。不过相比编码器，解码器在运行时所需要的大部分信息都包含在输入码流中，因此输入参数一般只需要指定一个待解码的视频码流文件即可
 
-###(2). 按照要求初始化需要的FFMpeg结构
+####(2). 按照要求初始化需要的FFMpeg结构
 
 首先，所有涉及到编解码的的功能，都必须要注册音视频编解码器之后才能使用。注册编解码调用下面的函数：
 
@@ -422,7 +422,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		return false;
 	}
 
-###(3)、解码循环体
+####(3)、解码循环体
 
 完成必须的codec组件的建立和初始化之后，开始进入正式的解码循环过程。解码循环通常按照以下几个步骤实现：
 
@@ -511,21 +511,21 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		}
 	} //while(1)
 
-###(4). 收尾工作
+####(4). 收尾工作
 收尾工作主要包括关闭输入输出文件、关闭FFMpeg解码器各个组件。其中关闭解码器组件需要：
 	
 	avcodec_close(ctx.pCodecContext);
 	av_free(ctx.pCodecContext);
 	av_frame_free(&(ctx.frame));
 
-##3、总结
+###3、总结
 
 解码器的流程与编码器类似，只是中间需要加入一个解析的过程。整个流程大致为：
 
 1.读取码流数据 -> 2.解析数据，是否尚未解析出一个包就已经用完？是返回1，否继续 -> 3.解析出一个包？是则继续，否则返回上一步继续解析 -> 4.调用avcodec\_decode_video2进行解码 -> 5.是否解码出一帧完整的图像？是则继续，否则返回上一步继续解码 -> 6.写出图像数据 -> 返回步骤2继续解析。
 
 ---
-#四、调用FFmpeg SDK解析封装格式的视频为音频流和视频流
+##四、调用FFmpeg SDK解析封装格式的视频为音频流和视频流
 
 我们平常最常用的音视频文件通常不是单独的音频信号和视频信号，而是一个整体的文件。这个文件会在其中包含音频流和视频流，并通过某种方式进行同步播放。通常，文件的音频和视频通过某种标准格式进行复用，生成某种封装格式，而封装的标志就是文件的扩展名，常用的有mp4/avi/flv/mkv等。
 
@@ -533,7 +533,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 事实上，无论是mp4还是avi等文件格式，都有不同的标准格式，对于不同的格式并没有一种通用的解析方法。因此，FFMpeg专门定义了一个库来处理设计文件封装格式的功能，即libavformat。涉及文件的封装、解封装的问题，都可以通过调用libavformat的API实现。这里我们实现一个demo来处理音视频文件的解复用与解码的功能。
 
-##1. FFMpeg解复用-解码器所包含的结构
+###1. FFMpeg解复用-解码器所包含的结构
 
 这一过程实际上包括了封装文件的解复用和音频/视频解码两个步骤，因此需要定义的结构体大致包括用于解码和解封装的部分。我们定义下面这样的一个结构体实现这个功能：
 
@@ -564,9 +564,9 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 - AVStream：表示音频或者视频流的结构。
 - AVPixelFormat：枚举类型，表示图像像素的格式，最常用的是AV_PIX_FMT_YUV420P
 
-##2、FFMpeg解复用-解码的过程
+###2、FFMpeg解复用-解码的过程
 
-###(1)、相关结构的初始化
+####(1)、相关结构的初始化
 
 与使用FFMpeg进行其他操作一样，首先需注册FFMpeg组件：
 
@@ -775,7 +775,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	va_ctx.pkt.data = NULL;
 	va_ctx.pkt.size = 0;
 
-###(2)、循环解析视频文件的包数据
+####(2)、循环解析视频文件的包数据
 
 解析视频文件的循环代码段为：
 
@@ -890,13 +890,13 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 在该函数中，首先对读取到的packet中的stream_index分别于先前获取的音频和视频的stream_index进行对比来确定是音频还是视频流。而后分别调用相应的解码函数进行解码，以视频流为例，判断当前stream为视频流后，调用avcodec\_decode_video2函数将流数据解码为像素数据，并在获取完整的一帧之后，将其写出到输出文件中。
 
-##3、总结
+###3、总结
 
 相对于前文讲述过的解码H.264格式裸码流，解封装+解码过程看似多了一个步骤，然而在实现起来实际上并无过多差别。这主要是由于FFMpeg中的多个API已经很好地实现了封装文件的解析和读取过程，如打开文件我们使用avformat\_open_input代替fopen，读取数据包使用av\_read_frame代替fread，其他方面只需要多一步判断封装文件中数据流的类型即可，剩余部分与裸码流的解码并无太多差别。
 
 ---
 
-#五、调用FFMpeg SDK封装音频和视频为视频文件
+##五、调用FFMpeg SDK封装音频和视频为视频文件
 
 音频和视频的封装过程为解封装的逆过程，即将独立的音频数据和视频数据按照容器文件所规定的格式封装为一个完整的视频文件的过程。对于大多数消费者来说，视频封装的容器是大家最为熟悉的，因为它直接体现在了我们使用的音视频文件扩展名上，比较常见的有mp4、avi、mkv、flv等等。
 
@@ -906,7 +906,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 
 音频和视频数据封装为视频文件的主要步骤为：
 
-## 1. 相关数据结构的准备 
+### 1. 相关数据结构的准备 
 
 首先，根据输出文件的格式获取AVFormatContext结构，获取AVFormatContext结构使用函数avformat\_alloc\_output\_context2实现。该函数的声明为：
 
@@ -1033,7 +1033,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 			c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 	}	
 
-## 2. 打开音视频
+### 2. 打开音视频
 
 打开音视频主要涉及到打开编码音视频数据所需要的编码器，以及分配相应的frame对象。其中打开编码器如之前一样，调用avcodec\_open函数，分配frame对象调用av\_frame\_alloc以及av\_frame\_get\_buffer。分配frame对象的实现如下：
 
@@ -1114,7 +1114,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 	}
 
 
-## 3. 打开输出文件并写入文件头
+### 3. 打开输出文件并写入文件头
 
 如果判断需要写出文件的话，则需要打开输出文件。在这里，我们可以不再定义输出文件指针，并使用fopen打开，而是直接使用FFMpeg的API——avio\_open来实现输出文件的打开功能。该函数的声明如下：
 
@@ -1155,11 +1155,11 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		return 1;
 	}
 
-##4. 编码和封装循环
+###4. 编码和封装循环
 
 以视频流为例。编解码循环的过程实际上可以封装在一个函数Write\_video_frame中。该函数从逻辑上可以分为3个部分：获取原始视频信号、视频编码、写入输出文件。
 
-### (1) 读取原始视频数据
+#### (1) 读取原始视频数据
 
 这一部分主要实现根据时长判断是否需要继续进行处理、读取视频到AVFrame和设置pts。其中时长判断部分根据pts和AVCodecContext的time_base判断。实现如下：
 
@@ -1252,7 +1252,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		return ost->frame;
 	}
 
-### (2) 视频编码
+#### (2) 视频编码
 
 视频编码的方式同之前几次使用的方式相同，即调用avcodec\_encode_video2，实现方法如：
 	
@@ -1264,7 +1264,7 @@ AVCodec查找成功后，下一步是分配AVCodecContext实例。分配AVCodecC
 		exit(1);
 	}
 
-### (3) 写出编码后的数据到输出视频文件
+#### (3) 写出编码后的数据到输出视频文件
 
 这部分的实现过程很简单，方式如下：
 
@@ -1355,7 +1355,7 @@ Write\_video_frame函数的整体实现如：
 		}
 	}
 
-##5. 写入文件尾，并进行收尾工作
+###5. 写入文件尾，并进行收尾工作
 
 写入文件尾的数据同写文件头一样简单，只需要调用函数av\_write_trailer即可实现：
 	
@@ -1386,11 +1386,11 @@ Write\_video_frame函数的整体实现如：
 至此，整个处理流程便结束了。正确设置输入的YUV文件就可以获取封装好的音视频文件。
 
 ---
-#六、调用FFMpeg SDK实现视频文件的转封装
+##六、调用FFMpeg SDK实现视频文件的转封装
 
 有时候我们可能会面对这样的一种需求，即我们不需要对视频内的音频或视频信号进行什么实际的操作，只是希望能把文件的封装格式进行转换，例如从avi转换为mp4格式或者flv格式等。实际上，转封装不需要对内部的音视频进行解码，只需要根据从输入文件中获取包含的数据流添加到输出文件中，然后将输入文件中的数据包按照规定格式写入到输出文件中去。
 
-## 1、解析命令行参数
+### 1、解析命令行参数
 
 如同之前的工程一样，我们使用命令行参数传入输入和输出的文件名。为此，我们定义了如下的结构体和函数来实现传入输入输出文件的过程：
 
@@ -1427,7 +1427,7 @@ Write\_video_frame函数的整体实现如：
 		//......
 	}
 
-## 2、所需要的结构与初始化操作
+### 2、所需要的结构与初始化操作
 
 为了实现视频文件的转封装操作，我们需要以下的结构：
 
@@ -1463,7 +1463,7 @@ Write\_video_frame函数的整体实现如：
 	}
 	ofmt = ofmt_ctx->oformat;
 
-## 3、 向输出文件中添加Stream并打开输出文件
+### 3、 向输出文件中添加Stream并打开输出文件
 
 在我们获取到了输入文件中的流信息后，保持输入流中的codec不变，并以其为依据添加到输出文件中：
 
@@ -1509,7 +1509,7 @@ Write\_video_frame函数的整体实现如：
 
 
 
-## 4、写入文件的音视频数据
+### 4、写入文件的音视频数据
 
 首先向输出文件中写入文件头:
 
@@ -1552,7 +1552,7 @@ Write\_video_frame函数的整体实现如：
 
 	av_write_trailer(ofmt_ctx);
 
-## 5、 收尾工作
+### 5、 收尾工作
 
 写入输出文件完成后，需要对打开的结构进行关闭或释放等操作。主要有关闭输入输出文件、释放输出文件的句柄等：
 
@@ -1571,13 +1571,13 @@ Write\_video_frame函数的整体实现如：
 	}
 
 ---
-#七、 FFMpeg实现视频水印
+##七、 FFMpeg实现视频水印
 
 视频的水印通常指附加在原始视频上的可见或者不可见的，与原始视频无直接关联的标识。通常在有线电视画面上电视台的台标以及视频网站上的logo就是典型的视频水印的应用场景。通常实现视频水印可以通过FFMpeg提供的libavfilter库实现。libavfilter库实际上实现的是视频的滤镜功能，除了水印之外，还可以实现视频帧的灰度化、平滑、翻转、直方图均衡、裁剪等操作。
 
 我们这里实现的视频水印等操作，完全在视频像素域实现，即从一个yuv文件中读取数据到AVFrame结构，对AVFrame结构进行处理后再输出到另一个yuv文件。中间不涉及封装或编码解码等操作。
 
-##1. 解析命令行，获取输入输出文件信息
+###1. 解析命令行，获取输入输出文件信息
 
 我们通过与之前类似的方式，在命令行中获取输入、输出文件名，图像宽高。首先定义如下的结构体用于保存配置信息：
 
@@ -1642,7 +1642,7 @@ Write\_video_frame函数的整体实现如：
 
 该函数实现了输入输出文件的文件名获取并打开，并读取filter索引。
 
-##2. Video Filter初始化
+###2. Video Filter初始化
 
 在进行初始化之前，必须调用filter的init函数，之后才能针对Video Filter进行各种操作。其声明如下：
 
@@ -1715,7 +1715,7 @@ Write\_video_frame函数的整体实现如：
 		return 0;
 	}
 
-##3. 初始化输入输出AVFrame并分配内存
+###3. 初始化输入输出AVFrame并分配内存
 
 我们首先声明AVFrame类型的对象和指向像素缓存的指针：
 
@@ -1741,7 +1741,7 @@ Write\_video_frame函数的整体实现如：
 		(*frameIn)->format = AV_PIX_FMT_YUV420P;
 	}
 
-##4. Video Filtering循环体
+###4. Video Filtering循环体
 
 这一部分主要包括三大部分：
 
@@ -1841,7 +1841,7 @@ Write\_video_frame函数的整体实现如：
 		av_frame_unref(frame_out);  
 	}
 
-##五、 收尾工作
+###5、 收尾工作
 
 整体实现完成后，需要进行善后的收尾工作有释放输入和输出frame、关闭输入输出文件，以及释放filter graph：
 
@@ -1853,3 +1853,86 @@ Write\_video_frame函数的整体实现如：
 	av_frame_free(&frame_out);
 
 	avfilter_graph_free(&filter_graph);
+
+---
+
+## 八、 FFMpeg实现视频缩放
+
+视频缩放是视频开发中一项最基本的功能。通过对视频的像素数据进行采样或插值，可以将低分辨率的视频转换到更高的分辨率，或者将高分辨率的视频转换为更低的分辨率。通过FFMpeg提供了libswscale库，可以轻松实现视频的分辨率转换功能。除此之外，libswscale库还可以实现颜色空间转换等功能。
+
+通常情况下视频缩放的主要思想是对视频进行解码到像素域后，针对像素域的像素值进行采样或差值操作。这种方式需要在解码端消耗一定时间，但是通用性最好，不需要对码流格式作出任何特殊处理。在FFMpeg中libswscale库也是针对AVFrame结构进行缩放处理。
+
+### 1. 解析命令行参数
+
+输入输出的数据使用以下结构进行封装：
+
+	typedef struct _IOFiles
+	{
+		char *inputName;			//输入文件名
+		char *outputName;			//输出文件名
+		char *inputFrameSize;		//输入图像的尺寸
+		char *outputFrameSize;		//输出图像的尺寸
+	
+		FILE *iFile;				//输入文件指针
+		FILE *oFile;				//输出文件指针
+	
+	} IOFiles;
+
+输入参数解析过程为：
+
+	static bool hello(int argc, char **argv, IOFiles &files)
+	{
+		printf("FFMpeg Scaling Demo.\nCommand format: %s input_file input_frame_size output_file output_frame_size\n", argv[0]);
+		if (argc != 5)
+		{
+			printf("Error: command line error, please re-check.\n");
+			return false;
+		}
+	
+		files.inputName = argv[1];
+		files.inputFrameSize = argv[2];
+		files.outputName = argv[3];
+		files.outputFrameSize = argv[4];
+	
+		fopen_s(&files.iFile, files.inputName, "rb+");
+		if (!files.iFile)
+		{
+			printf("Error: cannot open input file.\n");
+			return false;
+		}
+	
+		fopen_s(&files.oFile, files.outputName, "wb+");
+		if (!files.oFile)
+		{
+			printf("Error: cannot open output file.\n");
+			return false;
+		}
+	
+		return true;
+	}
+
+在参数读入完成后，需要从表示视频分辨率的字符串中解析出图像的宽和高两个值。我们在命令行中传入的视频分辨率字符串的格式为“width x height”，例如"720x480"。解析过程需要调用av\_parse\_video\_size函数。声明如下：
+
+	int av_parse_video_size(int *width_ptr, int *height_ptr, const char *str);
+
+例如，我们传入下面的参数：
+
+	int frameWidth, frameHeight;
+	av_parse_video_size(&frameWidth, &frameHeight, "720x480");
+
+函数将分别把720和480传入frameWidth和frameHeight中。
+
+在获取命令行参数后，调用该函数解析图像分辨率：
+
+	int srcWidth, srcHeight, dstWidth, dstHeight;
+	if (av_parse_video_size(&srcWidth, &srcHeight, files.inputFrameSize))
+	{
+		printf("Error: parsing input size failed.\n");
+		goto end;
+	}
+	if (av_parse_video_size(&dstWidth, &dstHeight, files.outputFrameSize))
+	{
+		printf("Error: parsing output size failed.\n");
+		goto end;
+	}
+
