@@ -1959,3 +1959,56 @@ Write\_video_frame函数的整体实现如：
 		goto end;
 	}
 
+### 3. 分配像素缓存
+
+视频缩放实际上是在像素域实现，但是实际上我们没有必要真的建立一个个AVFrame对象，我们只需要其像素缓存空间即可，我们定义两个指针数组和两个保存stride的数组，并为其分配内存区域：
+
+	//分配input和output
+	uint8_t *src_data[4], *dst_data[4];
+	int src_linesize[4], dst_linesize[4];
+	if ((ret = av_image_alloc(src_data, src_linesize, srcWidth, srcHeight, src_pix_fmt, 32)) < 0)
+	{
+		printf("Error: allocating src image failed.\n");
+		goto end;
+	}	
+	if ((ret = av_image_alloc(dst_data, dst_linesize, dstWidth, dstHeight, dst_pix_fmt, 1)) < 0)
+	{
+		printf("Error: allocating dst image failed.\n");
+		goto end;
+	}
+
+### 4. 循环处理输入frame
+
+循环处理的代码为：
+
+	//从输出frame中写出到输出文件
+	int dst_bufsize = ret;
+	for (int idx = 0; idx < MAX_FRAME_NUM; idx++)
+	{
+		read_yuv_from_ifile(src_data, src_linesize, srcWidth, srcHeight, 0, files);
+		read_yuv_from_ifile(src_data, src_linesize, srcWidth, srcHeight, 1, files);
+		read_yuv_from_ifile(src_data, src_linesize, srcWidth, srcHeight, 2, files);
+
+		sws_scale(sws_ctx, (const uint8_t * const*)src_data, src_linesize, 0, srcHeight, dst_data, dst_linesize);
+
+		fwrite(dst_data[0], 1, dst_bufsize, files.oFile);
+	}
+
+其核心函数为sws\_scale，其声明为：
+
+	int sws_scale(struct SwsContext *c, const uint8_t *const srcSlice[],
+              const int srcStride[], int srcSliceY, int srcSliceH,
+              uint8_t *const dst[], const int dstStride[]);
+
+该函数的各个参数比较容易理解，除了第一个是之前创建的SwsContext之外，其他基本上都是源和目标图像的缓存区和大小等。在写完一帧后，调用fwrite将输出的目标图像写入输出yuv文件中。
+
+### 5. 收尾工作
+
+收尾工作除了释放缓存区和关闭输入输出文件之外，就是需要释放SwsContext结构，需调用函数：sws\_freeContext。实现过程为：
+
+	fclose(files.iFile);
+	fclose(files.oFile);
+	av_freep(&src_data[0]);
+	av_freep(&dst_data[0]);
+	sws_freeContext(sws_ctx);
+
