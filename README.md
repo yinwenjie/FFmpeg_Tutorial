@@ -1936,3 +1936,26 @@ Write\_video_frame函数的整体实现如：
 		goto end;
 	}
 
+这样，我们就获得了源和目标图像的宽和高度。
+
+### 2. 创建SwsContext结构
+
+进行视频的缩放操作离不开libswscale的一个关键的结构，即SwsContext，该结构提供了缩放操作的必要参数。创建该结构需调用函数sws\_getContext。该函数的声明如下：
+
+	struct SwsContext *sws_getContext(int srcW, int srcH, enum AVPixelFormat srcFormat,
+	                                  int dstW, int dstH, enum AVPixelFormat dstFormat,
+	                                  int flags, SwsFilter *srcFilter,
+             	                     SwsFilter *dstFilter, const double *param);
+
+该函数的前两行参数分别表示输入和输出图像的宽、高、像素格式，参数flags表示采样和差值使用的算法，常用的有SWS\_BILINEAR表示双线性差值等。剩余的不常用参数通常设为NULL。创建该结构的代码如：
+
+	//创建SwsContext结构
+	enum AVPixelFormat src_pix_fmt = AV_PIX_FMT_YUV420P;
+	enum AVPixelFormat dst_pix_fmt = AV_PIX_FMT_YUV420P;
+	struct SwsContext *sws_ctx = sws_getContext(srcWidth, srcHeight, src_pix_fmt, dstWidth, dstHeight, dst_pix_fmt, SWS_BILINEAR, NULL,NULL,NULL );
+	if (!sws_ctx)
+	{
+		printf("Error: parsing output size failed.\n");
+		goto end;
+	}
+
