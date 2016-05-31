@@ -13,5 +13,5 @@ void Init_video_frame_in_out(AVFrame **frameIn, AVFrame **frameOut, unsigned cha
 
 	(*frameIn)->width = frameWidth;  
 	(*frameIn)->height = frameHeight;  
-	(*frameIn)->format = AV_PIX_FMT_YUV420P;  
+	(*frameIn)->format = AV_PIX_FMT_YUV420P;
 }

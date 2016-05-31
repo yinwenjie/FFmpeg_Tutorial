@@ -1574,3 +1574,282 @@ Write\_video_frame函数的整体实现如：
 #七、 FFMpeg实现视频水印
 
 视频的水印通常指附加在原始视频上的可见或者不可见的，与原始视频无直接关联的标识。通常在有线电视画面上电视台的台标以及视频网站上的logo就是典型的视频水印的应用场景。通常实现视频水印可以通过FFMpeg提供的libavfilter库实现。libavfilter库实际上实现的是视频的滤镜功能，除了水印之外，还可以实现视频帧的灰度化、平滑、翻转、直方图均衡、裁剪等操作。
+
+我们这里实现的视频水印等操作，完全在视频像素域实现，即从一个yuv文件中读取数据到AVFrame结构，对AVFrame结构进行处理后再输出到另一个yuv文件。中间不涉及封装或编码解码等操作。
+
+##1. 解析命令行，获取输入输出文件信息
+
+我们通过与之前类似的方式，在命令行中获取输入、输出文件名，图像宽高。首先定义如下的结构体用于保存配置信息：
+
+	typedef struct _IOFiles
+	{
+		const char *inputFileName;		//输入文件名
+		const char *outputFileName;		//输出文件名
+	
+		FILE *iFile;					//输入文件指针
+		FILE *oFile;					//输出文件指针
+	
+		uint8_t filterIdx;				//Filter索引
+	
+		unsigned int frameWidth;		//图像宽度
+		unsigned int frameHeight;		//图像高度
+	}IOFiles;
+
+在这个结构体中，filterIdx用于表示当前工程选择哪一种filter，即希望实现哪一种功能。
+
+在进入main函数之后，调用hello函数来解析命令行参数：
+	
+	static int hello(int argc, char **argv, IOFiles &files)
+	{
+		if (argc < 4) 
+		{
+			printf("usage: %s output_file input_file filter_index\n"
+				"Filter index:.\n"
+				"1. Color component\n"
+				"2. Blur\n"
+				"3. Horizonal flip\n"
+				"4. HUE\n"
+				"5. Crop\n"
+				"6. Box\n"
+				"7. Text\n"
+				"\n", argv[0]);
+	
+			return -1;
+		}
+	
+		files.inputFileName = argv[1];
+		files.outputFileName = argv[2];
+		files.frameWidth = atoi(argv[3]);
+		files.frameHeight = atoi(argv[4]);
+		files.filterIdx = atoi(argv[5]);
+	
+		fopen_s(&files.iFile, files.inputFileName, "rb+");
+		if (!files.iFile)
+		{
+			printf("Error: open input file failed.\n");
+			return -1;
+		}
+	
+		fopen_s(&files.oFile, files.outputFileName, "wb+");
+		if (!files.oFile)
+		{
+			printf("Error: open output file failed.\n");
+			return -1;
+		}
+	
+		return 0;
+	}
+
+该函数实现了输入输出文件的文件名获取并打开，并读取filter索引。
+
+##2. Video Filter初始化
+
+在进行初始化之前，必须调用filter的init函数，之后才能针对Video Filter进行各种操作。其声明如下：
+
+	void avfilter_register_all(void);
+
+为了实现视频水印的功能，所需要的相关结构主要有：
+
+	AVFilterContext *buffersink_ctx;  
+	AVFilterContext *buffersrc_ctx;  
+	AVFilterGraph *filter_graph;
+
+其中AVFilterContext用于表示一个filter的实例上下文，AVFilterGraph表示一个video filtering的工作流。Video Filter的初始化实现如以下函数：
+
+	//初始化video filter相关的结构
+	int Init_video_filter(const char *filter_descr, int width, int height)
+	{
+		char args[512];  
+		AVFilter *buffersrc  = avfilter_get_by_name("buffer");  
+		AVFilter *buffersink = avfilter_get_by_name("buffersink");  
+		AVFilterInOut *outputs = avfilter_inout_alloc();  
+		AVFilterInOut *inputs  = avfilter_inout_alloc();  
+		enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE };  
+		AVBufferSinkParams *buffersink_params;  
+	
+		filter_graph = avfilter_graph_alloc();  
+	
+		/* buffer video source: the decoded frames from the decoder will be inserted here. */  
+		snprintf(args, sizeof(args), "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d", width,height,AV_PIX_FMT_YUV420P, 1, 25,1,1);
+		int ret = avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in", args, NULL, filter_graph);  
+		if (ret < 0) 
+		{
+			printf("Error: cannot create buffer source.\n");  
+			return ret;  
+		}  
+	
+		/* buffer video sink: to terminate the filter chain. */  
+		buffersink_params = av_buffersink_params_alloc();  
+		buffersink_params->pixel_fmts = pix_fmts;  
+		ret = avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out", NULL, buffersink_params, filter_graph);  
+		av_free(buffersink_params);  
+		if (ret < 0) 
+		{
+			printf("Error: cannot create buffer sink\n");  
+			return ret;
+		}  
+	
+		/* Endpoints for the filter graph. */  
+		outputs->name       = av_strdup("in");  
+		outputs->filter_ctx = buffersrc_ctx;  
+		outputs->pad_idx    = 0;  
+		outputs->next       = NULL;  
+	
+		inputs->name       = av_strdup("out");  
+		inputs->filter_ctx = buffersink_ctx;  
+		inputs->pad_idx    = 0;  
+		inputs->next       = NULL;  
+	
+		if ((ret = avfilter_graph_parse_ptr(filter_graph, filter_descr,	&inputs, &outputs, NULL)) < 0)
+		{
+			printf("Error: avfilter_graph_parse_ptr failed.\n");
+			return ret;  
+		}
+	
+		if ((ret = avfilter_graph_config(filter_graph, NULL)) < 0)  
+		{
+			printf("Error: avfilter_graph_config");
+			return ret;  
+		}
+	
+		return 0;
+	}
+
+##3. 初始化输入输出AVFrame并分配内存
+
+我们首先声明AVFrame类型的对象和指向像素缓存的指针：
+
+	AVFrame *frame_in = NULL;  
+	AVFrame *frame_out = NULL;  
+	unsigned char *frame_buffer_in = NULL;  
+	unsigned char *frame_buffer_out = NULL; 
+
+然后分配AVFrame对象，并分配其中的缓存区：
+	
+	void Init_video_frame_in_out(AVFrame **frameIn, AVFrame **frameOut, unsigned char **frame_buffer_in, unsigned char **frame_buffer_out, int frameWidth, int frameHeight)
+	{
+		*frameIn = av_frame_alloc();  
+		*frame_buffer_in = (unsigned char *)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_YUV420P, frameWidth,frameHeight,1));  
+		av_image_fill_arrays((*frameIn)->data, (*frameIn)->linesize,*frame_buffer_in, AV_PIX_FMT_YUV420P,frameWidth,frameHeight,1);  
+	
+		*frameOut = av_frame_alloc();  
+		*frame_buffer_out = (unsigned char *)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_YUV420P, frameWidth,frameHeight,1));  
+		av_image_fill_arrays((*frameOut)->data, (*frameOut)->linesize,*frame_buffer_out, AV_PIX_FMT_YUV420P,frameWidth,frameHeight,1);  
+	
+		(*frameIn)->width = frameWidth;  
+		(*frameIn)->height = frameHeight;  
+		(*frameIn)->format = AV_PIX_FMT_YUV420P;
+	}
+
+##4. Video Filtering循环体
+
+这一部分主要包括三大部分：
+
+1. 读取原始的YUV数据到输入的frame；
+2. 使用预先定义好的filter_graph处理输入frame，生成输出frame；
+3. 将输出frame中的像素值写入输出yuv文件；
+
+第一部分，读取原始yuv的实现由自定义函数Read\_yuv\_data\_to\_buf实现：
+	
+	//从输入yuv文件中读取数据到buffer和frame结构
+	bool Read_yuv_data_to_buf(unsigned char *frame_buffer_in, const IOFiles &files, AVFrame **frameIn)
+	{
+		AVFrame *pFrameIn = *frameIn;
+		int width = files.frameWidth, height = files.frameHeight;
+		int frameSize = width * height * 3 / 2;
+	
+		if (fread_s(frame_buffer_in, frameSize, 1, frameSize, files.iFile) != frameSize)
+		{
+			return false;
+		}
+	
+		pFrameIn->data[0] = frame_buffer_in;
+		pFrameIn->data[1] = pFrameIn->data[0] + width * height;
+		pFrameIn->data[2] = pFrameIn->data[1] + width * height / 4;
+	
+		return true;
+	}
+
+第二部分实际上分为两部分，即将输入frame送入filter graph，以及从filter graph中取出输出frame。实现方法分别为：
+
+	//将待处理的输入frame添加进filter graph
+	bool Add_frame_to_filter(AVFrame *frameIn)
+	{
+		if (av_buffersrc_add_frame(buffersrc_ctx, frameIn) < 0) 
+		{  
+			return false;  
+		}  
+	
+		return true;
+	}
+	
+	//从filter graph中获取输出frame
+	int Get_frame_from_filter(AVFrame **frameOut)
+	{
+		if (av_buffersink_get_frame(buffersink_ctx, *frameOut) < 0)
+		{
+			return false;
+		}
+	
+		return true;
+	}
+
+第三部分，写出输出frame到输出yuv文件：
+	
+	//从输出frame中写出像素数据到输出文件
+	void Write_yuv_to_outfile(const AVFrame *frame_out, IOFiles &files)
+	{
+		if(frame_out->format==AV_PIX_FMT_YUV420P)
+		{  
+			for(int i=0;i<frame_out->height;i++)
+			{  
+				fwrite(frame_out->data[0]+frame_out->linesize[0]*i,1,frame_out->width,files.oFile);  
+			}  
+			for(int i=0;i<frame_out->height/2;i++)
+			{  
+				fwrite(frame_out->data[1]+frame_out->linesize[1]*i,1,frame_out->width/2,files.oFile);  
+			}  
+			for(int i=0;i<frame_out->height/2;i++)
+			{  
+				fwrite(frame_out->data[2]+frame_out->linesize[2]*i,1,frame_out->width/2,files.oFile);  
+			}  
+		}  
+	}
+
+该部分的综合实现如下：
+
+	while (Read_yuv_data_to_buf(frame_buffer_in, files, &frame_in)) 
+	{
+		//将输入frame添加到filter graph
+		if (!Add_frame_to_filter(frame_in))
+		{
+			printf("Error while adding frame.\n");
+			goto end;
+		}
+
+		//从filter graph中获取输出frame
+		if (!Get_frame_from_filter(&frame_out))
+		{
+			printf("Error while getting frame.\n");
+			goto end;
+		}
+
+		//将输出frame写出到输出文件
+		Write_yuv_to_outfile(frame_out, files);
+
+		printf("Process 1 frame!\n");  
+		av_frame_unref(frame_out);  
+	}
+
+##五、 收尾工作
+
+整体实现完成后，需要进行善后的收尾工作有释放输入和输出frame、关闭输入输出文件，以及释放filter graph：
+
+	//关闭文件及相关结构
+	fclose(files.iFile);
+	fclose(files.oFile);
+
+	av_frame_free(&frame_in);
+	av_frame_free(&frame_out);
+
+	avfilter_graph_free(&filter_graph);

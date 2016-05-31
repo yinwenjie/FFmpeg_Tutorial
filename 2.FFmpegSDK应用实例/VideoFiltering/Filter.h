@@ -48,6 +48,6 @@ int Get_frame_from_filter(AVFrame **frameOut);
 	Output:			нч
 	Return:			нч
 *************************************************/
-void Close_video_filter()
+void Close_video_filter();
 
 #endif

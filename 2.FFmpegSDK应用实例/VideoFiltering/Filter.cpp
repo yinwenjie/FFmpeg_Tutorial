@@ -21,7 +21,7 @@ int Init_video_filter(const char *filter_descr, int width, int height)
 	snprintf(args, sizeof(args), "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d", width,height,AV_PIX_FMT_YUV420P, 1, 25,1,1);
 	int ret = avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in", args, NULL, filter_graph);  
 	if (ret < 0) 
-	{  
+	{
 		printf("Error: cannot create buffer source.\n");  
 		return ret;  
 	}  
@@ -32,9 +32,9 @@ int Init_video_filter(const char *filter_descr, int width, int height)
 	ret = avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out", NULL, buffersink_params, filter_graph);  
 	av_free(buffersink_params);  
 	if (ret < 0) 
-	{  
+	{
 		printf("Error: cannot create buffer sink\n");  
-		return ret;  
+		return ret;
 	}  
 
 	/* Endpoints for the filter graph. */  

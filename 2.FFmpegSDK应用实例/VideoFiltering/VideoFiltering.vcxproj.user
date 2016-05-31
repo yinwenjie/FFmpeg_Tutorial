@@ -3,6 +3,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LocalDebuggerWorkingDirectory>$(Configuration)\bin\</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>test.yuv output.yuv 1280 720 7</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>test.yuv output.yuv 720 480 7</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>

@@ -25,6 +25,8 @@ static int hello(int argc, char **argv, IOFiles &files)
 			"6. Box\n"
 			"7. Text\n"
 			"\n", argv[0]);
+
+		return -1;
 	}
 
 	files.inputFileName = argv[1];
