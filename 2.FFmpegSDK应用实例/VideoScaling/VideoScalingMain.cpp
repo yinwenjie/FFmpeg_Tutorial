@@ -115,7 +115,7 @@ int main(int argc, char **argv)
 	struct SwsContext *sws_ctx = sws_getContext(srcWidth, srcHeight, src_pix_fmt, dstWidth, dstHeight, dst_pix_fmt, SWS_BILINEAR, NULL,NULL,NULL );
 	if (!sws_ctx)
 	{
-		printf("Error: parsing output size failed.\n");
+		printf("Error: allocating SwsContext struct failed.\n");
 		goto end;
 	}
 
