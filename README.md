@@ -1,17 +1,17 @@
 # FFmpeg_Tutorial
-** FFmpeg工具和sdk库的使用demo**
+**FFmpeg工具和sdk库的使用demo**
 
 ***
-##一、使用FFmpeg命令行工具和批处理脚本进行简单的音视频文件编辑
+## 一、使用FFmpeg命令行工具和批处理脚本进行简单的音视频文件编辑
 
-###1、基本介绍
+### 1、基本介绍
 
 对于每一个从事音视频技术开发的工程师，想必没有一个人对FFmpeg这个名称感到陌生。FFmpeg是一套非常知名的音视频处理的开源工具，它包含了开发完成的工具软件、封装好的函数库以及源代码供我们按需使用。FFmpeg提供了非常强大的功能，可以完成音视频的编码、解码、转码、视频采集、后处理（抓图、水印、封装/解封装、格式转换等），还有流媒体服务等诸多功能，可以说涵盖了音视频开发中绝大多数的领域。原生的FFmpeg是在Linux环境下开发的，但是通过各种方法（比如交叉编译等）可以使它运行在多种平台环境上，具有比较好的可移植性。
 
 FFmpeg项目的官方网址为：[https://ffmpeg.org/](https://ffmpeg.org/)。在它的官网上我们可以找到许多非常有用的内容，如项目的简介、版本更新日志、库和源代码的地址、使用文档等信息。官方的使用文档是我们在开发时必不可少的信息来源，其重要性不言而喻。除了官方网站以外，我们下载的FFmpeg的程序包中也有使用参考文档的离线版本。
 
 
-###2、FFmpeg组成
+### 2、FFmpeg组成
 
 构成FFmpeg主要有三个部分，第一部分是四个作用不同的工具软件，分别是：ffmpeg.exe，ffplay.exe，ffserver.exe和ffprobe.exe。
 
@@ -34,9 +34,9 @@ FFmpeg项目的官方网址为：[https://ffmpeg.org/](https://ffmpeg.org/)。�
 第三部分是整个工程的源代码，无论是编译出来的可执行程序还是SDK，都是由这些源代码编译出来的。FFmpeg的源代码由C语言实现，主要在Linux平台上进行开发。FFmpeg不是一个孤立的工程，它还存在多个依赖的第三方工程来增强它自身的功能。在当前这一系列的博文/视频中，我们暂时不会涉及太多源代码相关的内容，主要以FFmpeg的工具和SDK的调用为主。到下一系列我们将专门研究如何编译源代码并根据源代码来进行二次开发。
 
 
-###3、FFMpeg工具的下载和使用
+### 3、FFMpeg工具的下载和使用
 
-####(1)FFmpeg工具的下载：
+#### (1)FFmpeg工具的下载：
 在官网上我们可以找到"Download"页面，该页上可以下载FFmpeg的工具、库和源代码等。在选择"Windows Packages"下的Windows Builds后，会跳转到Windows版本的下载页面：
 
 在下载页面上，我们可以看到，对于32位和64位版本，分别提供了三种不同的模式：static、shared和dev
@@ -45,7 +45,7 @@ FFmpeg项目的官方网址为：[https://ffmpeg.org/](https://ffmpeg.org/)。�
 - **share**: 该版本的工具包括可执行文件和dll，程序运行过程必须依赖于提供的dll文件； 
 - **dev**: 提供了库的头文件和dll的引导库；
 
-####(2)ffplay.exe的使用
+#### (2)ffplay.exe的使用
 
 ffplay是一个极为简单的音视频媒体播放器。ffplay.exe使用了ffmpeg库和SDL库开发成的，可以用作FFmpeg API的测试工具。
 ffplay的使用方法，最简单的是直接按照默认格式播放某一个音视频文件或流：
@@ -63,7 +63,7 @@ ffplay的使用方法，最简单的是直接按照默认格式播放某一个�
 
 其他参数可以参考官网的文档：[https://www.ffmpeg.org/ffplay.html](https://www.ffmpeg.org/ffplay.html)或下载包里的文档
 
-####(3)ffprobe的使用
+#### (3)ffprobe的使用
 ffprobe可以提供简单的音视频文件分析功能。最简单的方法同ffplay类似：
 	
 	ffprobe.exe  -i ../video/IMG_0886.MOV
@@ -72,7 +72,7 @@ ffprobe可以提供简单的音视频文件分析功能。最简单的方法同f
 
 ![ffprobe](http://cl.ly/2h2l1g1U1m1F/QQ截图20160331231357.png)
 
-####(4)ffmpeg的使用
+#### (4)ffmpeg的使用
 
 ffmpeg.exe可谓是整个工程的核心所在，它的主要功能是完成音视频各种各样的转换操作。
 视频转码：ffmpeg.exe可以将视频文件由原格式转换为其他格式，如从avi转为mp4等：
@@ -105,11 +105,11 @@ ffmpeg.exe可谓是整个工程的核心所在，它的主要功能是完成音�
 
 
 ---
-##二、调用FFmpeg SDK对YUV视频序列进行编码
+## 二、调用FFmpeg SDK对YUV视频序列进行编码
 
 视频由像素格式编码为码流格式是FFMpeg的一项基本功能。通常，视频编码器的输入视频通常为原始的图像像素值，输出格式为符合某种格式规定的二进制码流。
 
-###1、FFMpeg进行视频编码所需要的结构：
+### 1、FFMpeg进行视频编码所需要的结构：
 
 - **AVCodec**：AVCodec结构保存了一个编解码器的实例，实现实际的编码功能。通常我们在程序中定义一个指向AVCodec结构的指针指向该实例。
 - **AVCodecContext**：AVCodecContext表示AVCodec所代表的上下文信息，保存了AVCodec所需要的一些参数。对于实现编码功能，我们可以在这个结构中设置我们指定的编码参数。通常也是定义一个指针指向AVCodecContext。
