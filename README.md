@@ -1,5 +1,5 @@
 # FFmpeg_Tutorial
-**FFmpeg工具和sdk库的使用demo**
+** FFmpeg工具和sdk库的使用demo**
 
 ***
 ##一、使用FFmpeg命令行工具和批处理脚本进行简单的音视频文件编辑
