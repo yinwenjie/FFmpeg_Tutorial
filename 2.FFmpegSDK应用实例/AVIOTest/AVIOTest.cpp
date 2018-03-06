@@ -11,11 +11,9 @@ extern "C"
 
 typedef uint8_t BYTE;
 
-AVIOContext *avio_ctx = nullptr;
-
 FILE *input_file = nullptr;
 BYTE *file_buffer = nullptr, *avio_ctx_buffer = nullptr;
-size_t file_buffer_size = 0, avio_ctx_buffer_size = 128;
+size_t file_buffer_size = 0, avio_ctx_buffer_size = 16;
 
 typedef struct buffer_data
 {
@@ -23,12 +21,14 @@ typedef struct buffer_data
 	size_t size; ///< size left in the buffer
 } BufferData;
 
+BufferData block_data = { 0 };
+
 static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
 	struct buffer_data *bd = (struct buffer_data *)opaque;
 	buf_size = FFMIN(buf_size, bd->size);
 
-//	printf("ptr:%p size:%zu\n", bd->ptr, bd->size);
+	printf("ptr:%p size:%zu\n", bd->ptr, bd->size);
 
 	/* copy internal buffer data to buf */
 	memcpy(buf, bd->ptr, buf_size);
@@ -40,6 +40,8 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 
 int main(int argc, char** argv)
 {
+	AVIOContext *avio_ctx = nullptr;
+
 	if (argc < 2)
 	{
 		printf("Error: input file name missing...\n");
@@ -70,14 +72,14 @@ int main(int argc, char** argv)
 		goto end;
 	}
 
-	printf("Output in main:\n");
-	for (int i = 0; i < 16; i++) {
+	printf("Output in main 1:\n");
+	for (int i = 0; i < 8; i++) {
 		printf("0x%x\t", avio_r8(avio_ctx));
 		if ((i+1) % 8 == 0)	{
 			printf("\n");
 		}
 	}
-
+	
 end:
 	if (avio_ctx) {
 		av_freep(&avio_ctx->buffer);
