@@ -105,10 +105,7 @@ int Decode_packet(IOFileName &files, DemuxingVideoAudioContex &va_ctx, int *got_
 		if (*got_frame)
 		{
 			size_t unpadded_linesize = va_ctx.frame->nb_samples * av_get_bytes_per_sample((AVSampleFormat)va_ctx.frame->format);
-			printf("audio_frame%s n:%d nb_samples:%d pts:%s\n",
-				cached ? "(cached)" : "",
-				audio_frame_count++, va_ctx.frame->nb_samples,
-				va_ctx.frame->pts);
+//			printf("audio_frame%s n:%d nb_samples:%d pts:%s\n",	cached ? "(cached)" : "", audio_frame_count++, va_ctx.frame->nb_samples, va_ctx.frame->pts);
 
 			/* Write the raw audio data samples of the first plane. This works
 			* fine for packed formats (e.g. AV_SAMPLE_FMT_S16). However,

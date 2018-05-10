@@ -1,7 +1,7 @@
 #ifndef _ENCODING_MUXING_HEADER_H_
 #define _ENCODING_MUXING_HEADER_H_
 
-#define snprintf(buf,len, format,...) _snprintf_s(buf, len,len, format, __VA_ARGS__)
+//#define snprintf(buf,len, format,...) _snprintf_s(buf, len,len, format, __VA_ARGS__)
 
 extern "C"  
 {  
