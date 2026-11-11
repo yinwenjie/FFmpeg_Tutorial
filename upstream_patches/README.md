@@ -15,10 +15,10 @@
 | 项目 | 值 |
 | --- | --- |
 | 制作和测试所用的提交 | `a337e8ddaa`（课程固定使用的版本，2026-11-10） |
-| 复核时的上游 master | `7b00cbd`（2026-11-11），`doc/examples` 与 `a337e8ddaa` 完全相同 |
+| 复核时的上游 master | `05001ce`（2026-11-11，fork 的 master 已同步到这里），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `7b00cbd` 上用 `git am` 按顺序应用无冲突。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `05001ce` 上用 `git am` 按顺序应用无冲突。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
