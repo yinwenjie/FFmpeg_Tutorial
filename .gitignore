@@ -1,0 +1,10 @@
+# 构建产物（顶层 CMake 的 build/ 和各讲 Makefile 的 build/）
+build/
+*.o
+
+# 测试素材和程序输出，全部由脚本生成，不入库
+samples/
+out/
+*.yuv
+*.rgb
+*.pcm
