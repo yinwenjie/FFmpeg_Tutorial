@@ -1,0 +1,101 @@
+From 0970d0038cdf38198acb836664dcdcd3dd331b72 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:41:31 +0000
+Subject: [PATCH] doc/examples/remux: set the DTS of packets that come without
+ one
+
+The Matroska demuxer cannot provide a DTS for the first packets of a
+stream with reordered frames, av_read_frame() returns them with
+dts == AV_NOPTS_VALUE. The example passed them on unchanged, so
+remuxing such a file printed
+
+  Timestamps are unset in a packet for stream 0. This is deprecated
+  and will stop working in the future. Fix your code to set the
+  timestamps properly
+
+and only worked because the muxing code still guesses the missing
+value. Once FF_API_COMPUTE_PKT_FIELDS2 is gone, the packets will be
+rejected with AVERROR(EINVAL).
+
+Estimate the DTS of such packets in the example instead: start at the
+first PTS minus the reordering delay and continue from the previous
+DTS, like ffmpeg does when copying streams. The output files are
+unchanged.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/remux.c | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/remux.c b/doc/examples/remux.c
+index 0bca5fc..f61f6ec 100644
+--- a/doc/examples/remux.c
++++ b/doc/examples/remux.c
+@@ -54,6 +54,7 @@ int main(int argc, char **argv)
+     int stream_index = 0;
+     int *stream_mapping = NULL;
+     int stream_mapping_size = 0;
++    int64_t *next_dts = NULL;
+ 
+     if (argc < 3) {
+         printf("usage: %s input output\n"
+@@ -98,7 +99,8 @@ int main(int argc, char **argv)
+ 
+     stream_mapping_size = ifmt_ctx->nb_streams;
+     stream_mapping = av_calloc(stream_mapping_size, sizeof(*stream_mapping));
+-    if (!stream_mapping) {
++    next_dts       = av_calloc(stream_mapping_size, sizeof(*next_dts));
++    if (!stream_mapping || !next_dts) {
+         ret = AVERROR(ENOMEM);
+         goto end;
+     }
+@@ -118,6 +120,7 @@ int main(int argc, char **argv)
+         }
+ 
+         stream_mapping[i] = stream_index++;
++        next_dts[i]       = AV_NOPTS_VALUE;
+ 
+         out_stream = avformat_new_stream(ofmt_ctx, NULL);
+         if (!out_stream) {
+@@ -158,6 +161,7 @@ int main(int argc, char **argv)
+ 
+     while (1) {
+         AVStream *in_stream, *out_stream;
++        int64_t *next;
+ 
+         ret = av_read_frame(ifmt_ctx, pkt);
+         if (ret < 0)
+@@ -172,6 +176,21 @@ int main(int argc, char **argv)
+ 
+         log_packet(ifmt_ctx, pkt, "in");
+ 
++        /* Demuxers for formats that store a single timestamp per packet
++         * (e.g. Matroska) cannot tell the DTS of the first packets of a
++         * stream with reordered frames. Muxers need it, so estimate it from
++         * the first PTS and the reordering delay and continue counting from
++         * there until the demuxer provides it. */
++        next = &next_dts[pkt->stream_index];
++        if (pkt->dts == AV_NOPTS_VALUE && pkt->duration > 0) {
++            if (*next == AV_NOPTS_VALUE && pkt->pts != AV_NOPTS_VALUE)
++                *next = pkt->pts -
++                        in_stream->codecpar->video_delay * pkt->duration;
++            pkt->dts = *next;
++        }
++        if (pkt->dts != AV_NOPTS_VALUE)
++            *next = pkt->dts + pkt->duration;
++
+         pkt->stream_index = stream_mapping[pkt->stream_index];
+         out_stream = ofmt_ctx->streams[pkt->stream_index];
+ 
+@@ -202,6 +221,7 @@ end:
+     avformat_free_context(ofmt_ctx);
+ 
+     av_freep(&stream_mapping);
++    av_freep(&next_dts);
+ 
+     if (ret < 0 && ret != AVERROR_EOF) {
+         fprintf(stderr, "Error occurred: %s\n", av_err2str(ret));
+-- 
+2.43.0
+
