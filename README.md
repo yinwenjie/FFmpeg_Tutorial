@@ -54,7 +54,7 @@ cmake -S . -B build && cmake --build build
 | --- | --- | --- |
 | 0 入门准备 | [L01 音视频基础概念](L01_basics/README.md) | 无 |
 | | [L02 开发环境与命令行工具](L02_environment/README.md) | 全部示例的编译 |
-| 1 容器与封装层 | L03 打开媒体文件 | show_metadata.c |
+| 1 容器与封装层 | [L03 打开媒体文件](L03_open_media/README.md) | show_metadata.c |
 | | L04 时间基与时间戳 | remux.c |
 | 2 解码 | L05 视频解码 | decode_video.c |
 | | L06 音频解码 | decode_audio.c |
@@ -81,8 +81,8 @@ cmake -S . -B build && cmake --build build
 - **每讲一个目录**，命名为 `LNN_主题`。目录里的 `README.md` 列出本讲要点、操作步骤和练习。
 - **两种构建方式**。在仓库根目录用 CMake 一次编译所有课次；或者进入某一讲的目录直接 `make`，
   产物在该目录的 `build/` 下。两种方式都通过 pkg-config 查找 FFmpeg。
-- **测试素材不入库**。`scripts/gen_samples.sh` 会在 `samples/` 下生成所有课次共用的素材，
-  每个人得到的文件参数相同，便于核对结果。
+- **测试素材不入库**。`scripts/gen_samples.sh` 会在 `samples/` 下生成所有课次共用的素材。
+  脚本固定了编码参数和线程数，在不同机器上用同一版本的 FFmpeg 生成，得到的音视频数据完全相同，便于核对结果。
 - **验证结果，而不只是“能跑”**。每个练习都要求用 ffprobe、ffplay 或校验和确认输出正确。
 
 ## 向上游反馈
