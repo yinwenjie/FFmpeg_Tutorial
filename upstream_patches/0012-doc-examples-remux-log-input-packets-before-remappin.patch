@@ -1,0 +1,49 @@
+From 55383df8aeefdebfa104ec97534557f2e05fb784 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:38:42 +0000
+Subject: [PATCH] doc/examples/remux: log input packets before remapping the
+ stream index
+
+log_packet() looks up the time base in the given format context by
+pkt->stream_index. The "in" line was printed after stream_index had
+already been replaced by the index of the output stream, so whenever
+an input stream is skipped (data and attachment streams are not
+remuxed), the packets of all following streams were logged with the
+index and the time base of the wrong input stream.
+
+For example, with a MOV file holding video, a tmcd data track and
+audio, the audio packets were printed as
+
+  in: pts:1024 pts_time:40.96 ... stream_index:1
+
+using the 1/25 time base of the data track, instead of
+
+  in: pts:1024 pts_time:0.02322 ... stream_index:2
+
+Log the packet before the index is remapped.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/remux.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/remux.c b/doc/examples/remux.c
+index fc63707..78e2126 100644
+--- a/doc/examples/remux.c
++++ b/doc/examples/remux.c
+@@ -158,9 +158,10 @@ int main(int argc, char **argv)
+             continue;
+         }
+ 
++        log_packet(ifmt_ctx, pkt, "in");
++
+         pkt->stream_index = stream_mapping[pkt->stream_index];
+         out_stream = ofmt_ctx->streams[pkt->stream_index];
+-        log_packet(ifmt_ctx, pkt, "in");
+ 
+         /* copy packet */
+         av_packet_rescale_ts(pkt, in_stream->time_base, out_stream->time_base);
+-- 
+2.43.0
+
