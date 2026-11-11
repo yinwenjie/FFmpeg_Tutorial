@@ -107,8 +107,12 @@ pkg-config --modversion libavcodec    # 63.28.100
 
 ```bash
 cd <本仓库目录>
-scripts/gen_samples.sh
+scripts/gen_samples.sh --force
 ```
+
+`--force` 会把 L01 时用系统自带的旧版 ffmpeg 生成的素材全部重新生成。
+不同版本编码出来的文件略有差别（例如 AAC 音频的码率），统一用刚编译的版本生成，
+后面各讲里的数字才能和你自己的结果逐项对上。
 
 `make examples` 生成的可执行文件在 `~/ffmpeg_src/doc/examples/` 下。先跑三个，确认整条工具链正常：
 
