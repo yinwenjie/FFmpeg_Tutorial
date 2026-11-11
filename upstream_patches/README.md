@@ -15,10 +15,10 @@
 | 项目 | 值 |
 | --- | --- |
 | 制作和测试所用的提交 | `a337e8ddaa`（课程固定使用的版本，2026-11-10） |
-| 复核时的上游 master | `05001ce`（2026-11-11，fork 的 master 已同步到这里），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
+| 复核时的上游 master | `72f8c33`（2026-11-11），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `05001ce` 上用 `git am` 按顺序应用无冲突。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `72f8c33` 上用 `git am` 按顺序应用无冲突。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -36,11 +36,16 @@
 | [0009](0009-doc-examples-show_metadata-report-errors-and-clean-u.patch) | show_metadata.c | 不符合规范 | 打不开文件时不报任何信息，错误路径上不释放资源 | L03 |
 | [0010](0010-doc-examples-terminate-error-messages-with-a-newline.patch) | remux.c、encode_audio.c | 错误 | 错误信息末尾缺换行，两条信息粘在一行 | L03 |
 | [0011](0011-doc-examples-transcode-pass-frame-durations-on-to-th.patch) | transcode.c | 错误 | 视频包没有时长，输出的 MP4 播放时丢掉最后一帧 | L03 |
+| [0012](0012-doc-examples-remux-log-input-packets-before-remappin.patch) | remux.c | 错误 | 有流被跳过时，输入包的日志用错了流的序号和时间基 | L04 |
+| [0013](0013-doc-examples-remux-copy-metadata-and-dispositions.patch) | remux.c | 不满足现有需求 | 不拷贝元数据和 disposition，输出文件丢掉标题、语言和默认轨标志 | L04 |
+| [0014](0014-doc-examples-do-not-replace-error-codes-with-AVERROR.patch) | remux.c、transcode.c | 不符合规范 | 丢弃真实的错误码，一律报 `Unknown error occurred` | L04 |
+| [0015](0015-doc-examples-remux-set-the-DTS-of-packets-that-come-.patch) | remux.c | 已废弃 | 把没有 DTS 的包直接交给复用器，依赖一个即将删除的兼容行为 | L04 |
 
 ## 怎么使用
 
 应用到 FFmpeg 源码树。各个问题在逻辑上互相独立，但有几个 patch 改的是同一个文件里相邻的行
-（0003 到 0005 都改 Makefile.example，0001、0007、0011 都改 transcode.c），所以要按编号顺序应用：
+（0003 到 0005 都改 Makefile.example，0001、0007、0011、0014 都改 transcode.c，
+0010、0012 到 0015 都改 remux.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -59,7 +64,8 @@ make -j"$(nproc)" examples
 3. **选择提交渠道**。按 `doc/developer.texi` 的说明，可以在
    <https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls> 提 pull request，
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
-4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组。
+4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
+   remux（0012 到 0015）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -209,6 +215,80 @@ stream|duration=4.960000|nb_read_frames=124
 MKV 和 TS 不依赖最后一个包的时长，所以看不出问题；ffmpeg 命令行工具设置了这个标志，也没有这个问题。
 
 修复后视频流时长为 5.000000 秒，能读出 125 帧；用 10 秒 30 fps 的 `demo_1080p30.mp4` 复验，读出 300 帧。
+
+### 0012 remux 的输入日志用错了流
+
+remux 不拷贝数据流和附件流。只要输入里有这样的流排在音视频流前面，它后面各路流的
+`in:` 日志就会用错流的序号和时间基。用一个带 timecode 轨的 MOV 复现，流的顺序是视频、数据、音频：
+
+```console
+$ ffmpeg -v error -i $S/small_360p25.mp4 -c copy -timecode 01:00:00:00 /tmp/tc.mov
+$ ffmpeg -v error -i /tmp/tc.mov -map 0:v -map 0:d -map 0:a -c copy /tmp/tc_mid.mov
+$ doc/examples/remux /tmp/tc_mid.mov /tmp/out.mp4 2>/dev/null | grep -m2 "stream_index:1"
+in: pts:-1024 pts_time:-40.96 dts:-1024 dts_time:-40.96 duration:1024 duration_time:40.96 stream_index:1
+out: pts:-1024 pts_time:-0.02322 dts:-1024 dts_time:-0.02322 duration:1024 duration_time:0.02322 stream_index:1
+```
+
+音频包在输入里是第 2 路流，时间基是 1/44100。`in:` 一行却显示成第 1 路流，
+并且用数据流的时间基 1/25 换算，得到 -40.96 秒。原因是打印之前 `pkt->stream_index` 已经被改成输出流的序号。
+修复后 `in:` 一行是 `pts_time:-0.02322 ... stream_index:2`。输出文件不受影响，修复前后逐字节相同。
+
+### 0013 remux 丢掉元数据和 disposition
+
+```console
+$ ffmpeg -v error -i $S/small_360p25.mp4 -c copy -metadata title="L04 test" \
+    -metadata:s:a:0 language=chi /tmp/tagged.mkv
+$ doc/examples/remux /tmp/tagged.mkv /tmp/out.mkv >/dev/null 2>&1
+$ for f in /tmp/tagged.mkv /tmp/out.mkv; do ffprobe -v error -of compact -show_entries \
+    format_tags=title:stream=index:stream_tags=language:stream_disposition=default $f; done
+stream|index=0|disposition:default=1
+stream|index=1|disposition:default=1|tag:language=chi
+format|tag:title=L04 test
+stream|index=0|disposition:default=0
+stream|index=1|disposition:default=0
+format
+```
+
+| | 输入 | 修复前的输出 | 修复后的输出 |
+| --- | --- | --- | --- |
+| 容器的 `title` | L04 test | 没有 | L04 test |
+| 音频流的 `language` | chi | 没有 | chi |
+| 两路流的 `disposition:default` | 1 | 0 | 1 |
+
+示例只拷贝了 `codecpar`。修复后输出的标签与 `ffmpeg -c copy` 的结果一致，
+MKV、MP4、MOV、TS、FLV 五种输出都能正常写出。
+
+### 0014 真实的错误码被换成 AVERROR_UNKNOWN
+
+```console
+$ doc/examples/remux $S/small_360p25.mp4 /tmp/out.xyz 2>&1 | tail -2
+Could not create output context
+Error occurred: Unknown error occurred
+```
+
+`avformat_alloc_output_context2()` 返回的是 `AVERROR(EINVAL)`，示例没有接收返回值。
+修复后最后一行是 `Error occurred: Invalid argument`。transcode.c 有同样的写法，一并修改；
+qsv_transcode.c 和 vaapi_transcode.c 本来就是用返回值的。
+
+### 0015 remux 把没有 DTS 的包交给复用器
+
+MKV 每个包只存一个时间戳。视频有 B 帧时，解封装器对开头的几个包给不出 DTS：
+
+```console
+$ doc/examples/remux $S/small_360p25.mkv /tmp/out.mp4 2>&1 | grep -m3 -e "^in:" -e "Timestamps"
+[mp4 @ 0x...] Timestamps are unset in a packet for stream 0. This is deprecated and will stop working in the future. Fix your code to set the timestamps properly
+in: pts:0 pts_time:0 dts:NOPTS dts_time:NOPTS duration:40 duration_time:0.04 stream_index:0
+in: pts:80 pts_time:0.08 dts:NOPTS dts_time:NOPTS duration:40 duration_time:0.04 stream_index:0
+```
+
+现在还能得到正确的文件，是因为 `libavformat/mux.c` 里保留着一段替调用者猜时间戳的旧代码
+（`FF_API_COMPUTE_PKT_FIELDS2`，定义为 `LIBAVFORMAT_VERSION_MAJOR < 64`，当前主版本是 63）。
+这段代码删除之后，同一位置会直接返回 `AVERROR(EINVAL)`，示例对这类输入就不能用了。
+
+修复的做法和 ffmpeg 命令行工具拷贝流时一样：第一个包的 DTS 取 PTS 减去重排延迟（`video_delay` 个包的时长），
+之后按上一个包的 DTS 加时长往下推，直到解封装器给出 DTS 为止。
+修复后没有警告。MKV 到 MP4、MKV 到 TS，以及 MP4、TS、FLV 作输入的另外六种组合，输出文件与修复前逐字节相同
+（输出为 MKV 时比较的是每个包的时间戳和大小，因为 MKV 文件里有随机生成的 UID）。
 
 ## 已记录、暂未制作 patch 的观察项
 
