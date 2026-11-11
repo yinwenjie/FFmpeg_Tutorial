@@ -1,0 +1,46 @@
+From e6f7589c3e1575fd70889e5d75f48080578f683a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:04:05 +0000
+Subject: [PATCH] doc/examples/show_metadata: report errors and clean up on
+ failure
+
+When the input cannot be opened, the example exits silently and uses
+the negative error code as exit status (254 for a missing file). When
+avformat_find_stream_info() fails, the opened input is never closed.
+
+Print the reason for the failure, close the input on the error path
+and return 1 in both cases.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/show_metadata.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/show_metadata.c b/doc/examples/show_metadata.c
+index abe3cc0..89225e5 100644
+--- a/doc/examples/show_metadata.c
++++ b/doc/examples/show_metadata.c
+@@ -45,12 +45,16 @@ int main (int argc, char **argv)
+         return 1;
+     }
+ 
+-    if ((ret = avformat_open_input(&fmt_ctx, argv[1], NULL, NULL)))
+-        return ret;
++    if ((ret = avformat_open_input(&fmt_ctx, argv[1], NULL, NULL)) < 0) {
++        av_log(NULL, AV_LOG_ERROR, "Cannot open '%s': %s\n",
++               argv[1], av_err2str(ret));
++        return 1;
++    }
+ 
+     if ((ret = avformat_find_stream_info(fmt_ctx, NULL)) < 0) {
+         av_log(NULL, AV_LOG_ERROR, "Cannot find stream information\n");
+-        return ret;
++        avformat_close_input(&fmt_ctx);
++        return 1;
+     }
+ 
+     while ((tag = av_dict_iterate(fmt_ctx->metadata, tag)))
+-- 
+2.43.0
+

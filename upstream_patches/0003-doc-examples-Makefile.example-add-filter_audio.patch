@@ -1,0 +1,38 @@
+From dd2feeb7ad0fb40eb24b162c94fb39df321338a8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:01:12 +0000
+Subject: [PATCH] doc/examples/Makefile.example: add filter_audio
+
+filter_audio is built by "make examples" in the source tree, but it is
+missing from the standalone Makefile that gets installed along with the
+example sources. It calls sin(), so it also needs the math library.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/Makefile.example | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/doc/examples/Makefile.example b/doc/examples/Makefile.example
+index dee9ebf..422c062 100644
+--- a/doc/examples/Makefile.example
++++ b/doc/examples/Makefile.example
+@@ -29,6 +29,7 @@ EXAMPLES=\
+                 encode_audio                       \
+                 encode_video                       \
+                 extract_mvs                        \
++                filter_audio                       \
+                 hw_decode                          \
+                 mux                                \
+                 remux                              \
+@@ -43,6 +44,7 @@ OBJS=$(addsuffix .o,$(EXAMPLES))
+ # the following examples make explicit use of the math library
+ avcodec:           LDLIBS += -lm
+ encode_audio:      LDLIBS += -lm
++filter_audio:      LDLIBS += -lm
+ mux:               LDLIBS += -lm
+ resample_audio:    LDLIBS += -lm
+ 
+-- 
+2.43.0
+

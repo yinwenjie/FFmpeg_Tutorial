@@ -85,6 +85,12 @@ cmake -S . -B build && cmake --build build
   每个人得到的文件参数相同，便于核对结果。
 - **验证结果，而不只是“能跑”**。每个练习都要求用 ffprobe、ffplay 或校验和确认输出正确。
 
+## 向上游反馈
+
+制作课程时在官方示例里发现的问题（运行失败、已删除的选项、与当前规范不符的写法等）
+记录在 [upstream_patches](upstream_patches/README.md) 目录，每个问题附带一个可以直接应用到 FFmpeg 源码的 patch，
+用于向 FFmpeg 社区提交。课程里用到这些示例时，会说明问题所在和绕过的办法。
+
 ## 旧版教程
 
 本仓库 2016–2018 年的旧版教程（FFmpeg 3.4.2、Visual Studio 2015）保留在

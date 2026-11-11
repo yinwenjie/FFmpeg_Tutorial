@@ -1,0 +1,81 @@
+From 483f6e4ee8fdc86166b7a909e9cf9d57e7a4dfa2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:02:18 +0000
+Subject: [PATCH] doc/examples/decode_audio: fix the hints printed after
+ decoding
+
+When the decoder produces a planar sample format, the example warns
+that it will output the first channel only. This is not what decode()
+does: it writes the samples of all channels interleaved.
+
+The ffplay command printed at the end uses the -ac option, which
+ffplay rejects:
+
+    Failed to set value '2' for option 'ac': Option not found
+
+Drop the warning and print the command with -ch_layout and
+-sample_rate, like demux_decode does.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_audio.c | 24 +++++++++++-------------
+ 1 file changed, 11 insertions(+), 13 deletions(-)
+
+diff --git a/doc/examples/decode_audio.c b/doc/examples/decode_audio.c
+index 26ce07a..b3dcf7b 100644
+--- a/doc/examples/decode_audio.c
++++ b/doc/examples/decode_audio.c
+@@ -32,6 +32,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++#include <libavutil/channel_layout.h>
+ #include <libavutil/frame.h>
+ #include <libavutil/mem.h>
+ 
+@@ -117,7 +118,7 @@ int main(int argc, char **argv)
+     AVPacket *pkt;
+     AVFrame *decoded_frame = NULL;
+     enum AVSampleFormat sfmt;
+-    int n_channels = 0;
++    char ch_layout[64];
+     const char *fmt;
+ 
+     if (argc <= 2) {
+@@ -210,23 +211,20 @@ int main(int argc, char **argv)
+     decode(c, pkt, decoded_frame, outfile);
+ 
+     /* print output pcm infomations, because there have no metadata of pcm */
+-    sfmt = c->sample_fmt;
+-
+-    if (av_sample_fmt_is_planar(sfmt)) {
+-        const char *packed = av_get_sample_fmt_name(sfmt);
+-        printf("Warning: the sample format the decoder produced is planar "
+-               "(%s). This example will output the first channel only.\n",
+-               packed ? packed : "?");
+-        sfmt = av_get_packed_sample_fmt(sfmt);
+-    }
++    /* decode() interleaves the samples of all channels, so the output file
++     * is in the packed variant of the planar format the decoder produced */
++    sfmt = av_get_packed_sample_fmt(c->sample_fmt);
+ 
+-    n_channels = c->ch_layout.nb_channels;
+     if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
+         goto end;
+ 
++    if ((ret = av_channel_layout_describe(&c->ch_layout, ch_layout,
++                                          sizeof(ch_layout))) < 0)
++        goto end;
++
+     printf("Play the output audio file with the command:\n"
+-           "ffplay -f %s -ac %d -ar %d %s\n",
+-           fmt, n_channels, c->sample_rate,
++           "ffplay -f %s -ch_layout %s -sample_rate %d %s\n",
++           fmt, ch_layout, c->sample_rate,
+            outfilename);
+ end:
+     fclose(outfile);
+-- 
+2.43.0
+

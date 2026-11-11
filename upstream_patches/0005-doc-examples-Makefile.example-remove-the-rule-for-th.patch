@@ -1,0 +1,30 @@
+From d9a387299b4f5d376fea31bc3c0330d3efc3c10f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:01:27 +0000
+Subject: [PATCH] doc/examples/Makefile.example: remove the rule for the
+ avcodec example
+
+There is no example called avcodec any more, so the target-specific
+LDLIBS setting for it is a leftover.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/Makefile.example | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/doc/examples/Makefile.example b/doc/examples/Makefile.example
+index 498cf43..dee906f 100644
+--- a/doc/examples/Makefile.example
++++ b/doc/examples/Makefile.example
+@@ -42,7 +42,6 @@ EXAMPLES=\
+ OBJS=$(addsuffix .o,$(EXAMPLES))
+ 
+ # the following examples make explicit use of the math library
+-avcodec:           LDLIBS += -lm
+ encode_audio:      LDLIBS += -lm
+ filter_audio:      LDLIBS += -lm
+ mux:               LDLIBS += -lm
+-- 
+2.43.0
+

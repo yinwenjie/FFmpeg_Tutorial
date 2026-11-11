@@ -1,0 +1,60 @@
+From 4b48ac7bea81be347ac2c9bf16195f781624a438 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:09:16 +0000
+Subject: [PATCH] doc/examples/transcode: pass frame durations on to the
+ encoder
+
+The example rescales the timestamp of each filtered frame to the
+encoder time base, but not its duration, and it does not set
+AV_CODEC_FLAG_FRAME_DURATION. The video encoder therefore outputs
+packets without a duration.
+
+Muxers that need the duration of the last packet get zero. With MP4
+output the last video sample is written with a duration of 0 and lies
+outside the edit list, so it is dropped on playback: transcoding a
+125 frame file gives a stream of 4.96 instead of 5 seconds from which
+only 124 frames can be read back.
+
+Rescale the frame duration along with the timestamp and set the flag.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode.c | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/transcode.c b/doc/examples/transcode.c
+index 78ac53f..69f880b 100644
+--- a/doc/examples/transcode.c
++++ b/doc/examples/transcode.c
+@@ -209,6 +209,10 @@ static int open_output_file(const char *filename)
+             if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+                 enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+ 
++            /* The frames sent to the encoder carry a valid duration, which
++             * the encoder should pass on to the packets it outputs. */
++            enc_ctx->flags |= AV_CODEC_FLAG_FRAME_DURATION;
++
+             /* Third parameter can be used to pass settings to encoder */
+             ret = avcodec_open2(enc_ctx, encoder, NULL);
+             if (ret < 0) {
+@@ -475,9 +479,13 @@ static int encode_write_frame(unsigned int stream_index, int flush)
+     /* encode filtered frame */
+     av_packet_unref(enc_pkt);
+ 
+-    if (filt_frame && filt_frame->pts != AV_NOPTS_VALUE)
+-        filt_frame->pts = av_rescale_q(filt_frame->pts, filt_frame->time_base,
+-                                       stream->enc_ctx->time_base);
++    if (filt_frame) {
++        if (filt_frame->pts != AV_NOPTS_VALUE)
++            filt_frame->pts = av_rescale_q(filt_frame->pts, filt_frame->time_base,
++                                           stream->enc_ctx->time_base);
++        filt_frame->duration = av_rescale_q(filt_frame->duration, filt_frame->time_base,
++                                            stream->enc_ctx->time_base);
++    }
+ 
+     ret = avcodec_send_frame(stream->enc_ctx, filt_frame);
+ 
+-- 
+2.43.0
+
