@@ -40,12 +40,15 @@
 | [0013](0013-doc-examples-remux-copy-metadata-and-dispositions.patch) | remux.c | 不满足现有需求 | 不拷贝元数据和 disposition，输出文件丢掉标题、语言和默认轨标志 | L04 |
 | [0014](0014-doc-examples-do-not-replace-error-codes-with-AVERROR.patch) | remux.c、transcode.c | 不符合规范 | 丢弃真实的错误码，一律报 `Unknown error occurred` | L04 |
 | [0015](0015-doc-examples-remux-set-the-DTS-of-packets-that-come-.patch) | remux.c | 已废弃 | 把没有 DTS 的包直接交给复用器，依赖一个即将删除的兼容行为 | L04 |
+| [0016](0016-doc-examples-return-a-failure-status-after-a-usage-e.patch) | decode_audio.c、decode_video.c、encode_audio.c、encode_video.c | 不符合规范 | 参数不够时打印用法，退出码却是 0 | L05 |
+| [0017](0017-doc-examples-decode_video-do-not-ignore-I-O-errors.patch) | decode_video.c | 错误 | 输出文件建不起来、读输入出错时照常结束，退出码是 0 | L05 |
+| [0018](0018-doc-examples-decode_video-describe-the-input-and-the.patch) | decode_video.c | 错误 | 用法说明与实际不符：第二个参数是前缀不是文件名，输入必须是裸流 | L05 |
 
 ## 怎么使用
 
 应用到 FFmpeg 源码树。各个问题在逻辑上互相独立，但有几个 patch 改的是同一个文件里相邻的行
 （0003 到 0005 都改 Makefile.example，0001、0007、0011、0014 都改 transcode.c，
-0010、0012 到 0015 都改 remux.c），所以要按编号顺序应用：
+0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -65,7 +68,7 @@ make -j"$(nproc)" examples
    <https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls> 提 pull request，
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
 4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
-   remux（0012 到 0015）一组。
+   remux（0012 到 0015）一组、decode_video（0016 到 0018）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -289,6 +292,72 @@ in: pts:80 pts_time:0.08 dts:NOPTS dts_time:NOPTS duration:40 duration_time:0.04
 之后按上一个包的 DTS 加时长往下推，直到解封装器给出 DTS 为止。
 修复后没有警告。MKV 到 MP4、MKV 到 TS，以及 MP4、TS、FLV 作输入的另外六种组合，输出文件与修复前逐字节相同
 （输出为 MKV 时比较的是每个包的时间戳和大小，因为 MKV 文件里有随机生成的 UID）。
+
+### 0016 用法错误时退出码是 0
+
+```console
+$ doc/examples/decode_video; echo $?
+Usage: doc/examples/decode_video <input file> <output file>
+And check your input file is encoded by mpeg1video please.
+0
+```
+
+decode_audio、encode_audio、encode_video 也是这样，其中 encode_audio 是 `return 0`，另外三个是 `exit(0)`。
+脚本或 Makefile 调用它们时判断不出程序什么也没做。其余示例在同样的情况下返回的都是非 0。
+修复后这四个示例都返回 1。
+
+### 0017 decode_video 忽略读写错误
+
+输出文件建不起来（这里是目录不存在）：
+
+```console
+$ doc/examples/decode_video $S/video_360p25.m1v /nonexistent/frame > /tmp/log 2>&1; echo $?
+0
+$ grep -c "saving frame" /tmp/log; grep -c "Could not open" /tmp/log
+125
+125
+```
+
+`pgm_save()` 打不开文件时打印一条信息就返回，程序把 125 帧全部解完，一个文件也没写出来，退出码是 0。
+
+读输入出错（这里把一个目录当作输入文件，`fread()` 失败）：
+
+```console
+$ doc/examples/decode_video $S /tmp/frame; echo $?
+0
+```
+
+读循环遇到 `ferror()` 只是 `break`，没有任何提示。
+
+修复后两种情况都报错并以 1 退出：前者在第一帧就停下，只打印一次 `Could not open /nonexistent/frame-1`；
+后者打印 `Error while reading <文件名>`。输入正常时，125 个 PGM 文件与修复前逐字节相同。
+
+### 0018 decode_video 的用法说明
+
+用法说明是这两行：
+
+```text
+Usage: doc/examples/decode_video <input file> <output file>
+And check your input file is encoded by mpeg1video please.
+```
+
+两处都会把人带偏。第二个参数其实是前缀，`decode_video in.m1v out.pgm` 得到的是 `out.pgm-1`、`out.pgm-2` 这样的文件。
+输入要求写的是“用 mpeg1video 编码”，照着做最自然的办法是转一个 `.mpg`，而 `.mpg` 是 MPEG-PS 容器：
+
+```console
+$ ffmpeg -v error -y -i $S/small_360p25.mp4 -an -c:v mpeg1video -b:v 1M /tmp/in.mpg
+$ doc/examples/decode_video /tmp/in.mpg /tmp/frame > /tmp/log 2>&1; echo $?
+0
+$ grep -c "saving frame" /tmp/log; grep -c "concealing" /tmp/log
+124
+124
+```
+
+示例把文件内容原样交给 MPEG-1 的 parser，容器的包头混进了帧数据，每一帧都触发错误隐藏，存下来的图片几乎是一片灰。
+换成 AVI 则直接失败，报 `Invalid frame dimensions 0x0`。
+
+修复后的用法说明写明输入必须是裸流，给出生成裸流的命令（`ffmpeg -i INPUT -c:v mpeg1video -f mpeg1video OUTPUT`），
+并说明每一帧存成 `<output prefix>-<frame number>`。文件开头的说明注释同步修改。只改了文字，不影响行为。
 
 ## 已记录、暂未制作 patch 的观察项
 
