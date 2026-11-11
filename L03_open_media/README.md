@@ -314,6 +314,25 @@ $ $B/probe_stages samples/small_360p25.mp4
 
 习惯上两个函数总是一起调用，只有清楚输入是什么、并且在意启动速度时才省略或限制第二步。
 
+`find_stream_info` 最多读多少，由两个选项限制：`probesize`（最多读多少字节）和
+`analyzeduration`（最多分析多长时间的数据，单位是微秒）。把它们压得很小，看看会怎样
+（`open_with_options` 在第 5 步介绍，这里先用一下）：
+
+```console
+$ $B/open_with_options samples/small_360p25.ts - probesize=2000 analyzeduration=0
+[mpegts @ 0x...] Stream #0: not enough frames to estimate rate; consider increasing probesize
+...
+[mpegts @ 0x...] Could not find codec parameters for stream 1 (Audio: aac ([15][0][0][0] / 0x000F), 0 channels): unspecified sample format
+Consider increasing the value for the 'analyzeduration' (0) and 'probesize' (2000) options
+Input #0, mpegts, from 'samples/small_360p25.ts':
+  ...
+  Stream #0:0[0x100]: Video: h264 (High) ([27][0][0][0] / 0x001B), yuv420p(progressive), 640x360 [SAR 1:1 DAR 16:9], 50 tbr, 90k tbn, start 1.480000
+  Stream #0:1[0x101](und): Audio: aac ([15][0][0][0] / 0x000F), 0 channels, start 1.480000
+```
+
+程序没有报错退出，但音频流的采样率、声道数、采样格式都没有读出来，视频的帧率也没有了。
+`Could not find codec parameters` 是实际工作中很常见的一条日志，原因就是探测到的数据不够。
+
 ## 第 5 步：open_with_options，选项字典与没有文件头的数据
 
 L01 导出的 `.yuv` 和 `.pcm` 没有任何文件头，FFmpeg 无法知道分辨率和采样率。
