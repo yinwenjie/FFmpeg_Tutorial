@@ -55,7 +55,7 @@ cmake -S . -B build && cmake --build build
 | 0 入门准备 | [L01 音视频基础概念](L01_basics/README.md) | 无 |
 | | [L02 开发环境与命令行工具](L02_environment/README.md) | 全部示例的编译 |
 | 1 容器与封装层 | [L03 打开媒体文件](L03_open_media/README.md) | show_metadata.c |
-| | L04 时间基与时间戳 | remux.c |
+| | [L04 时间基与时间戳](L04_remux_timestamps/README.md) | remux.c |
 | 2 解码 | L05 视频解码 | decode_video.c |
 | | L06 音频解码 | decode_audio.c |
 | | L07 解封装 + 解码全流程 | demux_decode.c |
