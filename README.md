@@ -57,7 +57,7 @@ cmake -S . -B build && cmake --build build
 | 1 容器与封装层 | [L03 打开媒体文件](L03_open_media/README.md) | show_metadata.c |
 | | [L04 时间基与时间戳](L04_remux_timestamps/README.md) | remux.c |
 | 2 解码 | [L05 视频解码](L05_decode_video/README.md) | decode_video.c |
-| | L06 音频解码 | decode_audio.c |
+| | [L06 音频解码](L06_decode_audio/README.md) | decode_audio.c |
 | | L07 解封装 + 解码全流程 | demux_decode.c |
 | | L08 帧类型、GOP 与 side data | extract_mvs.c |
 | 3 原始数据处理 | L09 图像缩放与像素格式转换 | scale_video.c |
