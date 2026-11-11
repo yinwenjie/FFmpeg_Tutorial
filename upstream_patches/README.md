@@ -43,12 +43,19 @@
 | [0016](0016-doc-examples-return-a-failure-status-after-a-usage-e.patch) | decode_audio.c、decode_video.c、encode_audio.c、encode_video.c | 不符合规范 | 参数不够时打印用法，退出码却是 0 | L05 |
 | [0017](0017-doc-examples-decode_video-do-not-ignore-I-O-errors.patch) | decode_video.c | 错误 | 输出文件建不起来、读输入出错时照常结束，退出码是 0 | L05 |
 | [0018](0018-doc-examples-decode_video-describe-the-input-and-the.patch) | decode_video.c | 错误 | 用法说明与实际不符：第二个参数是前缀不是文件名，输入必须是裸流 | L05 |
+| [0019](0019-doc-examples-decode_audio-fix-a-crash-when-no-data-c.patch) | decode_audio.c | 错误 | 输入文件是空的或者读不出数据时段错误 | L06 |
+| [0020](0020-doc-examples-decode_audio-do-not-ignore-I-O-errors.patch) | decode_audio.c | 错误 | 输出写不进去、读输入出错时照常提示播放命令，退出码是 0 | L06 |
+| [0021](0021-doc-examples-decode_audio-support-packed-sample-form.patch) | decode_audio.c | 不满足现有需求 | 只能处理 planar 采样格式，换一个输出 packed 格式的解码器就崩溃 | L06 |
+| [0022](0022-doc-examples-decode_audio-flush-the-parser-at-the-en.patch) | decode_audio.c | 不符合规范 | 读到文件末尾没有冲刷 parser，结尾的数据被丢掉 | L06 |
+| [0023](0023-doc-examples-decode_audio-describe-the-input-in-the-.patch) | decode_audio.c | 不符合规范 | 用法说明没有说输入必须是 MP2 裸流 | L06 |
+| [0024](0024-doc-examples-decode_audio-zero-the-padding-of-the-in.patch) | decode_audio.c | 不符合规范 | 输入缓冲区末尾的填充字节没有清零 | L06 |
 
 ## 怎么使用
 
 应用到 FFmpeg 源码树。各个问题在逻辑上互相独立，但有几个 patch 改的是同一个文件里相邻的行
 （0003 到 0005 都改 Makefile.example，0001、0007、0011、0014 都改 transcode.c，
-0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c），所以要按编号顺序应用：
+0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c，
+0006、0016、0019 到 0024 都改 decode_audio.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -68,7 +75,7 @@ make -j"$(nproc)" examples
    <https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls> 提 pull request，
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
 4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
-   remux（0012 到 0015）一组、decode_video（0016 到 0018）一组。
+   remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -359,6 +366,123 @@ $ grep -c "saving frame" /tmp/log; grep -c "concealing" /tmp/log
 修复后的用法说明写明输入必须是裸流，给出生成裸流的命令（`ffmpeg -i INPUT -c:v mpeg1video -f mpeg1video OUTPUT`），
 并说明每一帧存成 `<output prefix>-<frame number>`。文件开头的说明注释同步修改。只改了文字，不影响行为。
 
+### 0019 decode_audio 在空输入上崩溃
+
+```console
+$ : > /tmp/empty.mp2
+$ doc/examples/decode_audio /tmp/empty.mp2 /tmp/out.pcm; echo $?
+Segmentation fault (core dumped)
+139
+```
+
+把一个目录当作输入文件也是同样的结果。`AVFrame` 是在读循环里面第一次用到时才分配的，
+第一次 `fread()` 就读不到数据时循环体一次也不执行，随后冲刷解码器的那次调用把空指针交给了 `avcodec_receive_frame()`。
+
+修复后帧在循环之前分配。这种情况下一帧也没有解出来，结尾那条 ffplay 提示里的参数无从得知
+（只修崩溃的话会打印 `-ch_layout 0 channels -sample_rate 0`），所以改为报
+`No audio frame could be decoded from <文件名>` 并以 1 退出。
+
+### 0020 decode_audio 忽略读写错误
+
+输出写不进去（用 `/dev/full` 模拟磁盘已满）：
+
+```console
+$ doc/examples/decode_audio $S/audio_44k_stereo.mp2 /dev/full; echo $?
+Play the output audio file with the command:
+ffplay -f s16le -ch_layout stereo -sample_rate 44100 /dev/full
+0
+```
+
+`fwrite()` 和 `fclose()` 的结果都没有检查，一个字节也没写成功，程序照样提示去播放输出文件。
+读输入中途出错时，读循环像读到文件末尾一样正常结束，输出只有一部分，同样报告成功。
+
+修复后检查两个文件的错误标志，以及输出文件 `fclose()` 的返回值（缓冲区里剩下的数据是在这一步写出去的），
+出错时打印 `Error while writing <文件名>` 或 `Error while reading <文件名>` 并以 1 退出。
+输出文件改为在打印提示之前关闭，只有完整写完才会出现播放提示。输入正常时输出与修复前逐字节相同。
+
+### 0021 decode_audio 只能处理 planar 格式
+
+示例写死了 MP2 解码器，它输出 s16p，所以原样运行没有问题。问题出在把它当模板用的时候。
+只改一处，把 `AV_CODEC_ID_MP2` 换成 `AV_CODEC_ID_FLAC`（FLAC 解码器输出 packed 的 s16），拿一个双声道文件来解：
+
+```console
+$ ffmpeg -v error -i $S/audio_44k_stereo.mp2 -c:a flac /tmp/stereo.flac
+$ ./decode_audio_flac /tmp/stereo.flac /tmp/out.pcm; echo $?
+Segmentation fault (core dumped)
+139
+```
+
+`decode()` 对每个声道都去读 `frame->data[ch]`。packed 格式只有一个平面，`data[1]` 是空指针。
+另外 `data[]` 只有 8 个位置，planar 格式超过 8 个声道时必须用 `extended_data`。
+而文件里的 `get_format_from_sample_fmt()` 列的全是 packed 格式，看上去像是什么格式都能处理。
+
+修复后 packed 的帧整块写出，planar 的帧通过 `extended_data` 逐个采样交错写出，
+采样格式和声道数改用帧自己的（`frame->format`、`frame->ch_layout`）。MP2 的输出与修复前逐字节相同，
+改成 FLAC 的版本不再崩溃。
+
+### 0022 decode_audio 没有冲刷 parser
+
+`av_parser_parse2()` 的文档要求在输入结束时用长度 0 再调用一次，parser 才会把手里剩下的数据交出来。
+decode_video.c 是这样做的，decode_audio.c 没有。
+
+对完整的 MP2 文件没有影响，因为 MPEG 音频的 parser 从帧头就知道一帧多长，收齐就交出来。
+文件在一帧中间被截断时有区别，最后那个不完整的帧 ffmpeg 会解，示例把它丢了：
+
+```console
+$ head -c 3000 $S/audio_44k_stereo.mp2 > /tmp/short.mp2
+$ doc/examples/decode_audio /tmp/short.mp2 /tmp/out.pcm > /dev/null; wc -c < /tmp/out.pcm
+32256
+$ ffmpeg -v error -i /tmp/short.mp2 -f s16le - | wc -c
+36864
+```
+
+要看到下一帧的开头才能确定上一帧结尾的 parser 扣下的数据更多。接着 0021 把解码器换成 FLAC，
+5 秒的文件少了结尾的 14 帧：
+
+```console
+$ ./decode_audio_flac /tmp/stereo.flac /tmp/out.pcm > /dev/null; wc -c < /tmp/out.pcm
+820224
+$ ffmpeg -v error -i /tmp/stereo.flac -f s16le - | wc -c
+884736
+```
+
+修复后在读循环之后用长度 0 反复调用 parser，直到它不再交出数据。上面两个例子的输出都与 ffmpeg 的结果逐字节相同
+（分别是 36864 和 884736 字节）。
+
+### 0023 decode_audio 的用法说明
+
+```console
+$ doc/examples/decode_audio
+Usage: doc/examples/decode_audio <input file> <output file>
+$ doc/examples/decode_audio $S/small_360p25.mp4 /tmp/out.pcm
+[mp2 @ 0x564036e81640] Header missing
+Error submitting the packet to the decoder
+```
+
+用法说明只说要一个输入文件。示例把文件内容原样交给 MPEG 音频的 parser，再用 MP2 解码器解，所以输入必须是 MP2 裸流。
+给它 MP4、AAC，或者装在 MPEG-TS、Matroska、WAV 里的 MP2，得到的都是上面这两行，看不出错在哪里。
+
+修复后的用法说明写明输入必须是 MP2 裸流，给出生成它的命令（`ffmpeg -i INPUT -c:a mp2 OUTPUT.mp2`），
+文件开头的说明注释同步修改。只改了文字，不影响行为。
+
+### 0024 decode_audio 没有把填充字节清零
+
+`AV_INPUT_BUFFER_PADDING_SIZE` 的文档要求输入数据后面多留 64 个字节，并且提醒这些字节不为 0 时，
+损坏的 MPEG 码流可能让解码器读过头。decode_video.c 在读文件之前有一句
+`memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE)`，decode_audio.c 留了位置但从来没有清零：
+
+```console
+$ grep -n "memset\|PADDING" doc/examples/decode_audio.c doc/examples/decode_video.c
+doc/examples/decode_audio.c:126:    uint8_t inbuf[AUDIO_INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
+doc/examples/decode_video.c:96:    uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
+doc/examples/decode_video.c:120:    memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+```
+
+文件最后一帧后面的内容是缓冲区里原来的东西：前几次读进来的旧数据，文件比缓冲区小时则是没有初始化的栈内存。
+用课程素材和 valgrind 没有观察到实际的越界读，这个 patch 是按文档的要求补齐。
+
+修复后每次填充缓冲区之后把数据末尾的 64 个字节清零。输出与修复前逐字节相同。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
@@ -366,7 +490,6 @@ $ grep -c "saving frame" /tmp/log; grep -c "concealing" /tmp/log
 | 涉及文件 | 观察 | 计划处理的课次 |
 | --- | --- | --- |
 | scale_video.c、mux.c | 使用 `sws_getContext()` 加 `sws_scale()` 的旧式写法。libswscale 已提供 `sws_alloc_context()` 和按帧工作的 `sws_scale_frame()`，旧接口尚未标记废弃 | L09 |
-| decode_audio.c | `decode()` 用 `frame->data[ch]` 取各声道，只对 planar 格式成立。示例写死了 MP2 解码器所以没出问题，换成输出 packed 格式的解码器会崩溃 | L06 |
 | transcode.c | 编码器没有继承输入的色彩属性，BT.709 的输入转码后 `color_space` 和 `color_range` 变成 unknown | L16 |
 | avio_read_callback.c | 只提供读回调、没有 seek 回调。`moov` 在文件末尾的 MP4 读不到完整的流参数（报 `partial file` 和 `unspecified pixel format`） | L18 |
 | avio_http_serve_files.c、filter_audio.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告 | L11、L19 |

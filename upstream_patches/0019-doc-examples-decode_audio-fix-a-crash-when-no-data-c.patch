@@ -1,0 +1,72 @@
+From 413353cba92b4efaeaee814e7f0dd8c4634a9bac Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:52:37 +0000
+Subject: [PATCH] doc/examples/decode_audio: fix a crash when no data can be
+ read
+
+The frame was only allocated inside the read loop. When the first
+fread() returns nothing, which happens with an empty input file or
+when the input argument is a directory, the loop body never runs and
+the flush call passes a NULL frame to avcodec_receive_frame():
+
+    $ : > empty.mp2
+    $ doc/examples/decode_audio empty.mp2 out.pcm
+    Segmentation fault (core dumped)
+
+Allocate the frame before the loop.
+
+No frame has been decoded in this case, so the parameters printed in
+the ffplay hint are not known and the hint would read
+"ffplay -f s16le -ch_layout 0 channels -sample_rate 0 out.pcm". Report
+that nothing was decoded instead and return a failure status.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_audio.c | 18 +++++++++++-------
+ 1 file changed, 11 insertions(+), 7 deletions(-)
+
+diff --git a/doc/examples/decode_audio.c b/doc/examples/decode_audio.c
+index a3ce762..135a4a4 100644
+--- a/doc/examples/decode_audio.c
++++ b/doc/examples/decode_audio.c
+@@ -170,18 +170,17 @@ int main(int argc, char **argv)
+         exit(1);
+     }
+ 
++    decoded_frame = av_frame_alloc();
++    if (!decoded_frame) {
++        fprintf(stderr, "Could not allocate audio frame\n");
++        exit(1);
++    }
++
+     /* decode until eof */
+     data      = inbuf;
+     data_size = fread(inbuf, 1, AUDIO_INBUF_SIZE, f);
+ 
+     while (data_size > 0) {
+-        if (!decoded_frame) {
+-            if (!(decoded_frame = av_frame_alloc())) {
+-                fprintf(stderr, "Could not allocate audio frame\n");
+-                exit(1);
+-            }
+-        }
+-
+         ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
+                                data, data_size,
+                                AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
+@@ -210,6 +209,11 @@ int main(int argc, char **argv)
+     pkt->size = 0;
+     decode(c, pkt, decoded_frame, outfile);
+ 
++    if (!c->frame_num) {
++        fprintf(stderr, "No audio frame could be decoded from %s\n", filename);
++        exit(1);
++    }
++
+     /* print output pcm infomations, because there have no metadata of pcm */
+     /* decode() interleaves the samples of all channels, so the output file
+      * is in the packed variant of the planar format the decoder produced */
+-- 
+2.43.0
+
