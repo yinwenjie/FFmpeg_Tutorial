@@ -1,0 +1,56 @@
+From 665c279300bb95169ba2a98b4be7616f74f90f8b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:03:37 +0000
+Subject: [PATCH] doc/examples: set pkt_timebase when decoding audio from a
+ container
+
+demux_decode and decode_filter_audio do not tell the decoder in which
+time base the packet timestamps are expressed. With streams that carry
+samples to be discarded, such as AAC in MP4, the decoder then cannot
+adjust the frame timestamps and warns:
+
+    [aac @ 0x...] Could not update timestamps for discarded samples.
+
+Set AVCodecContext.pkt_timebase from the stream, as transcode and
+transcode_aac already do.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_filter_audio.c | 4 ++++
+ doc/examples/demux_decode.c        | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/doc/examples/decode_filter_audio.c b/doc/examples/decode_filter_audio.c
+index 67c8a14..589330a 100644
+--- a/doc/examples/decode_filter_audio.c
++++ b/doc/examples/decode_filter_audio.c
+@@ -77,6 +77,10 @@ static int open_input_file(const char *filename)
+         return AVERROR(ENOMEM);
+     avcodec_parameters_to_context(dec_ctx, fmt_ctx->streams[audio_stream_index]->codecpar);
+ 
++    /* Inform the decoder about the timebase for the packet timestamps.
++     * This is highly recommended, but not mandatory. */
++    dec_ctx->pkt_timebase = fmt_ctx->streams[audio_stream_index]->time_base;
++
+     /* init the audio decoder */
+     if ((ret = avcodec_open2(dec_ctx, dec, NULL)) < 0) {
+         av_log(NULL, AV_LOG_ERROR, "Cannot open audio decoder\n");
+diff --git a/doc/examples/demux_decode.c b/doc/examples/demux_decode.c
+index 5c38742..138d758 100644
+--- a/doc/examples/demux_decode.c
++++ b/doc/examples/demux_decode.c
+@@ -182,6 +182,10 @@ static int open_codec_context(int *stream_idx,
+             return ret;
+         }
+ 
++        /* Inform the decoder about the timebase for the packet timestamps.
++         * This is highly recommended, but not mandatory. */
++        (*dec_ctx)->pkt_timebase = st->time_base;
++
+         /* Init the decoders */
+         if ((ret = avcodec_open2(*dec_ctx, dec, NULL)) < 0) {
+             fprintf(stderr, "Failed to open %s codec\n",
+-- 
+2.43.0
+

@@ -1,0 +1,33 @@
+From fc75b719f365e3b6596f0e828ad7921c06d43245 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:01:26 +0000
+Subject: [PATCH] doc/examples/Makefile.example: fix the spelling of .PHONY
+
+Special targets are case-sensitive in make, so ".phony" declares an
+ordinary target and has no effect. With files named "clean" and
+"clean-test" in the directory, "make clean" does nothing:
+
+    make: 'clean' is up to date.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/Makefile.example | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/Makefile.example b/doc/examples/Makefile.example
+index 422c062..498cf43 100644
+--- a/doc/examples/Makefile.example
++++ b/doc/examples/Makefile.example
+@@ -48,7 +48,7 @@ filter_audio:      LDLIBS += -lm
+ mux:               LDLIBS += -lm
+ resample_audio:    LDLIBS += -lm
+ 
+-.phony: all clean-test clean
++.PHONY: all clean-test clean
+ 
+ all: $(OBJS) $(EXAMPLES)
+ 
+-- 
+2.43.0
+

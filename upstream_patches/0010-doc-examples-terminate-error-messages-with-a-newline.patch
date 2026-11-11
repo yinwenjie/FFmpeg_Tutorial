@@ -1,0 +1,63 @@
+From c410a6218c3febc3fd2d6318d255528c71852f3e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:04:15 +0000
+Subject: [PATCH] doc/examples: terminate error messages with a newline
+
+Three error messages in remux lack the trailing newline, so the generic
+message printed at the end is appended to the same line:
+
+    Could not open input file 'in.mp4'Error occurred: No such file or directory
+
+One message in encode_audio has the same problem.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_audio.c | 2 +-
+ doc/examples/remux.c        | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index a16c3a3..48c0cff 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -178,7 +178,7 @@ int main(int argc, char **argv)
+     /* check that the encoder supports s16 pcm input */
+     c->sample_fmt = AV_SAMPLE_FMT_S16;
+     if (!check_sample_fmt(codec, c->sample_fmt)) {
+-        fprintf(stderr, "Encoder does not support sample format %s",
++        fprintf(stderr, "Encoder does not support sample format %s\n",
+                 av_get_sample_fmt_name(c->sample_fmt));
+         exit(1);
+     }
+diff --git a/doc/examples/remux.c b/doc/examples/remux.c
+index 1a88f7e..fc63707 100644
+--- a/doc/examples/remux.c
++++ b/doc/examples/remux.c
+@@ -73,12 +73,12 @@ int main(int argc, char **argv)
+     }
+ 
+     if ((ret = avformat_open_input(&ifmt_ctx, in_filename, 0, 0)) < 0) {
+-        fprintf(stderr, "Could not open input file '%s'", in_filename);
++        fprintf(stderr, "Could not open input file '%s'\n", in_filename);
+         goto end;
+     }
+ 
+     if ((ret = avformat_find_stream_info(ifmt_ctx, 0)) < 0) {
+-        fprintf(stderr, "Failed to retrieve input stream information");
++        fprintf(stderr, "Failed to retrieve input stream information\n");
+         goto end;
+     }
+ 
+@@ -133,7 +133,7 @@ int main(int argc, char **argv)
+     if (!(ofmt->flags & AVFMT_NOFILE)) {
+         ret = avio_open(&ofmt_ctx->pb, out_filename, AVIO_FLAG_WRITE);
+         if (ret < 0) {
+-            fprintf(stderr, "Could not open output file '%s'", out_filename);
++            fprintf(stderr, "Could not open output file '%s'\n", out_filename);
+             goto end;
+         }
+     }
+-- 
+2.43.0
+

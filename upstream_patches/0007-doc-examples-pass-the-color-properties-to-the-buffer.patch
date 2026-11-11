@@ -1,0 +1,73 @@
+From 472a8b6c40bca119f106b2c4beab63af84062d55 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 21:03:11 +0000
+Subject: [PATCH] doc/examples: pass the color properties to the buffer source
+
+decode_filter_video and transcode only describe the size, the pixel
+format, the time base and the aspect ratio of the decoded video to the
+buffer source. The frames sent to it also carry a color space, a color
+range, an alpha mode and a chroma sample location, and when these
+differ from the (unspecified) values the filter was configured with,
+buffersrc complains on the first frame:
+
+    Changing video frame properties on the fly is not supported by all filters.
+    filter context - w: 640 h: 360 fmt: 0 csp: unknown range: unknown
+    alpha: unspecified chroma_loc: unspecified, incoming frame - w: 640
+    h: 360 fmt: 0 csp: unknown range: unknown alpha: unspecified
+    chroma_loc: left pts_time: 0
+
+This happens with any H.264 input, since the decoder sets the chroma
+sample location to "left". Take the four properties from the decoder
+context and pass them along.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_filter_video.c | 7 +++++--
+ doc/examples/transcode.c           | 7 +++++--
+ 2 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/doc/examples/decode_filter_video.c b/doc/examples/decode_filter_video.c
+index 62ada4b..a4b2252 100644
+--- a/doc/examples/decode_filter_video.c
++++ b/doc/examples/decode_filter_video.c
+@@ -107,10 +107,13 @@ static int init_filters(const char *filters_descr)
+ 
+     /* buffer video source: the decoded frames from the decoder will be inserted here. */
+     snprintf(args, sizeof(args),
+-            "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
++            "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d:"
++            "colorspace=%d:range=%d:alpha_mode=%d:chroma_location=%d",
+             dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
+             time_base.num, time_base.den,
+-            dec_ctx->sample_aspect_ratio.num, dec_ctx->sample_aspect_ratio.den);
++            dec_ctx->sample_aspect_ratio.num, dec_ctx->sample_aspect_ratio.den,
++            dec_ctx->colorspace, dec_ctx->color_range, dec_ctx->alpha_mode,
++            dec_ctx->chroma_sample_location);
+ 
+     ret = avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in",
+                                        args, NULL, filter_graph);
+diff --git a/doc/examples/transcode.c b/doc/examples/transcode.c
+index cf094d4..78ac53f 100644
+--- a/doc/examples/transcode.c
++++ b/doc/examples/transcode.c
+@@ -285,11 +285,14 @@ static int init_filter(FilteringContext* fctx, AVCodecContext *dec_ctx,
+         }
+ 
+         snprintf(args, sizeof(args),
+-                "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
++                "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d:"
++                "colorspace=%d:range=%d:alpha_mode=%d:chroma_location=%d",
+                 dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
+                 dec_ctx->pkt_timebase.num, dec_ctx->pkt_timebase.den,
+                 dec_ctx->sample_aspect_ratio.num,
+-                dec_ctx->sample_aspect_ratio.den);
++                dec_ctx->sample_aspect_ratio.den,
++                dec_ctx->colorspace, dec_ctx->color_range, dec_ctx->alpha_mode,
++                dec_ctx->chroma_sample_location);
+ 
+         ret = avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in",
+                 args, NULL, filter_graph);
+-- 
+2.43.0
+
