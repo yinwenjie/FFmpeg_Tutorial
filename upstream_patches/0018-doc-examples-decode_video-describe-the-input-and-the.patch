@@ -1,0 +1,65 @@
+From ecc917d9799a3d41052e9bdc16a660521783c1a3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:19:23 +0000
+Subject: [PATCH] doc/examples/decode_video: describe the input and the output
+ in the usage
+
+The usage message asked for an "<output file>" and for an input
+"encoded by mpeg1video". Neither is what the example needs:
+
+- The second argument is a prefix. Every frame is written to its own
+  file named <prefix>-<frame number>, so "decode_video in.m1v out.pgm"
+  creates out.pgm-1, out.pgm-2 and so on.
+
+- The input is passed to the MPEG-1 video parser as is, so it has to
+  be a raw video stream. MPEG-1 video in a container does not work:
+  with an AVI file the example fails with "Invalid frame dimensions
+  0x0", and with an MPEG program stream, which is what
+
+    ffmpeg -i INPUT -c:v mpeg1video OUTPUT.mpg
+
+  creates, it writes damaged pictures and the decoder prints hundreds
+  of error concealment messages.
+
+Say so in the usage message and in the description of the file, and
+show a command that creates a suitable input file.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_video.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/doc/examples/decode_video.c b/doc/examples/decode_video.c
+index e2fdda6..a192936 100644
+--- a/doc/examples/decode_video.c
++++ b/doc/examples/decode_video.c
+@@ -24,8 +24,8 @@
+  * @file libavcodec video decoding API usage example
+  * @example decode_video.c *
+  *
+- * Read from an MPEG1 video file, decode frames, and generate PGM images as
+- * output.
++ * Read a raw MPEG-1 video stream from a file, decode the frames, and write
++ * each of them to a PGM image.
+  */
+ 
+ #include <stdio.h>
+@@ -101,8 +101,12 @@ int main(int argc, char **argv)
+     AVPacket *pkt;
+ 
+     if (argc <= 2) {
+-        fprintf(stderr, "Usage: %s <input file> <output file>\n"
+-                "And check your input file is encoded by mpeg1video please.\n", argv[0]);
++        fprintf(stderr, "Usage: %s <input file> <output prefix>\n"
++                "The input file must contain a raw MPEG-1 video stream, not a container\n"
++                "such as MPEG-PS, AVI or MP4. It can be created with a command like\n"
++                "  ffmpeg -i INPUT -c:v mpeg1video -f mpeg1video OUTPUT\n"
++                "Every decoded frame is written to the PGM image\n"
++                "<output prefix>-<frame number>.\n", argv[0]);
+         exit(1);
+     }
+     filename    = argv[1];
+-- 
+2.43.0
+

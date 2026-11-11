@@ -1,0 +1,81 @@
+From 171559af7c546c87a40727dc97d8af1b4cfcd352 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:18:56 +0000
+Subject: [PATCH] doc/examples: return a failure status after a usage error
+
+decode_audio, decode_video, encode_audio and encode_video printed
+their usage message when called with too few arguments and then
+terminated with exit status 0, so a calling script or Makefile could
+not tell that nothing had been done:
+
+  $ doc/examples/decode_video; echo $?
+  Usage: doc/examples/decode_video <input file> <output file>
+  And check your input file is encoded by mpeg1video please.
+  0
+
+Return 1 in this case, like the other examples do.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_audio.c | 2 +-
+ doc/examples/decode_video.c | 2 +-
+ doc/examples/encode_audio.c | 2 +-
+ doc/examples/encode_video.c | 2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/doc/examples/decode_audio.c b/doc/examples/decode_audio.c
+index b3dcf7b..a3ce762 100644
+--- a/doc/examples/decode_audio.c
++++ b/doc/examples/decode_audio.c
+@@ -123,7 +123,7 @@ int main(int argc, char **argv)
+ 
+     if (argc <= 2) {
+         fprintf(stderr, "Usage: %s <input file> <output file>\n", argv[0]);
+-        exit(0);
++        exit(1);
+     }
+     filename    = argv[1];
+     outfilename = argv[2];
+diff --git a/doc/examples/decode_video.c b/doc/examples/decode_video.c
+index 9d92ebb..1072963 100644
+--- a/doc/examples/decode_video.c
++++ b/doc/examples/decode_video.c
+@@ -103,7 +103,7 @@ int main(int argc, char **argv)
+     if (argc <= 2) {
+         fprintf(stderr, "Usage: %s <input file> <output file>\n"
+                 "And check your input file is encoded by mpeg1video please.\n", argv[0]);
+-        exit(0);
++        exit(1);
+     }
+     filename    = argv[1];
+     outfilename = argv[2];
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index 48c0cff..32c98ff 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -155,7 +155,7 @@ int main(int argc, char **argv)
+ 
+     if (argc <= 1) {
+         fprintf(stderr, "Usage: %s <output file>\n", argv[0]);
+-        return 0;
++        return 1;
+     }
+     filename = argv[1];
+ 
+diff --git a/doc/examples/encode_video.c b/doc/examples/encode_video.c
+index 4fae146..f52a4fb 100644
+--- a/doc/examples/encode_video.c
++++ b/doc/examples/encode_video.c
+@@ -79,7 +79,7 @@ int main(int argc, char **argv)
+ 
+     if (argc <= 2) {
+         fprintf(stderr, "Usage: %s <output file> <codec name>\n", argv[0]);
+-        exit(0);
++        exit(1);
+     }
+     filename = argv[1];
+     codec_name = argv[2];
+-- 
+2.43.0
+

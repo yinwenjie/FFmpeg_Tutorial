@@ -1,0 +1,53 @@
+From 09852e9ef77834e53b929c0ebf2966943652164e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:19:10 +0000
+Subject: [PATCH] doc/examples/decode_video: do not ignore I/O errors
+
+When an output file could not be created, pgm_save() printed a
+message and returned, and the example went on to decode the whole
+input: with an output prefix in a directory that does not exist it
+printed "saving frame" for every frame, wrote nothing and exited with
+status 0.
+
+A read error was ignored as well. The read loop was left without any
+message and the example exited with status 0, e.g. when the input
+argument is a directory.
+
+Print a message for read errors and terminate with a failure status in
+both cases, as is done for all the other errors in this example.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_video.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/decode_video.c b/doc/examples/decode_video.c
+index 1072963..e2fdda6 100644
+--- a/doc/examples/decode_video.c
++++ b/doc/examples/decode_video.c
+@@ -45,7 +45,7 @@ static void pgm_save(unsigned char *buf, int wrap, int xsize, int ysize,
+     f = fopen(filename, "wb");
+     if (!f) {
+         fprintf(stderr, "Could not open %s\n", filename);
+-        return;
++        exit(1);
+     }
+     fprintf(f, "P5\n%d %d\n%d\n", xsize, ysize, 255);
+     for (i = 0; i < ysize; i++)
+@@ -159,8 +159,10 @@ int main(int argc, char **argv)
+     do {
+         /* read raw data from the input file */
+         data_size = fread(inbuf, 1, INBUF_SIZE, f);
+-        if (ferror(f))
+-            break;
++        if (ferror(f)) {
++            fprintf(stderr, "Error while reading %s\n", filename);
++            exit(1);
++        }
+         eof = !data_size;
+ 
+         /* use the parser to split the data into frames */
+-- 
+2.43.0
+
