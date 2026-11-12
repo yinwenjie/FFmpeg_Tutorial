@@ -516,7 +516,8 @@ apkt_md5() { ffmpeg -v error -i "$1" -map 0:a:0 -c copy -f framecrc - 2>/dev/nul
 # 帧的时间（3 位小数，按显示顺序）
 fmt_start() { ffprobe -v error -show_entries format=start_time -of csv=p=0 "$1" 2>/dev/null | head -n 1; }
 frame_times() { ffprobe -v error -select_streams v:0 -show_entries frame=pts_time -of csv=p=0 "$1" | awk '{printf "%.3f\n", $1}'; }
-# tc_same 名字 输入 输出扩展名 模式(bytes|packets) "mtool 的参数" "ffmpeg 命令行的参数"：两边同样的设置（单线程），结果要相同
+# tc_same 名字 输入 输出扩展名 模式(bytes|packets) "mtool 的参数" "ffmpeg 命令行的参数"：两边同样的设置（单线程），结果要相同。
+# bytes 逐字节相同；packets 视频包、音频包逐包相同（解码时间戳、显示时间戳、时长、大小、CRC）加起始时间相同
 tc_same() {
     local name=$1 in=$2 ext=$3 mode=$4 ma=$5 fa=$6
     run "transcode $name" transcode -y --threads 1 $ma "$S/$in" "$W/tm.$ext"
@@ -571,6 +572,7 @@ test_transcode() {
     tc_same "没有音频→mp4" video_only.mp4 mp4 bytes "" "-c:v libx264"
     tc_same "只有音频 m4a→m4a" audio_only.m4a m4a bytes "--no-video" "-c:a aac"
     tc_same "很小的画面→mp4" tiny_16x14.mp4 mp4 bytes "" "-c:v libx264 -c:a aac"
+    tc_same "单声道 8 kHz 的 WAV→m4a" mono_8k.wav m4a bytes "" "-c:a aac"
     tc_same "--crf 28 --preset veryfast -w 320" h264_aac.mp4 mp4 bytes "--crf 28 --preset veryfast -w 320" "-c:v libx264 -c:a aac -crf 28 -preset veryfast -vf scale=320:-2"
     tc_same "--vb 1500k --ab 96k" h264_aac.mp4 mp4 bytes "--vb 1500k --ab 96k" "-c:v libx264 -c:a aac -b:v 1500k -b:a 96k"
     tc_same "--gop 12" h264_aac.mp4 mp4 bytes "--gop 12" "-c:v libx264 -c:a aac -g 12"
@@ -581,11 +583,17 @@ test_transcode() {
     tc_same "-s 1 -d 2（精确裁剪）" h264_aac.mp4 mp4 bytes "-s 1 -d 2" "-ss 1 -t 2 -c:v libx264 -c:a aac"
     tc_same "-s 1.5 -d 2（起点不在关键帧上）" h264_aac.mp4 mp4 bytes "-s 1.5 -d 2" "-ss 1.5 -t 2 -c:v libx264 -c:a aac"
     tc_same "可变帧率→mp4（保持可变）" vfr.mp4 mp4 packets "" "-c:v libx264 -c:a aac"
-    for ext in mkv ts flv; do
-        tc_same "mp4→$ext" h264_aac.mp4 $ext packets "" "-c:v libx264 -c:a aac"
+    for ext in ts flv; do
+        tc_same "mp4→$ext" h264_aac.mp4 $ext bytes "" "-c:v libx264 -c:a aac"
     done
-    tc_same "mp4→avi（H.264 加 AAC）" h264_aac.mp4 avi packets "" "-c:v libx264 -c:a aac"
-    tc_same "--vcodec mpeg4 --acodec mp2 → avi" h264_aac.mp4 avi packets "--vcodec mpeg4 --acodec mp2" "-c:v mpeg4 -c:a mp2"
+    tc_same "mp4→avi（H.264 加 AAC）" h264_aac.mp4 avi bytes "" "-c:v libx264 -c:a aac"
+    tc_same "--vcodec mpeg4 --acodec mp2 → avi" h264_aac.mp4 avi bytes "--vcodec mpeg4 --acodec mp2" "-c:v mpeg4 -c:a mp2"
+    # MKV 每次写的 SegmentUID、TrackUID 和它们的 CRC-32 是随机的，文件不可能逐字节相同：包逐个相同，其余的元素（名字、大小、内容）逐个相同，文件大小相同
+    tc_same "mp4→mkv" h264_aac.mp4 mkv packets "" "-c:v libx264 -c:a aac"
+    eq "transcode mp4→mkv：文件大小和 ffmpeg 命令行相同" "$(stat -c %s "$W/tc.mkv")" "$(stat -c %s "$W/tm.mkv")"
+    eq "transcode mp4→mkv：除随机值外的头部元素和 ffmpeg 命令行逐个相同" \
+        "$(python3 -I L22_engineering/ebml_dump.py "$W/tc.mkv" | grep -vE 'CRC-32|SegmentUID|TrackUID' | md5sum)" \
+        "$(python3 -I L22_engineering/ebml_dump.py "$W/tm.mkv" | grep -vE 'CRC-32|SegmentUID|TrackUID' | md5sum)"
 
     # 具体的特征
     run transcode transcode -y "$S/rotate90.mp4" "$W/rot.mp4"
@@ -641,6 +649,14 @@ PY
         eq "transcode --vcodec h264_vaapi 没有 --hw：退出码 1" 1 $RC
     fi
     run transcode transcode -y --hw none "$S/h264_aac.mp4" "$W/hwn.mp4";   eq "transcode --hw none：退出码 0" 0 $RC
+    run transcode transcode -y --hw vaapi --hw-device /nonexistent_device "$S/h264_aac.mp4" "$W/hwd.mp4"
+    eq "transcode --hw vaapi --hw-device 不存在的设备：退出码 1" 1 $RC
+    yes "transcode --hw-device 不存在的设备：错误里有设备路径" grep -q '/nonexistent_device' "$ERR"
+    yes "transcode --hw-device 不存在的设备：不留下输出" test ! -e "$W/hwd.mp4"
+    run transcode transcode -y --hw auto --hw-device /nonexistent_device "$S/h264_aac.mp4" "$W/hwd2.mp4"
+    eq "transcode --hw auto --hw-device 不存在的设备：退回软件，退出码 0" 0 $RC
+    run transcode transcode -y --hw-device /dev/dri/renderD128 "$S/h264_aac.mp4" "$W/hwd3.mp4"
+    eq "transcode --hw-device 没有 --hw：退出码 2" 2 $RC
 
     # 该拒绝的
     run transcode transcode -y --vcodec bogus "$S/h264_aac.mp4" "$W/u.mp4";   eq "transcode 没有这个视频编码器：退出码 1" 1 $RC
@@ -729,6 +745,11 @@ test_push() {
     run push push --no-pace -f flv "$S/mpeg4_mp2.avi" "tcp://127.0.0.1:1";   eq "push MPEG-4+MP2 → FLV：退出码 1" 1 $RC
     yes "push MPEG-4+MP2 → FLV：说明装不下" grep -q '装不下' "$ERR"
     yes "push MPEG-4+MP2 → FLV：没有去连接（错误里没有 Connection refused）" no_match 'refused' "$ERR"
+    # avformat_query_codec 对 FLV 装 MPEG-4 视频说“可以”，要靠 avformat_init_output 才查得出来
+    ffmpeg -v error -y -i "$S/mpeg4_mp2.avi" -c:v copy -c:a aac "$W/mpeg4_aac.mkv" 2>/dev/null
+    run push push "$W/mpeg4_aac.mkv" "rtmp://127.0.0.1:1/live/k";    eq "push MPEG-4+AAC → RTMP：退出码 1" 1 $RC
+    yes "push MPEG-4+AAC → RTMP：说 flv 装不下" grep -q 'flv 装不下' "$ERR"
+    yes "push MPEG-4+AAC → RTMP：没有去连接（错误里没有 Connection refused）" no_match 'refused' "$ERR"
 
     # RTMP：按播放速度推 2 秒。时长对得上、收到的包数和发出的相同、包内容和输入开头逐包相同、密钥不出现在输出里
     got=$W/got_rtmp.flv

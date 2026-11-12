@@ -310,7 +310,19 @@ int cmd_push(int argc, char **argv)
     sigaction(SIGTERM, &sa, NULL);
     signal(SIGPIPE, SIG_IGN);
 
-    /* ---- 连接。-o 给的选项先交给协议（avio_open2 取走它认识的），剩下的交给封装器 ---- */
+    /* FLV 开头的元数据里有时长和文件大小，写完文件尾要回去改；往网络上推改不了，会打印两条警告。
+     * 直播本来就没有时长：让封装器不写这两项（和 ffmpeg 命令行推 RTMP 时建议的 -flvflags no_duration_filesize 一样） */
+    if (!strcmp(oc->oformat->name, "flv") && !av_dict_get(opts, "flvflags", NULL, 0))
+        av_dict_set(&opts, "flvflags", "no_duration_filesize", 0);
+    /* 先让封装器检查所有流（avformat_init_output）：它装不下的编码（FLV 装不下 MPEG-4 视频之类，
+     * avformat_query_codec 对它们不一定说“不行”）要在连接之前就报错，不能等连上服务器、握手完了才发现。
+     * -o 给的选项里封装器认识的在这里取走，剩下的是协议的，交给 avio_open2 */
+    ret = avformat_init_output(oc, &opts);
+    if (ret < 0) {
+        mt_averr(ret, "输出格式 %s 装不下这个输入的流（流拷贝不能改编码，先用 mtool transcode 转成它装得下的）", oc->oformat->name);
+        goto end;
+    }
+    /* ---- 连接 ---- */
     if (!(oc->oformat->flags & AVFMT_NOFILE)) {
         ret = avio_open2(&oc->pb, url, AVIO_FLAG_WRITE, &oc->interrupt_callback, &opts);
         if (ret < 0) {
@@ -321,11 +333,13 @@ int cmd_push(int argc, char **argv)
         }
         opened = 1;
     }
-    /* FLV 开头的元数据里有时长和文件大小，写完文件尾要回去改；往网络上推改不了，会打印两条警告。
-     * 直播本来就没有时长：让封装器不写这两项（和 ffmpeg 命令行推 RTMP 时建议的 -flvflags no_duration_filesize 一样） */
-    if (!strcmp(oc->oformat->name, "flv") && !av_dict_get(opts, "flvflags", NULL, 0))
-        av_dict_set(&opts, "flvflags", "no_duration_filesize", 0);
-    ret = avformat_write_header(oc, &opts);
+    if (opts) {
+        const AVDictionaryEntry *e = av_dict_iterate(opts, NULL);
+
+        mt_err("协议和封装器 %s 都不认识选项 %s", oc->oformat->name, e->key);
+        goto end;
+    }
+    ret = avformat_write_header(oc, NULL);
     if (ret < 0) {
         if (stop_requested)
             goto interrupted_early;
@@ -333,12 +347,6 @@ int cmd_push(int argc, char **argv)
         goto end;
     }
     header_written = 1;
-    if (opts) {
-        const AVDictionaryEntry *e = av_dict_iterate(opts, NULL);
-
-        mt_err("协议和封装器 %s 都不认识选项 %s", oc->oformat->name, e->key);
-        goto end;
-    }
 
     mt_progress_start(&prog, "推流", dur > 0 ? dur : (loop >= 0 && ic->duration != AV_NOPTS_VALUE ?
                                                       ic->duration / (double)AV_TIME_BASE * (loop + 1) : 0));

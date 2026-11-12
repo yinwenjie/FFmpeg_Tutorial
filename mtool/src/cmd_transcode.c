@@ -71,7 +71,7 @@ typedef struct Transcode {
 
 typedef struct Opts {
     double      start, end, dur;
-    const char *vcodec, *acodec, *preset, *crf, *vf, *af, *fmt_name, *hw;
+    const char *vcodec, *acodec, *preset, *crf, *vf, *af, *fmt_name, *hw, *hw_device;
     double      vb, ab;
     int         gop, fps, width, box_w, box_h, ar, ac, threads;
     int         no_video, no_audio, no_rotate, faststart, overwrite;
@@ -95,7 +95,8 @@ static void usage(FILE *f)
             "      --vopt 名=值    直接交给视频编码器的选项（可以重复），例如 --vopt tune=film\n"
             "      --aopt 名=值    直接交给音频编码器的选项（可以重复）\n"
             "      --threads 数    编码线程数，默认 0（编码器自己决定）；1 的结果最可重复（L13）\n"
-            "      --hw 模式       none（默认）、auto、vaapi：用 VAAPI 硬件编码。auto 没有设备时退回软件，vaapi 没有设备就失败\n\n"
+            "      --hw 模式       none（默认）、auto、vaapi：用 VAAPI 硬件编码。auto 没有设备时退回软件，vaapi 没有设备就失败\n"
+            "      --hw-device 路径 VAAPI 设备，例如 /dev/dri/renderD129；不给就用默认的\n\n"
             "画面和声音：\n"
             "  -w, --width 宽      视频宽，高按比例（取偶数）\n"
             "      --size 宽x高    缩进这个框里，保持比例（和 -w 只能给一个）\n"
@@ -465,6 +466,12 @@ static int open_video_encoder(Transcode *t, const Opts *o, TStream *s, const AVC
     enc->sample_aspect_ratio    = av_buffersink_get_sample_aspect_ratio(s->graph.sink);
     enc->colorspace             = av_buffersink_get_colorspace(s->graph.sink);
     enc->color_range            = av_buffersink_get_color_range(s->graph.sink);
+    /* 没有 VUI 的 H.264 解码器不会说范围，但解出来的帧标的是“电视范围”（ffmpeg 命令行从第一帧的标记取）：
+     * 编码器的范围留空的话，MKV 少写一个 Colour 的 Range 元素，各种元数据和命令行不一样（L13） */
+    if (enc->color_range == AVCOL_RANGE_UNSPECIFIED &&
+        !(av_pix_fmt_desc_get(enc->pix_fmt)->flags & AV_PIX_FMT_FLAG_RGB))
+        enc->color_range = AVCOL_RANGE_MPEG;
+    enc->field_order            = dec->field_order != AV_FIELD_UNKNOWN ? dec->field_order : AV_FIELD_PROGRESSIVE;
     enc->chroma_sample_location = av_buffersink_get_chroma_location(s->graph.sink);
     enc->color_primaries        = dec->color_primaries;     /* 出口不提供原色和传输特性，照着解码器抄（L13、patch 0074） */
     enc->color_trc              = dec->color_trc;
@@ -616,6 +623,8 @@ static int setup_stream(Transcode *t, const Opts *o, TStream *s)
         return ret;
     }
     s->ost->time_base = s->enc->time_base;      /* 只是建议，写完文件头以后以复用器给的为准 */
+    if (s->type == AVMEDIA_TYPE_VIDEO && s->enc->framerate.num > 0)
+        s->ost->avg_frame_rate = s->enc->framerate;     /* MKV 的 DefaultDuration、FLV 元数据里的 framerate 都从这里来 */
     s->ost->sample_aspect_ratio = s->enc->sample_aspect_ratio;
     /* --no-rotate：像素没转，旋转信息要跟着带到输出流上 */
     if (s->type == AVMEDIA_TYPE_VIDEO && o->no_rotate) {
@@ -701,14 +710,14 @@ static void print_stream_summary(const TStream *s, const AVCodecParameters *in)
 int cmd_transcode(int argc, char **argv)
 {
     enum { OPT_VCODEC = 256, OPT_ACODEC, OPT_CRF, OPT_VB, OPT_AB, OPT_PRESET, OPT_GOP, OPT_VOPT, OPT_AOPT, OPT_THREADS, OPT_HW,
-           OPT_SIZE, OPT_FPS, OPT_AR, OPT_AC, OPT_VF, OPT_AF, OPT_NOROT, OPT_NOV, OPT_NOA, OPT_FAST };
+           OPT_SIZE, OPT_FPS, OPT_AR, OPT_AC, OPT_VF, OPT_AF, OPT_NOROT, OPT_NOV, OPT_NOA, OPT_FAST, OPT_HWDEV };
     static const struct option longopts[] = {
         { "vcodec", required_argument, NULL, OPT_VCODEC }, { "acodec", required_argument, NULL, OPT_ACODEC },
         { "crf", required_argument, NULL, OPT_CRF },       { "vb", required_argument, NULL, OPT_VB },
         { "ab", required_argument, NULL, OPT_AB },         { "preset", required_argument, NULL, OPT_PRESET },
         { "gop", required_argument, NULL, OPT_GOP },       { "vopt", required_argument, NULL, OPT_VOPT },
         { "aopt", required_argument, NULL, OPT_AOPT },     { "threads", required_argument, NULL, OPT_THREADS },
-        { "hw", required_argument, NULL, OPT_HW },         { "width", required_argument, NULL, 'w' },
+        { "hw", required_argument, NULL, OPT_HW },         { "hw-device", required_argument, NULL, OPT_HWDEV },         { "width", required_argument, NULL, 'w' },
         { "size", required_argument, NULL, OPT_SIZE },     { "fps", required_argument, NULL, OPT_FPS },
         { "ar", required_argument, NULL, OPT_AR },         { "ac", required_argument, NULL, OPT_AC },
         { "vf", required_argument, NULL, OPT_VF },         { "af", required_argument, NULL, OPT_AF },
@@ -811,6 +820,7 @@ int cmd_transcode(int argc, char **argv)
         case OPT_NOV: o.no_video = 1; break;
         case OPT_NOA: o.no_audio = 1; break;
         case OPT_FAST: o.faststart = 1; break;
+        case OPT_HWDEV: o.hw_device = optarg; break;
         case 's':
             if (mt_parse_time(optarg, &o.start) < 0)
                 USAGE("起点 %s 不是时间", optarg);
@@ -843,6 +853,8 @@ int cmd_transcode(int argc, char **argv)
         USAGE("-w 和 --size 只能给一个");
     if (o.no_video && o.no_audio)
         USAGE("--no-video 和 --no-audio 不能同时用");
+    if (o.hw_device && !strcmp(o.hw, "none"))
+        USAGE("--hw-device 要和 --hw vaapi 或者 --hw auto 一起用");
     if (!strcmp(in_path, out_path)) {
         mt_err("输入和输出是同一个文件，会把输入写坏：%s", in_path);
         goto end_noinput;
@@ -907,10 +919,10 @@ int cmd_transcode(int argc, char **argv)
     if (strcmp(o.hw, "none") && vi >= 0) {
         const enum AVHWDeviceType type = av_hwdevice_find_type_by_name("vaapi");
 
-        ret = type == AV_HWDEVICE_TYPE_NONE ? AVERROR(ENOSYS) : av_hwdevice_ctx_create(&t.hw_dev, type, NULL, NULL, 0);
+        ret = type == AV_HWDEVICE_TYPE_NONE ? AVERROR(ENOSYS) : av_hwdevice_ctx_create(&t.hw_dev, type, o.hw_device, NULL, 0);
         if (ret < 0) {
             if (!strcmp(o.hw, "vaapi")) {
-                mt_averr(ret, "打不开 VAAPI 设备（没有显卡、没有 /dev/dri，或者驱动没装）");
+                mt_averr(ret, "打不开 VAAPI 设备%s%s（没有显卡、没有 /dev/dri，或者驱动没装）", o.hw_device ? " " : "", o.hw_device ? o.hw_device : "");
                 goto end;
             }
             mt_warn("没有可用的 VAAPI 设备（%s），改用软件编码", av_err2str(ret));
