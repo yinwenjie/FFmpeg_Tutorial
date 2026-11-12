@@ -1,0 +1,54 @@
+From be02bd1fa00bc652918d6947639ad9073aa84184 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:23:34 +0000
+Subject: [PATCH] doc/examples/resample_audio: flush the resampler at the end
+
+The resampler keeps some samples buffered for the next call. The
+example never drains them, so the end of the signal is missing from
+the output: 480256 input samples at 48 kHz produce 441219 samples at
+44.1 kHz instead of 441236.
+
+Call swr_convert() without input after the main loop until no more
+samples are returned.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/resample_audio.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/doc/examples/resample_audio.c b/doc/examples/resample_audio.c
+index 24ed166..1982d1f 100644
+--- a/doc/examples/resample_audio.c
++++ b/doc/examples/resample_audio.c
+@@ -203,6 +203,27 @@ int main(int argc, char **argv)
+         }
+     } while (t < 10);
+ 
++    /* flush the resampler: the samples it still holds are returned when
++     * swr_convert() is called without input */
++    while ((ret = swr_convert(swr_ctx, dst_data, max_dst_nb_samples, NULL, 0)) > 0) {
++        dst_bufsize = av_samples_get_buffer_size(&dst_linesize, dst_nb_channels,
++                                                 ret, dst_sample_fmt, 1);
++        if (dst_bufsize < 0) {
++            fprintf(stderr, "Could not get sample buffer size\n");
++            goto end;
++        }
++        printf("flush out:%d\n", ret);
++        if (fwrite(dst_data[0], 1, dst_bufsize, dst_file) != dst_bufsize) {
++            fprintf(stderr, "Error writing to %s\n", dst_filename);
++            ret = AVERROR(EIO);
++            goto end;
++        }
++    }
++    if (ret < 0) {
++        fprintf(stderr, "Error while converting\n");
++        goto end;
++    }
++
+     if (fflush(dst_file)) {
+         fprintf(stderr, "Error writing to %s\n", dst_filename);
+         ret = AVERROR(EIO);
+-- 
+2.43.0
+

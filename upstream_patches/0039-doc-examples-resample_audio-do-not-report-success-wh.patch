@@ -1,0 +1,39 @@
+From 8f2019736f957847b4afee183b050a479226b64e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:23:09 +0000
+Subject: [PATCH] doc/examples/resample_audio: do not report success when the
+ reallocation fails
+
+When the destination buffer has to grow and av_samples_alloc() fails,
+the loop is left with break. The code after the loop then overwrites
+the error code, prints "Resampling succeeded" and the program returns
+0 although the output is truncated.
+
+Jump to the cleanup code instead, like the other error paths do.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/resample_audio.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/resample_audio.c b/doc/examples/resample_audio.c
+index 4b33af7..e60a0a3 100644
+--- a/doc/examples/resample_audio.c
++++ b/doc/examples/resample_audio.c
+@@ -176,8 +176,10 @@ int main(int argc, char **argv)
+             av_freep(&dst_data[0]);
+             ret = av_samples_alloc(dst_data, &dst_linesize, dst_nb_channels,
+                                    dst_nb_samples, dst_sample_fmt, 1);
+-            if (ret < 0)
+-                break;
++            if (ret < 0) {
++                fprintf(stderr, "Could not allocate destination samples\n");
++                goto end;
++            }
+             max_dst_nb_samples = dst_nb_samples;
+         }
+ 
+-- 
+2.43.0
+
