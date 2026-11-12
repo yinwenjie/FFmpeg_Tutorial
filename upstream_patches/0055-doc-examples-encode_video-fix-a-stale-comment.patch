@@ -1,0 +1,30 @@
+From f14932a0d71f38fb586ae386576f43aa5f34c8a0 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:36:03 +0000
+Subject: [PATCH] doc/examples/encode_video: fix a stale comment
+
+The encoder is selected by the name given on the command line; it has
+not been hardcoded to mpeg1video for a long time.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_video.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/encode_video.c b/doc/examples/encode_video.c
+index d429b3c..279eda5 100644
+--- a/doc/examples/encode_video.c
++++ b/doc/examples/encode_video.c
+@@ -87,7 +87,7 @@ int main(int argc, char **argv)
+     filename = argv[1];
+     codec_name = argv[2];
+ 
+-    /* find the mpeg1video encoder */
++    /* find the encoder with the requested name */
+     codec = avcodec_find_encoder_by_name(codec_name);
+     if (!codec) {
+         fprintf(stderr, "Codec '%s' not found\n", codec_name);
+-- 
+2.43.0
+
