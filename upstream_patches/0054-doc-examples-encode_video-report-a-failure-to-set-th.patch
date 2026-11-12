@@ -1,0 +1,41 @@
+From 9a2a1ad519b4e76df8fe73773edfcb2728716ca4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:35:53 +0000
+Subject: [PATCH] doc/examples/encode_video: report a failure to set the preset
+
+The example sets the "preset" private option to "slow" for every
+H.264 encoder and ignores the result. Not every H.264 encoder has such
+an option (h264_vaapi and h264_v4l2m2m do not), and in that case the
+request is dropped without a word.
+
+Print the error returned by av_opt_set() so that the user knows the
+option was not applied. It is not treated as fatal, as encoding can
+continue with the encoder's defaults.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_video.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/encode_video.c b/doc/examples/encode_video.c
+index c8168a1..d429b3c 100644
+--- a/doc/examples/encode_video.c
++++ b/doc/examples/encode_video.c
+@@ -123,8 +123,11 @@ int main(int argc, char **argv)
+     c->max_b_frames = 1;
+     c->pix_fmt = AV_PIX_FMT_YUV420P;
+ 
+-    if (codec->id == AV_CODEC_ID_H264)
+-        av_opt_set(c->priv_data, "preset", "slow", 0);
++    if (codec->id == AV_CODEC_ID_H264) {
++        ret = av_opt_set(c->priv_data, "preset", "slow", 0);
++        if (ret < 0)
++            fprintf(stderr, "Could not set the preset: %s\n", av_err2str(ret));
++    }
+ 
+     /* open it */
+     ret = avcodec_open2(c, codec, NULL);
+-- 
+2.43.0
+

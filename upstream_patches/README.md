@@ -77,6 +77,9 @@
 | [0050](0050-doc-examples-decode_filter_-audio-video-flush-the-de.patch) | decode_filter_audio.c、decode_filter_video.c | 错误 | 文件读完后不冲刷解码器，125 帧的 H.264 文件只处理了 123 帧 | L12 |
 | [0051](0051-doc-examples-decode_filter_audio-fix-the-ffplay-comm.patch) | decode_filter_audio.c | 已废弃 | 用法里提示的 ffplay 命令用了已经删除的 `-ac` 选项 | L12 |
 | [0052](0052-doc-examples-decode_filter_audio-check-for-write-err.patch) | decode_filter_audio.c | 错误 | 不检查写标准输出是否成功，写不出去时照常报告成功 | L12 |
+| [0053](0053-doc-examples-encode_video-check-for-write-errors.patch) | encode_video.c | 错误 | 不检查 fwrite 和 fclose 的结果，写不出去时照常报告成功 | L13 |
+| [0054](0054-doc-examples-encode_video-report-a-failure-to-set-th.patch) | encode_video.c | 不符合规范 | 给所有 H.264 编码器设 `preset` 私有选项却不看结果，编码器没有这个选项时没有任何提示 | L13 |
+| [0055](0055-doc-examples-encode_video-fix-a-stale-comment.patch) | encode_video.c | 不符合规范 | 注释还写着“查找 mpeg1video 编码器”，实际按命令行给的名字查找 | L13 |
 
 ## 怎么使用
 
@@ -89,7 +92,8 @@
 0034 到 0037 都改 scale_video.c，
 0038 到 0041 都改 resample_audio.c，
 0042 到 0047 都改 filter_audio.c，
-0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c），所以要按编号顺序应用：
+0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c，
+0016、0053 到 0055 都改 encode_video.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -113,7 +117,7 @@ make -j"$(nproc)" examples
    demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
    filter_audio（0042 到 0047）一组、
-   decode_filter_audio 和 decode_filter_video（0048 到 0052）一组。
+   decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -888,6 +892,33 @@ rc=0
 
 `print_frame()` 用 `fputc()` 逐字节写，从不看结果。修复后每帧写完检查 `ferror(stdout)`，
 出错时打印 `Error while writing the filtered audio` 并以退出码 1 结束。
+
+### 0053 encode_video 不检查写文件是否成功
+
+```console
+$ doc/examples/encode_video /dev/full mpeg1video >/dev/null 2>&1; echo $?
+0
+```
+
+修复后 `fwrite()` 和 `fclose()` 的结果都检查，同一条命令的退出码是 1。正常输出不变：修复前后编出的 `mpeg1video` 文件逐字节相同。
+
+### 0054 encode_video 设置 preset 失败时没有提示
+
+示例对所有 H.264 编码器执行 `av_opt_set(c->priv_data, "preset", "slow", 0)`，不看返回值。
+`preset` 是 libx264 等编码器的私有选项，h264_vaapi、h264_v4l2m2m 没有这个选项，这时设置被悄悄丢掉。
+
+修复后：
+
+```console
+$ doc/examples/encode_video out.264 h264_vaapi 2>&1 | grep preset
+Could not set the preset: Option not found
+```
+
+只打印，不退出，因为编码器用默认设置仍然可以工作（这条命令后面仍然会因为 h264_vaapi 不接受 yuv420p 而失败，那是另一回事）。libx264 下没有这行输出。
+
+### 0055 encode_video 的过时注释
+
+`/* find the mpeg1video encoder */` 下面的代码是 `avcodec_find_encoder_by_name(codec_name)`，编码器由命令行第二个参数决定。只改注释。
 
 ## 已记录、暂未制作 patch 的观察项
 

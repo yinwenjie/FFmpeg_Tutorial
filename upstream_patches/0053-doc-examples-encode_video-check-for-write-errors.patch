@@ -1,0 +1,52 @@
+From dfda21e44184da5ab0db5ea88d8b701831b0950c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:35:42 +0000
+Subject: [PATCH] doc/examples/encode_video: check for write errors
+
+The return values of fwrite() and fclose() were ignored, so the example
+reported success even when nothing could be written:
+
+    $ ./encode_video /dev/full mpeg1video; echo $?
+    0
+
+Check the writes and the close, and exit with a failure status when
+they fail.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_video.c | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/encode_video.c b/doc/examples/encode_video.c
+index f52a4fb..c8168a1 100644
+--- a/doc/examples/encode_video.c
++++ b/doc/examples/encode_video.c
+@@ -61,7 +61,10 @@ static void encode(AVCodecContext *enc_ctx, AVFrame *frame, AVPacket *pkt,
+         }
+ 
+         printf("Write packet %3"PRId64" (size=%5d)\n", pkt->pts, pkt->size);
+-        fwrite(pkt->data, 1, pkt->size, outfile);
++        if (fwrite(pkt->data, 1, pkt->size, outfile) != pkt->size) {
++            fprintf(stderr, "Error writing the encoded data\n");
++            exit(1);
++        }
+         av_packet_unref(pkt);
+     }
+ }
+@@ -206,7 +209,11 @@ int main(int argc, char **argv)
+      */
+     if (codec->id == AV_CODEC_ID_MPEG1VIDEO || codec->id == AV_CODEC_ID_MPEG2VIDEO)
+         fwrite(endcode, 1, sizeof(endcode), f);
+-    fclose(f);
++    ret = ferror(f);
++    if (fclose(f) || ret) {
++        fprintf(stderr, "Error writing %s\n", filename);
++        exit(1);
++    }
+ 
+     avcodec_free_context(&c);
+     av_frame_free(&frame);
+-- 
+2.43.0
+
