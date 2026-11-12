@@ -647,6 +647,8 @@ PY
         yes "transcode --hw auto 没有显卡：输出和 --hw none 的逐字节相同" cmp -s "$W/hwa1.mp4" "$W/hwn1.mp4"
         run transcode transcode -y --vcodec h264_vaapi "$S/h264_aac.mp4" "$W/hwb.mp4"
         eq "transcode --vcodec h264_vaapi 没有 --hw：退出码 1" 1 $RC
+    else
+        echo "  （这台机器有 /dev/dri：跳过上面 13 项“没有显卡时”的检查，总数会比没有 /dev/dri 的机器少 13 项）"
     fi
     run transcode transcode -y --hw none "$S/h264_aac.mp4" "$W/hwn.mp4";   eq "transcode --hw none：退出码 0" 0 $RC
     run transcode transcode -y --hw vaapi --hw-device /nonexistent_device "$S/h264_aac.mp4" "$W/hwd.mp4"

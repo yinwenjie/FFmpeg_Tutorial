@@ -135,7 +135,7 @@ mtool/tests/run_tests.sh thumb audio                      # 只测这几个（co
 BUILD=mtool/build-asan mtool/tests/run_tests.sh           # 测 ASan 构建
 ```
 
-每一次运行都检查有没有 sanitizer 报告，每一项“算通过”的标准写死在脚本里。数字都是和 ffprobe、ffmpeg 命令行对出来的，不是“看着差不多”。当前共 1360 项（`common` 12、`info` 150、`cut` 161、`thumb` 166、`audio` 335、`transcode` 320、`push` 216），普通构建和 ASan 加 UBSan 构建都全部通过，各约 85 到 90 秒（`push` 一节要按播放速度推流，占其中约 18 秒）。一条命令做完编译加两份测试：`mtool/scripts/check.sh`（约 3 分钟）。`push` 的测试要在本机起 `ffmpeg` 当接收端：端口从 21000 到 41000 之间随机选一个起点，每个接收端往上用一个，共几十个。
+每一次运行都检查有没有 sanitizer 报告，每一项“算通过”的标准写死在脚本里。数字都是和 ffprobe、ffmpeg 命令行对出来的，不是“看着差不多”。当前共 1360 项（`common` 12、`info` 150、`cut` 161、`thumb` 166、`audio` 335、`transcode` 320、`push` 216），普通构建和 ASan 加 UBSan 构建都全部通过，各约 85 到 90 秒（`push` 一节要按播放速度推流，占其中约 18 秒）。这个总数是在没有 `/dev/dri` 的机器上数的：有 `/dev/dri` 时，`transcode` 里 13 项“没有显卡时 `--hw vaapi` 要失败、`--hw auto` 要退回软件”的检查会跳过（那时有没有设备要看设备本身），脚本会打印一行说明；GitHub Actions 上跑出来是 1347 项，差的正好是这 13 项。一条命令做完编译加两份测试：`mtool/scripts/check.sh`（约 3 分钟）。`push` 的测试要在本机起 `ffmpeg` 当接收端：端口从 21000 到 41000 之间随机选一个起点，每个接收端往上用一个，共几十个。
 
 ## mtool info
 
@@ -518,7 +518,7 @@ $ mtool push --no-pace --loop 2 samples/mtool/h264_aac.mp4 tcp://127.0.0.1:19370
 | `transcode` 输出时长误差 < 0.1 秒（ffprobe） | 14 个文件转 MP4，读输入输出的 `format=duration`；程序自己转完也重新打开输出读一遍 | 最大 0.055 秒（`h264_aac.flv`），见上面的表 |
 | 没有明显的音视频不同步 | 输出里音视频两路的开头差和时长差 | 8 个有音视频两路的好文件最大 0.040 秒、0.039 秒 |
 | ASan 无泄漏、无越界 | `make SANITIZE=address,undefined`，每次运行都检查 sanitizer 报告，同样的全部测试再跑一遍 | 通过 |
-| 有 README、自动化测试、CI 配置 | 本文件；`tests/run_tests.sh`；`.github/workflows/mtool.yml` | CI 配置没有在 GitHub 上跑过，见下 |
+| 有 README、自动化测试、CI 配置 | 本文件；`tests/run_tests.sh`；`.github/workflows/mtool.yml` | 都有；CI 在 GitHub Actions 上第一次运行就通过了，见“持续集成” |
 | L22 的约定：退出码只有 0/1/2、错误写 stderr、版本检查、ASan 构建 | `mtool --version`（头文件和运行时库的版本检查）；测试里逐项检查 | 通过 |
 | VAAPI 硬件编码 | `scripts/verify_hw.sh` | **没有验证**（没有显卡），见【待补 1】 |
 
@@ -532,7 +532,9 @@ mtool/scripts/check.sh plain     # 只有普通构建
 mtool/scripts/check.sh asan      # 只有 ASan 构建
 ```
 
-CI 跑的就是 `check.sh`，所以本机改完代码跑它，结果和 CI 一致。**写这段的时候，CI 配置还没有在 GitHub 上跑过。**本机能验证的都验证了：YAML 能解析，`check.sh` 的每一步（`-Werror` 编译、ASan 构建、两遍测试）在本机从头到尾跑通（3 分钟，1360 项 × 2）。第一次在 GitHub 上跑可能要调的地方：缓存路径（`ffmpeg_build` 在工作目录下，`--enable-rpath` 编译的库能不能原样用）、`ubuntu-24.04` 上的包名。
+CI 跑的就是 `check.sh`，所以本机改完代码跑它，结果和 CI 一致。
+
+**GitHub Actions 上的第一次运行**（PR #33，`ubuntu-24.04`，没有改过工作流）通过了：装依赖约 23 秒，缓存没有命中所以编译 FFmpeg 用了约 5 分钟，`check.sh` 约 2 分 40 秒；普通构建和 ASan 加 UBSan 构建的 `-Werror` 编译都过，两份构建各 **1347 项全部通过**，最后一行是“mtool 全部检查通过”。1347 比本机的 1360 少 13 项，原因见上面“自动化测试”：那 13 项只在没有 `/dev/dri` 时才跑，少的数正好是 13，所以运行器上应该有 `/dev/dri`（当时没有直接去查，加了说明那一行以后的运行会在日志里打印出来）。工作流最后把 `ffmpeg_build` 存进了缓存；**下一次运行能不能命中缓存、`--enable-rpath` 编译的库从缓存还原后能不能用，还没有验证**（要看之后的运行）。CI 里没有跑 `verify_hw.sh`，所以 VAAPI 编码仍然没有在真实设备上验证过（见【待补 1】）。
 
 ## 练习
 
