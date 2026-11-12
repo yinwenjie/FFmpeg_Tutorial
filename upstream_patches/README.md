@@ -15,10 +15,10 @@
 | 项目 | 值 |
 | --- | --- |
 | 制作和测试所用的提交 | `a337e8ddaa`（课程固定使用的版本，2026-11-10） |
-| 复核时的上游 master | `40a5422`（2026-11-12），`doc/examples` 与 `a337e8ddaa` 完全相同，`configure` 只有一行（AMF 版本号）不同，不影响 patch |
+| 复核时的上游 master | `539da4e3d7`（2026-11-12），`doc/examples`、`libavformat/aviobuf.c` 与 `a337e8ddaa` 完全相同，`configure` 只有一行（AMF 版本号）不同，不影响 patch |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `40a5422` 上用 `git am` 按顺序应用无冲突。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `539da4e3d7` 上用 `git am` 按顺序应用无冲突（0001 到 0084）。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -106,6 +106,9 @@
 | [0079](0079-doc-examples-transcode_aac-do-not-drop-the-frames-th.patch) | transcode_aac.c | 错误 | 读到文件尾就宣布解码结束，带 `AV_CODEC_CAP_DELAY` 的解码器（WMA、APE……）留在里面的最后几帧丢了，输出少一整帧 | L17 |
 | [0080](0080-doc-examples-transcode_aac-accept-inputs-that-have-m.patch) | transcode_aac.c | 不满足现有需求 | 输入不止一路流就拒绝（`Expected one audio input stream`），视频文件里的音轨、带封面图的音乐文件都用不了 | L17 |
 | [0081](0081-doc-examples-transcode_aac-copy-the-metadata-of-the-.patch) | transcode_aac.c | 不满足现有需求 | 不拷贝容器和流的元数据，转出来的文件没有标题、艺术家 | L17 |
+| [0082](0082-doc-examples-avio_read_callback-avoid-comparing-int-.patch) | avio_read_callback.c | 不符合规范 | `FFMIN` 拿 `int` 和 `size_t` 比较，`-Wall -Wextra` 下有 `-Wsign-compare` 警告 | L18 |
+| [0083](0083-doc-examples-avio_read_callback-add-a-seek-callback.patch) | avio_read_callback.c | 不满足现有需求 | 只提供读回调、没有 seek 回调：`moov` 在文件尾的 MP4 读不出包，像素格式未知，却不报错；TS、MP2 的时长未知 | L18 |
+| [0084](0084-avformat-aviobuf-pad-the-dynamic-buffer-after-the-la.patch) | **libavformat/aviobuf.c**（不是示例） | 错误 | `avio_close_dyn_buf()` 把补的 64 字节零写在当前位置，不一定是数据末尾：flv、aiff、caf、asf 写出来的结果被盖掉 64 字节，长度也少 64 字节 | L18 |
 
 ## 怎么使用
 
@@ -121,7 +124,7 @@
 0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c，
 0016、0053 到 0055 都改 encode_video.c，
 0010、0016、0056 到 0061 都改 encode_audio.c，
-0062 到 0070 都改 mux.c，0078 到 0081 都改 transcode_aac.c），所以要按编号顺序应用：
+0062 到 0070 都改 mux.c，0078 到 0081 都改 transcode_aac.c，0082、0083 都改 avio_read_callback.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -146,7 +149,8 @@ make -j"$(nproc)" examples
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
    filter_audio（0042 到 0047）一组、
    decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组，
-   encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组，transcode_aac（0078 到 0081）一组。
+   encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组，transcode_aac（0078 到 0081）一组，
+   avio_read_callback（0082、0083）一组。**0084 改的是 libavformat，不是示例**，要单独提交，邮件主题和评审的人都不一样（`avformat/aviobuf: ...`），不要和示例的 patch 放在一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -1262,13 +1266,81 @@ format
 标题和艺术家是音乐库里一个文件的身份，转码以后全丢了。修复后在写文件头之前用 `av_dict_copy()` 拷贝容器和这一路流的元数据，
 再复制流的 `disposition`；输出与 `ffmpeg -i in -c:a aac -b:a 96k -ac 2 out.m4a` 逐字节相同（FLAC 和 Matroska 的输入试过）。
 
+### 0082 avio_read_callback 的符号比较警告
+
+```console
+$ gcc -std=c11 -Wall -Wextra -c doc/examples/avio_read_callback.c -o /dev/null $(pkg-config --cflags libavformat libavcodec libavutil)
+warning: comparison of integer expressions of different signedness: 'int' and 'size_t' {aka 'long unsigned int'} [-Wsign-compare]
+```
+
+`read_packet()` 里的 `FFMIN(buf_size, bd->size)`。回调的 `buf_size` 不会是负数，转成 `size_t` 不改变行为。
+
+### 0083 avio_read_callback 没有 seek 回调
+
+`avio_alloc_context()` 的最后一个参数是 `NULL`，得到的 `AVIOContext` 不能 seek，而示例不报错：
+
+```console
+$ doc/examples/avio_read_callback $S/small_360p25.mp4 2>&1 >/dev/null | head -3
+[mov,mp4,m4a,3gp,3g2,mj2 @ 0x...] stream 0, offset 0x30: partial file
+[mov,mp4,m4a,3gp,3g2,mj2 @ 0x...] Could not find codec parameters for stream 0 (Video: h264 (avc1 / 0x31637661), none, 640x360, 770 kb/s): unspecified pixel format
+Consider increasing the value for the 'analyzeduration' (0) and 'probesize' (5000000) options
+$ doc/examples/avio_read_callback $S/small_360p25.mp4 2>/dev/null | wc -l
+138
+$ doc/examples/avio_read_callback $S/small_360p25.mp4 >/dev/null 2>&1; echo $?
+0
+```
+
+`ffmpeg` 默认写出的 MP4 把 `moov` 放在文件尾，读它要么 seek 到末尾，要么把整个 `mdat` 读过去。
+没有 seek 回调时只能后者：138 次读回调读完整个 563 kB 的文件，而 `mdat` 读过去以后回不来，视频流的像素格式是 `none`，视频包一个也读不出来；
+程序却照常返回 0，只有 `av_dump_format()` 的输出里看得出来。
+修复后加一个处理 `SEEK_SET`、`SEEK_CUR`、`SEEK_END` 和 `AVSEEK_SIZE` 的 seek 回调：6 次读回调，`yuv420p`，码率 901 kb/s。
+MPEG-TS（时长 N/A，修复后 5.039 秒）和 MP2（时长 N/A，修复后 5.016 秒）也一样。
+
+提交信息里有一句不准确：“MPEG-TS and MP2 files lose their duration and bitrate”。实测 TS 丢时长和码率，**MP2 只丢时长，码率还在**（128 kb/s，来自帧头）。
+提交之前请改成 “MPEG-TS files lose their duration and bitrate, and MP2 files their duration”。
+
+### 0084 avio_close_dyn_buf 把补的零写在了数据中间
+
+这是 **libavformat 的问题**，不是示例的问题：L18 用 `avio_open_dyn_buf()` 把输出写进内存，对比直接写文件时发现的。
+`avio_close_dyn_buf()` 在数据后面补 `AV_INPUT_BUFFER_PADDING_SIZE`（64）字节的零，补在**当前写位置**上，再返回“总长度减 64”。
+写位置在数据末尾时没有问题。但有的复用器在 `write_trailer()` 里回头改文件头（时长、文件大小），改完就停在那里，不 seek 回末尾，
+这时 64 个零盖在了数据中间，返回的长度又少了 64，文件尾被截掉。
+
+课程里的 `L18_avio_callbacks/avio_mem_out` 用同一个输入分别写文件（`mode=file`）和写 `avio_open_dyn_buf()`（`mode=dyn`），逐字节比较（`bitexact=1`）：
+
+```console
+$ L18_avio_callbacks/build/avio_mem_out $S/small_360p25.mp4 flv /tmp/file.flv mode=file bitexact=1
+$ L18_avio_callbacks/build/avio_mem_out $S/small_360p25.mp4 flv /tmp/dyn.flv  mode=dyn  bitexact=1
+$ stat -c %s /tmp/file.flv /tmp/dyn.flv
+564393
+564329
+$ cmp -l /tmp/file.flv /tmp/dyn.flv 2>/dev/null | wc -l
+37
+$ ffprobe -v error -count_packets -show_entries stream=nb_read_packets -of csv=p=0 /tmp/dyn.flv 2>/dev/null | tr '\n' ' '
+N/A N/A
+```
+
+受影响的格式（用 1 秒的音频或本讲的视频素材逐个试过）：
+
+| 格式 | 写文件 | `avio_open_dyn_buf()` |
+| --- | --- | --- |
+| flv | 119467 字节（1 秒的视频素材） | 119403 字节 |
+| aiff | 176454 字节 | 176390 字节 |
+| caf | 176492 字节 | 176428 字节 |
+| asf | 19644 字节 | 19580 字节 |
+| mp4、matroska、mpegts、wav、flac | 相同 | 相同，没有问题 |
+
+在 `539da4e3d7`（上游 master）上打 0084 重新编译，flv、aiff、caf、asf 的两种输出都逐字节相同，mp4、matroska、wav 的输出不变；`valgrind` 没有报错。
+修复的办法是：先 `avio_flush()`，再把 `DynBuffer` 的写位置设到数据末尾，然后才补零。
+课程用的是没有打这个补丁的 libavformat，`avio_mem_out` 的 `dynend=1` 在关闭之前先把位置移到末尾（`avio_get_dyn_buf()` 得到长度，再 `avio_seek(pb, size, SEEK_SET)`），可以绕开。
+没有为它写 FATE 测试：`libavformat/tests` 里没有动态缓冲区的测试，提交时评审可能会要求加一个。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
 
 | 涉及文件 | 观察 | 计划处理的课次 |
 | --- | --- | --- |
-| avio_read_callback.c | 只提供读回调、没有 seek 回调。`moov` 在文件末尾的 MP4 读不到完整的流参数（报 `partial file` 和 `unspecified pixel format`） | L18 |
 | avio_http_serve_files.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告（filter_audio.c 的同类问题已在 0042 改掉） | L19 |
 
 transcode_aac.c 在 L17 研究过，除了 0078 到 0081，下面几处也看到了，但各自要改的地方比较大或者属于风格问题，暂时没有制作 patch：

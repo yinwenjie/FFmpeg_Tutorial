@@ -1,5 +1,5 @@
 From cab01b6b0e02a731ebedd1ceb81de08357e39c34 Mon Sep 17 00:00:00 2001
-From: t <a@b>
+From: Claude <noreply@anthropic.com>
 Date: Thu, 12 Nov 2026 16:19:41 +0000
 Subject: [PATCH] doc/examples/transcode_aac: do not drop the frames that are
  left in the decoder

@@ -1,0 +1,39 @@
+From ae2e9a9f4dab1ba5d0bfb5125818707accc8edd0 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:15:40 +0000
+Subject: [PATCH 82/84] doc/examples/avio_read_callback: avoid comparing int
+ with size_t
+
+FFMIN(buf_size, bd->size) compares an int with a size_t, which makes
+gcc -Wextra warn about the signedness of the comparison:
+
+    warning: comparison of integer expressions of different signedness:
+    'int' and 'size_t'
+
+libavformat never calls the read callback with a negative size, so
+casting buf_size to size_t does not change what the example does. It
+just lets the example build without warnings when someone copies it
+into a project that compiles with -Wall -Wextra.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/avio_read_callback.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/avio_read_callback.c b/doc/examples/avio_read_callback.c
+index 0a299b4c73..d95b4fe11f 100644
+--- a/doc/examples/avio_read_callback.c
++++ b/doc/examples/avio_read_callback.c
+@@ -42,7 +42,7 @@ struct buffer_data {
+ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
+ {
+     struct buffer_data *bd = (struct buffer_data *)opaque;
+-    buf_size = FFMIN(buf_size, bd->size);
++    buf_size = FFMIN((size_t)buf_size, bd->size);
+ 
+     if (!buf_size)
+         return AVERROR_EOF;
+-- 
+2.43.0
+

@@ -1,5 +1,5 @@
 From 3343f2dc462bd850f07832f47150377ac79f861b Mon Sep 17 00:00:00 2001
-From: t <a@b>
+From: Claude <noreply@anthropic.com>
 Date: Thu, 12 Nov 2026 16:21:19 +0000
 Subject: [PATCH] doc/examples/transcode_aac: copy the metadata of the input
 

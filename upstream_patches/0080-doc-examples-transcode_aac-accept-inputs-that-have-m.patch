@@ -1,5 +1,5 @@
 From 6823b56392bcec83e28842b1ba80d77a5e93f12a Mon Sep 17 00:00:00 2001
-From: t <a@b>
+From: Claude <noreply@anthropic.com>
 Date: Thu, 12 Nov 2026 16:20:46 +0000
 Subject: [PATCH] doc/examples/transcode_aac: accept inputs that have more than
  one stream

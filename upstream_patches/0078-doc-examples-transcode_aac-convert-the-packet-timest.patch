@@ -1,5 +1,5 @@
 From 95ffa62e25bd70b73e6c7c610eca2c915eb2bb9b Mon Sep 17 00:00:00 2001
-From: t <a@b>
+From: Claude <noreply@anthropic.com>
 Date: Thu, 12 Nov 2026 16:19:10 +0000
 Subject: [PATCH] doc/examples/transcode_aac: convert the packet timestamps to
  the stream time base
