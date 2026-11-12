@@ -22,6 +22,7 @@ typedef struct Command {
 static const Command commands[] = {
     { "info",      cmd_info,      "显示容器、流、GOP 和帧类型统计，可以输出 JSON" },
     { "cut",       cmd_cut,       "不转码截取一段，可以同时换容器" },
+    { "thumb",     cmd_thumb,     "按时间间隔或关键帧生成缩略图，或者拼成一张图" },
 };
 
 static void usage(FILE *f)

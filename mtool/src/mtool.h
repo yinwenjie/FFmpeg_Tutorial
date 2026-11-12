@@ -14,6 +14,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <libavcodec/avcodec.h>
+#include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
 
 #define MT_OK    0
@@ -41,6 +43,24 @@ int  mt_usage_err(const char *cmd, const char *fmt, ...) av_printf_format(2, 3);
 int mt_open_input(AVFormatContext **ctx, const char *path);
 /* 把 AVERROR 翻译成给用户看的一句话（比 av_strerror 多一句“可能是什么原因”）。 */
 const char *mt_errhint(int averr);
+
+/* ---- 解码器和滤镜图（media.c，来自 L5、L11、L12、L16） ---- */
+/* 为一路流打开解码器；失败时已经打印好错误。 */
+int mt_open_decoder(const AVStream *st, int keyframes_only, AVCodecContext **dec);
+
+typedef struct MtGraph {
+    AVFilterGraph   *graph;
+    AVFilterContext *src, *sink;
+} MtGraph;
+/*
+ * 建滤镜图：入口按解码器的参数，中间是 desc（滤镜图描述，写法和 ffmpeg 的 -vf、-af 相同），
+ * 出口只接受 enc 支持的格式（enc 为 NULL 不限制）；格式对不上时图会自动插入 scale、aresample。
+ * frame_rate 只用于视频入口，未知填 {0, 1}。失败时已经打印好错误。
+ */
+int  mt_graph_init(MtGraph *g, AVCodecContext *dec, AVRational frame_rate, const char *desc, const AVCodec *enc);
+void mt_graph_free(MtGraph *g);
+/* 视频流的显示矩阵转成“让画面朝上”的滤镜（和 ffmpeg 命令行自动旋转的做法相同）。没有旋转写成空字符串。 */
+void mt_rotation_filter(const AVStream *st, char *buf, size_t size);
 
 /* ---- 时间：接受“90”“1.5”“1:30”“01:02:03.5”，成功返回 0，结果是秒 ---- */
 int mt_parse_time(const char *s, double *seconds);

@@ -8,6 +8,7 @@ run_tests.sh 用的几个小帮手：读 mtool 输出的 JSON，比较两份逐�
   helpers.py fmt      x.json 键          format 里的值（duration nb_streams format_name）
   helpers.py slice    全部.txt 一段.txt   一段的每一行是不是全部.txt 里连续的一段（逐包 CRC 的比较）
   helpers.py sheet    x.png              打印图片的宽 高（只认 PNG 和 JPEG）
+  helpers.py picktimes pts.txt 间隔秒     按 thumb 的规则从帧时间清单里挑出该取的帧，每行一个时间（3 位小数）
 """
 import json
 import struct
@@ -64,6 +65,16 @@ def main():
                 sys.exit(0)
         print('not-a-slice')
         sys.exit(1)
+    elif cmd == 'picktimes':
+        # 规则（和 cmd_thumb.c 一样）：取第一个时间不小于 next 的帧（留 1e-6 的误差），next 从 0 开始，取了以后 next = (floor(t / 间隔) + 1) * 间隔
+        import math
+        interval = float(sys.argv[3])
+        times = [float(l) for l in open(sys.argv[2]) if l.strip()]
+        nxt = 0.0
+        for t in times:
+            if t >= nxt - 1e-6:
+                print('%.3f' % t)
+                nxt = (math.floor(t / interval) + 1) * interval
     elif cmd == 'sheet':
         data = open(sys.argv[2], 'rb').read()
         if data[:8] == b'\x89PNG\r\n\x1a\n':
