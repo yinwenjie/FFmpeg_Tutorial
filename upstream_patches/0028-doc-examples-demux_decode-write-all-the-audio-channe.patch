@@ -1,0 +1,99 @@
+From caef988a76a569e205c976efb3802ab12619ee0e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 06:36:13 +0000
+Subject: [PATCH] doc/examples/demux_decode: write all the audio channels
+
+output_audio_frame() writes nb_samples * bytes_per_sample bytes of the
+first plane. For planar formats this is the first channel only, which
+the example warns about. For packed formats it is not "fine" as the
+comment claims: the first plane holds nb_samples * channels samples, so
+with more than one channel only the first part of every frame is
+written, while the printed ffplay command names the full channel layout.
+For 5 seconds of stereo FLAC the output is 882000 bytes of s32le where
+1764000 are expected, and it plays as fragments at the wrong speed.
+
+Write the whole plane for packed formats and interleave the planes for
+planar formats, as decode_audio does, and print the ffplay command for
+the real channel layout.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/demux_decode.c | 44 ++++++++++++++++++-------------------
+ 1 file changed, 21 insertions(+), 23 deletions(-)
+
+diff --git a/doc/examples/demux_decode.c b/doc/examples/demux_decode.c
+index a3602b3..396056c 100644
+--- a/doc/examples/demux_decode.c
++++ b/doc/examples/demux_decode.c
+@@ -89,20 +89,28 @@ static int output_video_frame(AVFrame *frame)
+ 
+ static int output_audio_frame(AVFrame *frame)
+ {
+-    size_t unpadded_linesize = frame->nb_samples * av_get_bytes_per_sample(frame->format);
++    const int bps      = av_get_bytes_per_sample(frame->format);
++    const int channels = frame->ch_layout.nb_channels;
++
+     printf("audio_frame n:%d nb_samples:%d pts:%s\n",
+            audio_frame_count++, frame->nb_samples,
+            av_ts2timestr(frame->pts, &audio_stream->time_base));
+ 
+-    /* Write the raw audio data samples of the first plane. This works
+-     * fine for packed formats (e.g. AV_SAMPLE_FMT_S16). However,
+-     * most audio decoders output planar audio, which uses a separate
+-     * plane of audio samples for each channel (e.g. AV_SAMPLE_FMT_S16P).
+-     * In other words, this code will write only the first audio channel
+-     * in these cases.
+-     * You should use libswresample or libavfilter to convert the frame
+-     * to packed data. */
+-    fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
++    /* A raw audio file contains interleaved samples. Packed formats
++     * (e.g. AV_SAMPLE_FMT_S16) already store the samples of all channels
++     * interleaved in the first plane. Planar formats
++     * (e.g. AV_SAMPLE_FMT_S16P), which most audio decoders output, use a
++     * separate plane for each channel, so the samples have to be
++     * interleaved here.
++     * libswresample or libavfilter can be used to convert a frame to
++     * another sample format, sample rate or channel layout. */
++    if (av_sample_fmt_is_planar(frame->format)) {
++        for (int i = 0; i < frame->nb_samples; i++)
++            for (int ch = 0; ch < channels; ch++)
++                fwrite(frame->extended_data[ch] + bps * i, 1, bps, audio_dst_file);
++    } else {
++        fwrite(frame->extended_data[0], bps * channels, frame->nb_samples, audio_dst_file);
++    }
+ 
+     return 0;
+ }
+@@ -350,25 +358,15 @@ int main (int argc, char **argv)
+     }
+ 
+     if (audio_stream) {
+-        enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
+-        AVChannelLayout mono = AV_CHANNEL_LAYOUT_MONO;
+-        AVChannelLayout *ch_layout = &audio_dec_ctx->ch_layout;
++        /* the samples of planar formats were interleaved when writing */
++        enum AVSampleFormat sfmt = av_get_packed_sample_fmt(audio_dec_ctx->sample_fmt);
+         const char *fmt;
+         char buf[64];
+ 
+-        if (av_sample_fmt_is_planar(sfmt)) {
+-            const char *packed = av_get_sample_fmt_name(sfmt);
+-            printf("Warning: the sample format the decoder produced is planar "
+-                   "(%s). This example will output the first channel only.\n",
+-                   packed ? packed : "?");
+-            sfmt = av_get_packed_sample_fmt(sfmt);
+-            ch_layout = &mono;
+-        }
+-
+         if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
+             goto end;
+ 
+-        if ((ret = av_channel_layout_describe(ch_layout, buf, sizeof(buf))) < 0)
++        if ((ret = av_channel_layout_describe(&audio_dec_ctx->ch_layout, buf, sizeof(buf))) < 0)
+             goto end;
+ 
+         printf("Play the output audio file with the command:\n"
+-- 
+2.43.0
+

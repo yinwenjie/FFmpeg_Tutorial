@@ -1,0 +1,38 @@
+From 6cb15139ad0170477967dc97bcf536c26e0e165d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 06:35:34 +0000
+Subject: [PATCH] doc/examples/demux_decode: print audio timestamps in the
+ stream time base
+
+The pts of a decoded frame is expressed in the time base of the packets,
+which is AVStream.time_base. output_audio_frame() converts it with
+AVCodecContext.time_base instead, which is not set by the user when
+decoding and happens to be 1/sample_rate for audio decoders. The printed
+time is only right when the stream uses the same time base, as MP4
+does. For AAC audio at 44100 Hz in MPEG-TS, where the time base is
+1/90000, the first frame at 1.456778 seconds is printed as
+
+    audio_frame n:0 nb_samples:1024 pts:2.973016
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/demux_decode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/demux_decode.c b/doc/examples/demux_decode.c
+index a3a9131..a3602b3 100644
+--- a/doc/examples/demux_decode.c
++++ b/doc/examples/demux_decode.c
+@@ -92,7 +92,7 @@ static int output_audio_frame(AVFrame *frame)
+     size_t unpadded_linesize = frame->nb_samples * av_get_bytes_per_sample(frame->format);
+     printf("audio_frame n:%d nb_samples:%d pts:%s\n",
+            audio_frame_count++, frame->nb_samples,
+-           av_ts2timestr(frame->pts, &audio_dec_ctx->time_base));
++           av_ts2timestr(frame->pts, &audio_stream->time_base));
+ 
+     /* Write the raw audio data samples of the first plane. This works
+      * fine for packed formats (e.g. AV_SAMPLE_FMT_S16). However,
+-- 
+2.43.0
+

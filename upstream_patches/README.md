@@ -15,10 +15,10 @@
 | 项目 | 值 |
 | --- | --- |
 | 制作和测试所用的提交 | `a337e8ddaa`（课程固定使用的版本，2026-11-10） |
-| 复核时的上游 master | `72f8c33`（2026-11-11），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
+| 复核时的上游 master | `23c4540`（2026-11-12），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `72f8c33` 上用 `git am` 按顺序应用无冲突。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `23c4540` 上用 `git am` 按顺序应用无冲突。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -49,13 +49,20 @@
 | [0022](0022-doc-examples-decode_audio-flush-the-parser-at-the-en.patch) | decode_audio.c | 不符合规范 | 读到文件末尾没有冲刷 parser，结尾的数据被丢掉 | L06 |
 | [0023](0023-doc-examples-decode_audio-describe-the-input-in-the-.patch) | decode_audio.c | 不符合规范 | 用法说明没有说输入必须是 MP2 裸流 | L06 |
 | [0024](0024-doc-examples-decode_audio-zero-the-padding-of-the-in.patch) | decode_audio.c | 不符合规范 | 输入缓冲区末尾的填充字节没有清零 | L06 |
+| [0025](0025-doc-examples-demux_decode-return-a-failure-exit-stat.patch) | demux_decode.c | 错误 | 输出文件打不开、输入里没有音视频流时报了错，退出码却是 0 | L07 |
+| [0026](0026-doc-examples-demux_decode-stop-with-an-error-when-de.patch) | demux_decode.c | 错误 | 解码中途出错后仍然打印 `Demuxing succeeded.`，退出码是 0 | L07 |
+| [0027](0027-doc-examples-demux_decode-print-audio-timestamps-in-.patch) | demux_decode.c | 错误 | 打印音频帧时间用错了时间基，输入是 MPEG-TS 时数值不对 | L07 |
+| [0028](0028-doc-examples-demux_decode-write-all-the-audio-channe.patch) | demux_decode.c | 错误、不满足现有需求 | planar 音频只写第一个声道；packed 多声道音频每帧只写前一部分 | L07 |
+| [0029](0029-doc-examples-demux_decode-do-not-ignore-write-errors.patch) | demux_decode.c | 错误 | 输出写不进去时照常报告成功，退出码是 0 | L07 |
+| [0030](0030-doc-examples-demux_decode-fix-a-typo-in-the-file-des.patch) | demux_decode.c | 错误 | 文件开头的说明把输出写成了 `input files` | L07 |
 
 ## 怎么使用
 
 应用到 FFmpeg 源码树。各个问题在逻辑上互相独立，但有几个 patch 改的是同一个文件里相邻的行
 （0003 到 0005 都改 Makefile.example，0001、0007、0011、0014 都改 transcode.c，
 0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c，
-0006、0016、0019 到 0024 都改 decode_audio.c），所以要按编号顺序应用：
+0006、0016、0019 到 0024 都改 decode_audio.c，
+0008、0025 到 0030 都改 demux_decode.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -75,7 +82,8 @@ make -j"$(nproc)" examples
    <https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls> 提 pull request，
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
 4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
-   remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组。
+   remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
+   demux_decode（0025 到 0030）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -482,6 +490,105 @@ doc/examples/decode_video.c:120:    memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFE
 用课程素材和 valgrind 没有观察到实际的越界读，这个 patch 是按文档的要求补齐。
 
 修复后每次填充缓冲区之后把数据末尾的 64 个字节清零。输出与修复前逐字节相同。
+
+### 0025 demux_decode 出错时退出码是 0
+
+```console
+$ doc/examples/demux_decode $S/small_360p25.mp4 /nonexistent/v.yuv /tmp/a.pcm; echo "exit=$?"
+Could not open destination file /nonexistent/v.yuv
+exit=0
+```
+
+`main()` 最后一句是 `return ret < 0`，而三处出错的地方把 `ret` 设成了 1：两个输出文件打不开，以及输入里既没有视频也没有音频。
+1 不小于 0，所以退出码是 0。
+
+修复后这三处改用负的错误码（`AVERROR(errno)` 和 `AVERROR_STREAM_NOT_FOUND`），退出码是 1。
+
+### 0026 demux_decode 解码出错后仍然报告成功
+
+把素材中间的一段数据清零，做一个损坏的文件：
+
+```console
+$ cp $S/small_360p25.mp4 /tmp/bad.mp4
+$ dd if=/dev/zero of=/tmp/bad.mp4 bs=1 seek=200000 count=50000 conv=notrunc
+$ doc/examples/demux_decode /tmp/bad.mp4 /tmp/v.yuv /tmp/a.pcm; echo "exit=$?"
+...
+Error submitting a packet for decoding (Invalid data found when processing input)
+Demuxing succeeded.
+Play the output video file with the command:
+...
+exit=0
+$ ls -l /tmp/v.yuv
+... 16243200 ... /tmp/v.yuv
+```
+
+`decode_packet()` 失败后只是 `break` 出读循环，接着冲刷解码器、打印成功信息和播放命令。
+`ret` 在后面被别的函数的返回值覆盖，退出码也是 0。视频只写了 47 帧（完整的是 125 帧，43,200,000 字节），调用它的脚本无从知道。
+另外 `av_read_frame()` 返回 `AVERROR_EOF` 以外的错误、冲刷时出错，原来都没有检查。
+
+修复后这几种情况都直接跳到清理代码，退出码是 1，不再打印成功信息。
+冲刷改为只对实际用到的流做：解码器上下文在 `avcodec_open2()` 之前分配，打开失败时指针不是空的，原来会对一个没打开的解码器调用冲刷。
+
+### 0027 demux_decode 打印的音频时间用错了时间基
+
+```console
+$ ffprobe -v error -select_streams a -show_entries stream=time_base,start_time -of compact $S/small_360p25.ts
+stream|time_base=1/90000|start_time=1.456778
+$ doc/examples/demux_decode $S/small_360p25.ts /tmp/v.yuv /tmp/a.pcm 2>/dev/null | grep -m2 audio_frame
+audio_frame n:0 nb_samples:1024 pts:2.973016
+audio_frame n:1 nb_samples:1024 pts:3.020408
+```
+
+解码出来的帧的 pts 用的是包的时间基，也就是 `AVStream.time_base`。示例换算成秒时用了 `AVCodecContext.time_base`，
+这个字段解码时不由用户设置，音频解码器里它恰好是采样率的倒数。MP4 的音频流时间基也是采样率的倒数，所以用 MP4 测试看不出问题；
+MPEG-TS 的时间基是 1/90000，第一帧的 pts 是 131110，被算成 131110 ÷ 44100 = 2.973 秒，正确的是 131110 ÷ 90000 = 1.457 秒。
+
+修复后改用 `audio_stream->time_base`，上面两行变成 `pts:1.456778` 和 `pts:1.48`。
+
+### 0028 demux_decode 没有写全音频数据
+
+```console
+$ doc/examples/demux_decode $S/small_360p25.mp4 /tmp/v.yuv /tmp/a.pcm 2>/dev/null | tail -3
+Warning: the sample format the decoder produced is planar (fltp). This example will output the first channel only.
+Play the output audio file with the command:
+ffplay -f f32le -ch_layout mono -sample_rate 44100 /tmp/a.pcm
+```
+
+planar 格式只写第一个声道，这一点示例自己说明了，但现在常见的解码器输出的几乎都是 planar，双声道的输入得到的总是单声道。
+更严重的是 packed 格式。注释里说 packed“works fine”，实际写出去的字节数是 `nb_samples × 每采样字节数`，没有乘声道数：
+
+```console
+$ ffmpeg -v error -i $S/small_360p25.mp4 -c:v copy -c:a flac /tmp/flac.mkv
+$ doc/examples/demux_decode /tmp/flac.mkv /tmp/v.yuv /tmp/a.pcm 2>/dev/null | tail -1
+ffplay -f s32le -ch_layout stereo -sample_rate 44100 /tmp/a.pcm
+$ ls -l /tmp/a.pcm
+... 882000 ... /tmp/a.pcm
+```
+
+5 秒双声道 s32 应该是 1,764,000 字节，实际只有一半：每一帧只写了前半帧的左右声道数据，后半帧丢掉了。
+按它打印的命令播放，时长是 2.5 秒，内容是断开的片段。
+
+修复后 packed 格式写出整个平面，planar 格式逐个采样交错写出（与 0021 之后的 decode_audio 相同），
+打印的播放命令使用真实的声道布局。MP4 和 FLAC 两种输入的音频输出都与 `ffmpeg -vn -f f32le`、`ffmpeg -vn -f s32le` 的结果 md5 相同。
+
+### 0029 demux_decode 忽略写入错误
+
+```console
+$ doc/examples/demux_decode $S/small_360p25.mp4 /dev/full /dev/full 2>/dev/null | tail -3; echo "exit=${PIPESTATUS[0]}"
+Warning: the sample format the decoder produced is planar (fltp). This example will output the first channel only.
+Play the output audio file with the command:
+ffplay -f f32le -ch_layout mono -sample_rate 44100 /dev/full
+exit=0
+```
+
+`/dev/full` 模拟磁盘已满。`fwrite()` 和 `fclose()` 的结果都没有检查，一个字节也没写成功，示例照样报告成功。
+
+修复后每写一帧检查一次文件的错误标志，并且在报告成功之前关闭输出文件（缓冲区里剩下的数据这时才真正写出，也可能失败）。
+同样的命令打印 `Error writing to /dev/full`，退出码是 1。
+
+### 0030 demux_decode 文件说明里的笔误
+
+文件开头的说明写的是 `Write the output as raw audio and input files to be played by ffplay`，`input` 应为 `video`。只改注释。
 
 ## 已记录、暂未制作 patch 的观察项
 

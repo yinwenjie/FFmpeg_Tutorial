@@ -1,0 +1,56 @@
+From cf9335f284d36ccfd55c3b21c13b7f0e13daf855 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 06:35:34 +0000
+Subject: [PATCH] doc/examples/demux_decode: return a failure exit status on
+ all errors
+
+main() ends with "return ret < 0", but three error paths set ret to 1:
+an output file that cannot be opened and an input without any audio or
+video stream. The error message is printed and the exit status is 0:
+
+    $ ./demux_decode in.mp4 /nonexistent/v.yuv a.pcm; echo $?
+    Could not open destination file /nonexistent/v.yuv
+    0
+
+Use negative error codes there, like the other error paths do.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/demux_decode.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/demux_decode.c b/doc/examples/demux_decode.c
+index 138d758..fb9254d 100644
+--- a/doc/examples/demux_decode.c
++++ b/doc/examples/demux_decode.c
+@@ -262,7 +262,7 @@ int main (int argc, char **argv)
+         video_dst_file = fopen(video_dst_filename, "wb");
+         if (!video_dst_file) {
+             fprintf(stderr, "Could not open destination file %s\n", video_dst_filename);
+-            ret = 1;
++            ret = AVERROR(errno);
+             goto end;
+         }
+ 
+@@ -284,7 +284,7 @@ int main (int argc, char **argv)
+         audio_dst_file = fopen(audio_dst_filename, "wb");
+         if (!audio_dst_file) {
+             fprintf(stderr, "Could not open destination file %s\n", audio_dst_filename);
+-            ret = 1;
++            ret = AVERROR(errno);
+             goto end;
+         }
+     }
+@@ -294,7 +294,7 @@ int main (int argc, char **argv)
+ 
+     if (!audio_stream && !video_stream) {
+         fprintf(stderr, "Could not find audio or video stream in the input, aborting\n");
+-        ret = 1;
++        ret = AVERROR_STREAM_NOT_FOUND;
+         goto end;
+     }
+ 
+-- 
+2.43.0
+

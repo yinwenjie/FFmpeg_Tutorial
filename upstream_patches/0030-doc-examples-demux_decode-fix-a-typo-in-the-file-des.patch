@@ -1,0 +1,29 @@
+From df8b832a043ce086cbd1f4a0adb9cf501cb3854c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 06:36:13 +0000
+Subject: [PATCH] doc/examples/demux_decode: fix a typo in the file description
+
+The output consists of raw audio and video files, not "input files".
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/demux_decode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/demux_decode.c b/doc/examples/demux_decode.c
+index 04591b4..c33ae24 100644
+--- a/doc/examples/demux_decode.c
++++ b/doc/examples/demux_decode.c
+@@ -25,7 +25,7 @@
+  * @example demux_decode.c
+  *
+  * Show how to use the libavformat and libavcodec API to demux and decode audio
+- * and video data. Write the output as raw audio and input files to be played by
++ * and video data. Write the output as raw audio and video files to be played by
+  * ffplay.
+  */
+ 
+-- 
+2.43.0
+
