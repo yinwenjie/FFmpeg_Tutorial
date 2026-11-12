@@ -17,4 +17,4 @@ not_media.mp4	bad	0	0	一行文字，扩展名是 .mp4
 truncated_nomoov.mp4	bad	0	0	MP4 只剩前 40%，文件尾的 moov 没了
 bad_header.mp4	bad	0	0	MP4 开头 32 个字节被清零
 truncated.ts	damaged	1	1	TS 只剩前 40%：能打开能解码，只是短了（时长约 2.06 秒）
-corrupt_mid.mp4	damaged	1	1	mdat 中间 300 字节被换成伪随机数：能打开，解码时有 4 行错误、个别帧花屏
+corrupt_mid.mp4	damaged	1	1	一个视频包（第 60 个）和一个音频包（第 100 个）的中间被换成伪随机数：能打开；视频有 25 帧和原文件不同（错误一直传到这个 GOP 的末尾），解码时 h264 报错

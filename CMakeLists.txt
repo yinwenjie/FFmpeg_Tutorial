@@ -35,3 +35,5 @@ add_subdirectory(L19_avio_network)
 add_subdirectory(L20_hw_decode)
 add_subdirectory(L21_hw_encode)
 add_subdirectory(L22_engineering)
+# 综合项目
+add_subdirectory(mtool)

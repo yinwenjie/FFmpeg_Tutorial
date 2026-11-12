@@ -22,7 +22,7 @@ elif [ $# -gt 0 ]; then
 fi
 
 cd "$(dirname "$0")/../.."
-for c in ffmpeg ffprobe python3; do
+for c in ffmpeg ffprobe python3 dd head stat; do
     command -v $c >/dev/null 2>&1 || { echo "找不到 $c" >&2; exit 2; }
 done
 D=samples/mtool
@@ -94,24 +94,29 @@ if [ ! -s "$D/truncated.ts" ]; then
     size=$(stat -c %s "$D/h264_aac.ts")
     head -c $(( (size * 4 / 10) / 188 * 188 )) "$D/h264_aac.ts" > "$D/truncated.ts"
 fi
-# 17 中间被改坏：把 MP4 的 mdat 中间 300 个字节换成固定的伪随机数（种子固定，每次生成的内容相同）。
-#    moov 完好，所以能打开、能读出所有的包，解码时会报错、有的帧花屏。
+# 17 中间被改坏：用 ffprobe 找到第 60 个视频包和第 100 个音频包在文件里的位置，各自在包的中间换成固定的
+#    伪随机数（种子固定，每次生成的内容相同）。moov 完好，所以能打开、能读出所有的包，解码时会报错、有的帧花屏。
 [ "$force" -eq 1 ] && rm -f "$D/corrupt_mid.mp4"
 if [ ! -s "$D/corrupt_mid.mp4" ]; then
     echo "生成：$D/corrupt_mid.mp4"
     cp "$D/h264_aac.mp4" "$D/corrupt_mid.mp4"
-    python3 -I - "$D/corrupt_mid.mp4" <<'PY'
+    ffprobe -v error -show_entries packet=stream_index,pos,size -of csv=p=0 "$D/h264_aac.mp4" |
+    python3 -I -c '
 import random, sys
 path = sys.argv[1]
-data = bytearray(open(path, 'rb').read())
-i = data.find(b'mdat')
-assert i > 0
-mid = i + (len(data) - i) // 3          # mdat 的三分之一处，避开文件头部的几个关键帧
+pk = {0: [], 1: []}
+for line in sys.stdin:
+    si, pos, size = line.strip().split(",")
+    pk[int(si)].append((int(pos), int(size)))
+data = bytearray(open(path, "rb").read())
 rng = random.Random(12345)
-for k in range(300):
-    data[mid + k] = rng.randrange(256)
-open(path, 'wb').write(data)
-PY
+for si, idx, n in ((0, 60, 200), (1, 100, 20)):
+    pos, size = pk[si][idx]
+    assert size > n + 20
+    for k in range(n):
+        data[pos + 20 + k] = rng.randrange(256)
+open(path, "wb").write(data)
+' "$D/corrupt_mid.mp4"
 fi
 # 18 文件头被改坏：MP4 开头的 ftyp 盒子没了（前 32 个字节换成 0）
 [ "$force" -eq 1 ] && rm -f "$D/bad_header.mp4"

@@ -74,7 +74,7 @@ cmake -S . -B build && cmake --build build
 | 7 硬件加速与工程化 | [L20 硬件解码](L20_hw_decode/README.md) | hw_decode.c |
 | | [L21 硬件编码与全 GPU 转码](L21_hw_encode/README.md) | vaapi_encode.c、vaapi_transcode.c |
 | | [L22 工程化专题](L22_engineering/README.md) | 无官方示例；自写 reconfig_graph.c、fflog.h、err_codes.c、version_info.c，以及回归脚本 regress.sh |
-| 综合项目 | 命令行媒体工具箱 mtool | 无 |
+| 综合项目 | [命令行媒体工具箱 mtool](mtool/README.md) | 无官方示例；自写，把前 22 讲的接口组合成一个带子命令的工具 |
 
 ## 仓库约定
 
