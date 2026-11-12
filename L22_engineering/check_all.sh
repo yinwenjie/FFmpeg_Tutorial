@@ -158,8 +158,12 @@ one() {
         fi
     fi
     if [ -z "$why" ]; then
-        pass=$((pass + 1))
-        printf '%s\t%s\t%s\t%s\tok\n' "$l" "$prog" "$label" "$rc" >> "$W/results.tsv"
+        if [ -n "$rcnote" ]; then
+            printf '%s\t%s\t%s\t%s\tKNOWN %s\n' "$l" "$prog" "$label" "$rc" "${rcnote%%：*}" >> "$W/results.tsv"
+        else
+            pass=$((pass + 1))
+            printf '%s\t%s\t%s\t%s\tok\n' "$l" "$prog" "$label" "$rc" >> "$W/results.tsv"
+        fi
     elif [ -n "${KNOWN[$l $prog|$label]:-}" ]; then
         known=$((known + 1))
         known_list="$known_list
@@ -282,7 +286,7 @@ ghost L18 avio_mem_out $MP4 mp4 $D/out.mp4 mode=file
 ghost L19 avio_cat $MP4 $D/out.bin
 
 echo
-echo "共 $total 项：通过 $pass，已知问题 $known，失败 $fail；退出码大于 10 又没有记录的有 $warn 项（模式 $MODE，结果表 $W/results.tsv）"
+echo "共 $total 项：正常 $pass，已知问题 $known，失败 $fail；退出码大于 10 又没有记录的有 $warn 项（模式 $MODE，结果表 $W/results.tsv）"
 [ $known -gt 0 ] && echo "已知问题（已经有 patch 或者确认是库的问题，不算失败）：$known_list"
 [ $warn -gt 0 ] && echo "退出码大于 10 的项（不算失败，请查原因）：$warn_list"
 [ $fail -gt 0 ] && echo "失败的项：$fail_list"
