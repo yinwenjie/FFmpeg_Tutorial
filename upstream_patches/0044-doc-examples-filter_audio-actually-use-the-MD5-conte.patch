@@ -1,0 +1,36 @@
+From c32d39672f5ec1669c6606e28f1cb141b92d3076 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:38:16 +0000
+Subject: [PATCH] doc/examples/filter_audio: actually use the MD5 context
+
+process_output() initialized the context passed by the caller and then
+called av_md5_sum(), which does not take a context and hashes the
+buffer with one of its own. The context allocated in main() was thus
+never used for anything.
+
+Hash the data with av_md5_update() and av_md5_final() instead. The
+printed checksums do not change.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/filter_audio.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/filter_audio.c b/doc/examples/filter_audio.c
+index 760c605..e0df1fd 100644
+--- a/doc/examples/filter_audio.c
++++ b/doc/examples/filter_audio.c
+@@ -222,7 +222,8 @@ static int process_output(struct AVMD5 *md5, AVFrame *frame)
+         uint8_t checksum[16];
+ 
+         av_md5_init(md5);
+-        av_md5_sum(checksum, frame->extended_data[i], plane_size);
++        av_md5_update(md5, frame->extended_data[i], plane_size);
++        av_md5_final(md5, checksum);
+ 
+         fprintf(stdout, "plane %d: 0x", i);
+         for (j = 0; j < sizeof(checksum); j++)
+-- 
+2.43.0
+

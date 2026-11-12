@@ -1,0 +1,58 @@
+From 1282990488c43d2fc2771d2d1101ecdccfe54db6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:39:15 +0000
+Subject: [PATCH] doc/examples/filter_audio: flush the filtergraph at the end
+
+The example never signalled the end of the input to the buffer source,
+so whatever the graph still held when the last frame had been sent was
+lost. The aformat filter makes the graph resample from 48000 to 44100
+Hz, and the resampler keeps a few samples back: with a duration of 1
+second, 47104 samples go in and 43261 come out, where 43277 are
+expected.
+
+Send a NULL frame to the buffer source after the loop and read from the
+sink until it returns AVERROR_EOF. The 16 missing samples are now
+output in a final frame.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/filter_audio.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/doc/examples/filter_audio.c b/doc/examples/filter_audio.c
+index 893c442..9a2b26b 100644
+--- a/doc/examples/filter_audio.c
++++ b/doc/examples/filter_audio.c
+@@ -349,6 +349,28 @@ int main(int argc, char *argv[])
+         }
+     }
+ 
++    /* Signal the end of the input and get the samples
++     * that are still buffered in the filtergraph. */
++    err = av_buffersrc_add_frame(src, NULL);
++    if (err < 0) {
++        fprintf(stderr, "Error flushing the filtergraph:");
++        goto fail;
++    }
++
++    while ((err = av_buffersink_get_frame(sink, frame)) >= 0) {
++        err = process_output(md5, frame);
++        if (err < 0) {
++            fprintf(stderr, "Error processing the filtered frame:");
++            goto fail;
++        }
++        av_frame_unref(frame);
++    }
++
++    if (err != AVERROR_EOF) {
++        fprintf(stderr, "Error filtering the data:");
++        goto fail;
++    }
++
+     avfilter_graph_free(&graph);
+     av_frame_free(&frame);
+     av_freep(&md5);
+-- 
+2.43.0
+

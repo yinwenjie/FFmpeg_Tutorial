@@ -1,0 +1,35 @@
+From 78a8c771e83cfd11ec070fc025e05d7bbc07a408 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:38:16 +0000
+Subject: [PATCH] doc/examples/filter_audio: use char buffers for strings
+
+options_str and ch_layout hold text and are only passed to functions
+taking char pointers (av_channel_layout_describe(), av_opt_set(),
+snprintf(), avfilter_init_str()). Declaring them as uint8_t arrays
+triggers four -Wpointer-sign warnings when the example is built with
+-Wall outside of the FFmpeg tree.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/filter_audio.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/filter_audio.c b/doc/examples/filter_audio.c
+index ad77bf1..824fd83 100644
+--- a/doc/examples/filter_audio.c
++++ b/doc/examples/filter_audio.c
+@@ -71,8 +71,8 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src,
+     const AVFilter  *abuffersink;
+ 
+     AVDictionary *options_dict = NULL;
+-    uint8_t options_str[1024];
+-    uint8_t ch_layout[64];
++    char options_str[1024];
++    char ch_layout[64];
+ 
+     int err;
+ 
+-- 
+2.43.0
+

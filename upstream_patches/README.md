@@ -66,6 +66,12 @@
 | [0039](0039-doc-examples-resample_audio-do-not-report-success-wh.patch) | resample_audio.c | 错误 | 输出缓冲区扩容失败时跳出循环，随后照常报告成功，退出码是 0 | L10 |
 | [0040](0040-doc-examples-resample_audio-check-for-write-errors.patch) | resample_audio.c | 错误 | 不检查 `fwrite()` 的返回值，写不出去时照常报告成功 | L10 |
 | [0041](0041-doc-examples-resample_audio-flush-the-resampler-at-t.patch) | resample_audio.c | 错误 | 结束时不冲刷重采样器，输出少了最后 17 个采样 | L10 |
+| [0042](0042-doc-examples-filter_audio-use-char-buffers-for-strin.patch) | filter_audio.c | 不符合规范 | 字符串缓冲区声明成 `uint8_t` 数组，用 `-Wall` 编译有 4 个 `-Wpointer-sign` 警告 | L11 |
+| [0043](0043-doc-examples-filter_audio-generate-a-continuous-sine.patch) | filter_audio.c | 错误 | 生成的正弦波在每个帧的边界跳过一个采样，波形不连续 | L11 |
+| [0044](0044-doc-examples-filter_audio-actually-use-the-MD5-conte.patch) | filter_audio.c | 不符合规范 | 分配了 MD5 上下文却没有用它（`av_md5_sum()` 不使用调用者的上下文） | L11 |
+| [0045](0045-doc-examples-filter_audio-print-the-error-when-the-g.patch) | filter_audio.c | 错误 | 滤镜图建立失败时只打印半句话，没有错误原因和换行 | L11 |
+| [0046](0046-doc-examples-filter_audio-do-not-leak-the-graph-when.patch) | filter_audio.c | 错误 | 滤镜图建立失败时不释放已经分配的图和滤镜 | L11 |
+| [0047](0047-doc-examples-filter_audio-flush-the-filtergraph-at-t.patch) | filter_audio.c | 错误 | 结束时不冲刷滤镜图，输出少了最后 16 个采样 | L11 |
 
 ## 怎么使用
 
@@ -76,7 +82,8 @@
 0008、0025 到 0030 都改 demux_decode.c，
 0031 到 0033 都改 extract_mvs.c，
 0034 到 0037 都改 scale_video.c，
-0038 到 0041 都改 resample_audio.c），所以要按编号顺序应用：
+0038 到 0041 都改 resample_audio.c，
+0042 到 0047 都改 filter_audio.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -98,7 +105,8 @@ make -j"$(nproc)" examples
 4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
    remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
    demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
-   scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组。
+   scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
+   filter_audio（0042 到 0047）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -754,6 +762,68 @@ $ doc/examples/resample_audio /tmp/out.pcm | awk '{split($2,a,":"); split($3,b,"
 说明：fork 分支上这个修复是两个提交（`b908217` 和紧跟的 `aac704f`，后者修正了前者在冲刷结束时误报失败的问题），
 这里的 0041 是两者合并后的结果，提交到上游时以 patch 文件为准。
 
+### 0042 filter_audio 的字符串缓冲区用了 uint8_t
+
+在 FFmpeg 源码树之外用 `-Wall` 编译（课程仓库的 Makefile 就是这样）：
+
+```console
+$ gcc -Wall -c filter_audio.c $(pkg-config --cflags libavfilter libavutil) 2>&1 | grep -c warning
+4
+```
+
+4 个警告都是 `-Wpointer-sign`：`options_str` 和 `ch_layout` 声明成 `uint8_t` 数组，却传给参数是 `char *` 的函数。
+修复后改成 `char` 数组，警告为 0。
+
+### 0043 filter_audio 生成的正弦波不连续
+
+`get_input()` 用 `frame_num + j` 算相位。一个周期正好是 `FRAME_SIZE` 个采样，
+第 n 帧最后一个采样的相位是 n + 1023，下一个采样应该是 n + 1024（等同于 n），
+但第 n + 1 帧是从 n + 1 开始的，每个帧的边界上跳过了一个采样。
+
+修复后相位只由帧内的位置 `j` 决定（每帧都是整数个周期）。输出的校验值会变，这是预期的。
+
+### 0044 filter_audio 没有使用分配的 MD5 上下文
+
+`process_output()` 先 `av_md5_init(md5)`，然后调用 `av_md5_sum()`。后者不接受上下文参数，它自己另建一个，
+所以 `main()` 里分配并一路传下来的上下文实际上没有用。
+
+修复后改用 `av_md5_update()` 加 `av_md5_final()`。修复前后 `filter_audio 1 | md5sum` 的结果相同
+（`6c19462e54888af465a35a0d9541ba77`，在 0043 之后测）。
+
+### 0045 filter_audio 滤镜图建立失败时错误信息不完整
+
+把示例里的 `channel_layouts=stereo` 临时改成 `channel_layouts=nosuch` 来触发失败：
+
+```console
+$ ./filter_audio 1
+Could not initialize the aformat filter.
+Unable to init filter graph:$
+```
+
+最后一行没有错误原因，也没有换行。其他失败路径都跳到 `fail` 标签，由那里补上 `av_err2str(err)` 和换行，只有这一处直接返回了。
+修复后输出 `Unable to init filter graph:Invalid argument`。
+
+### 0046 filter_audio 滤镜图建立失败时泄漏
+
+同样用上面的办法触发失败，valgrind 报告：
+
+```text
+2,024 (192 direct, 1,832 indirect) bytes in 1 blocks are definitely lost
+```
+
+`init_filter_graph()` 里十几处出错返回都没有释放已经分配的图。修复后图一分配就交给调用者，
+由 `main()` 的失败路径统一释放，valgrind 不再报告。
+
+### 0047 filter_audio 结束时不冲刷滤镜图
+
+示例的图里 aformat 要求 44100 Hz，输入是 48000 Hz，libavfilter 会自动插入重采样。
+时长给 1 秒时送进去 46 帧共 47,104 个采样，按比例应该输出 47104 × 44100 / 48000 = 43,276.8 个；
+在 `process_output()` 里临时加一行打印 `frame->nb_samples` 再求和，实际只有 43,261 个，少了 16 个。
+原因和 0041 相同：重采样器里留着的采样没有取出来。示例从来没有告诉 buffersrc 输入结束了。
+
+修复后在主循环之后调用 `av_buffersrc_add_frame(src, NULL)`，再从 buffersink 读到 `AVERROR_EOF` 为止。
+输出多了最后一帧 16 个采样，总数 43,277；valgrind 通过。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
@@ -763,7 +833,7 @@ $ doc/examples/resample_audio /tmp/out.pcm | awk '{split($2,a,":"); split($3,b,"
 | mux.c | 和 scale_video.c 一样使用 `sws_getContext()` 加 `sws_scale()` 的旧式写法（scale_video.c 已在 0037 改掉）。mux.c 的改法要和它的编码流程一起考虑 | L15 |
 | transcode.c | 编码器没有继承输入的色彩属性，BT.709 的输入转码后 `color_space` 和 `color_range` 变成 unknown | L16 |
 | avio_read_callback.c | 只提供读回调、没有 seek 回调。`moov` 在文件末尾的 MP4 读不到完整的流参数（报 `partial file` 和 `unspecified pixel format`） | L18 |
-| avio_http_serve_files.c、filter_audio.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告 | L11、L19 |
+| avio_http_serve_files.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告（filter_audio.c 的同类问题已在 0042 改掉） | L19 |
 
 用 `-Wdeprecated-declarations` 编译全部能独立编译的示例，没有发现使用已标记废弃的函数。
 qsv_decode.c 和 qsv_transcode.c 需要 Intel 的库才能编译，还没有检查。

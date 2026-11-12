@@ -1,0 +1,49 @@
+From ad73b12f9054edf20d69a2e436d4bcfb4021ac1c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:38:50 +0000
+Subject: [PATCH] doc/examples/filter_audio: print the error when the graph
+ cannot be set up
+
+When init_filter_graph() failed, main() printed
+"Unable to init filter graph:" and returned, without the error
+description and the newline that all other failure paths add at the
+fail label.
+
+Jump to the fail label like the other paths do. The graph pointer is
+now initialized to NULL so that it can be passed to
+avfilter_graph_free() there.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/filter_audio.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/doc/examples/filter_audio.c b/doc/examples/filter_audio.c
+index e0df1fd..bd3a899 100644
+--- a/doc/examples/filter_audio.c
++++ b/doc/examples/filter_audio.c
+@@ -268,7 +268,7 @@ static int get_input(AVFrame *frame, int frame_num)
+ int main(int argc, char *argv[])
+ {
+     struct AVMD5 *md5;
+-    AVFilterGraph *graph;
++    AVFilterGraph *graph = NULL;
+     AVFilterContext *src, *sink;
+     AVFrame *frame;
+     float duration;
+@@ -303,10 +303,8 @@ int main(int argc, char *argv[])
+     /* Set up the filtergraph. */
+     err = init_filter_graph(&graph, &src, &sink);
+     if (err < 0) {
+-        av_frame_free(&frame);
+-        av_freep(&md5);
+         fprintf(stderr, "Unable to init filter graph:");
+-        return 1;
++        goto fail;
+     }
+ 
+     /* the main filtering loop */
+-- 
+2.43.0
+
