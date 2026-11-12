@@ -1,0 +1,38 @@
+From 0e9b58b58420d6ea2fe0698fc51716fd50d04120 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 06:53:57 +0000
+Subject: [PATCH] doc/examples/extract_mvs: return a failure exit status
+ without a video stream
+
+main() ends with "return ret < 0", but ret is set to 1 when the input
+has no video stream that can be decoded, so the exit status is 0:
+
+    $ ./extract_mvs audio.mp2; echo $?
+    ...
+    Could not find video stream in the input, aborting
+    0
+
+Use a negative error code, as the other error paths do.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/extract_mvs.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/extract_mvs.c b/doc/examples/extract_mvs.c
+index b5ed2c5..73c8570 100644
+--- a/doc/examples/extract_mvs.c
++++ b/doc/examples/extract_mvs.c
+@@ -158,7 +158,7 @@ int main(int argc, char **argv)
+ 
+     if (!video_stream) {
+         fprintf(stderr, "Could not find video stream in the input, aborting\n");
+-        ret = 1;
++        ret = AVERROR_STREAM_NOT_FOUND;
+         goto end;
+     }
+ 
+-- 
+2.43.0
+

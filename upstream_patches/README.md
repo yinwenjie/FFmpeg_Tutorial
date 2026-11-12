@@ -55,6 +55,9 @@
 | [0028](0028-doc-examples-demux_decode-write-all-the-audio-channe.patch) | demux_decode.c | 错误、不满足现有需求 | planar 音频只写第一个声道；packed 多声道音频每帧只写前一部分 | L07 |
 | [0029](0029-doc-examples-demux_decode-do-not-ignore-write-errors.patch) | demux_decode.c | 错误 | 输出写不进去时照常报告成功，退出码是 0 | L07 |
 | [0030](0030-doc-examples-demux_decode-fix-a-typo-in-the-file-des.patch) | demux_decode.c | 错误 | 文件开头的说明把输出写成了 `input files` | L07 |
+| [0031](0031-doc-examples-extract_mvs-return-a-failure-exit-statu.patch) | extract_mvs.c | 错误 | 输入里没有视频流时报了错，退出码却是 0 | L08 |
+| [0032](0032-doc-examples-extract_mvs-do-not-leak-the-codec-conte.patch) | extract_mvs.c | 不符合规范 | 解码器打不开时不释放解码器上下文 | L08 |
+| [0033](0033-doc-examples-extract_mvs-check-for-errors-when-writi.patch) | extract_mvs.c | 错误 | 结果写不出去时照常结束，退出码是 0 | L08 |
 
 ## 怎么使用
 
@@ -62,7 +65,8 @@
 （0003 到 0005 都改 Makefile.example，0001、0007、0011、0014 都改 transcode.c，
 0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c，
 0006、0016、0019 到 0024 都改 decode_audio.c，
-0008、0025 到 0030 都改 demux_decode.c），所以要按编号顺序应用：
+0008、0025 到 0030 都改 demux_decode.c，
+0031 到 0033 都改 extract_mvs.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -83,7 +87,7 @@ make -j"$(nproc)" examples
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
 4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
    remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
-   demux_decode（0025 到 0030）一组。
+   demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -589,6 +593,37 @@ exit=0
 ### 0030 demux_decode 文件说明里的笔误
 
 文件开头的说明写的是 `Write the output as raw audio and input files to be played by ffplay`，`input` 应为 `video`。只改注释。
+
+### 0031 extract_mvs 没有视频流时退出码是 0
+
+```console
+$ doc/examples/extract_mvs $S/audio_44k_stereo.mp2 > /dev/null; echo "exit=$?"
+...
+Could not find video stream in the input, aborting
+exit=0
+```
+
+和 0025 是同一种写法：`main()` 最后是 `return ret < 0`，这里却把 `ret` 设成了 1。修复后改用 `AVERROR_STREAM_NOT_FOUND`，退出码是 1。
+
+### 0032 extract_mvs 不释放解码器上下文
+
+`open_codec_context()` 里，`avcodec_parameters_to_context()` 失败时释放了 `dec_ctx`，紧接着的 `avcodec_open2()` 失败时却直接返回。
+`dec_ctx` 只有在成功之后才存进全局变量 `video_dec_ctx`，所以 `main()` 结尾的 `avcodec_free_context(&video_dec_ctx)` 也释放不到它。
+这是读代码发现的，用课程素材触发不了 `avcodec_open2()` 失败。
+
+修复后在这条错误路径上补了 `avcodec_free_context(&dec_ctx)`。顺带把分配失败时返回的 `AVERROR(EINVAL)` 改成 `AVERROR(ENOMEM)`。
+
+### 0033 extract_mvs 不检查输出是否写成功
+
+```console
+$ doc/examples/extract_mvs $S/small_360p25.mp4 2>/dev/null > /dev/full; echo "exit=$?"
+exit=0
+```
+
+运动矢量打印在标准输出上，通常重定向到文件，它就是这个程序的全部结果。磁盘满了写不进去，程序不知道。
+
+修复后在结束前 `fflush(stdout)` 并检查错误标志，失败时打印 `Error writing to the standard output`，退出码是 1。
+正常情况下的输出与修复前逐字节相同（174,394 行）。
 
 ## 已记录、暂未制作 patch 的观察项
 
