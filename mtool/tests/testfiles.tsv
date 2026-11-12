@@ -1,0 +1,20 @@
+# 文件名	类别	视频流数	音频流数	说明
+# 类别：good 能正常处理，退出码 0；bad 打不开，要给能看懂的错误提示，退出码 1；damaged 能打开但内容有损坏，不能崩溃，处理完成并报告解码出错的数量。mtool 的测试脚本读这张表。
+h264_aac.mp4	good	1	1	基准：H.264 加 AAC，5 秒，GOP 25 带 B 帧
+h264_aac.mkv	good	1	1	同样的内容，Matroska 容器
+h264_aac.ts	good	1	1	同样的内容，MPEG-TS 容器（起始时间不是 0）
+h264_aac.flv	good	1	1	同样的内容，FLV 容器
+mpeg4_mp2.avi	good	1	1	AVI，MPEG-4 视频加 MP2 音频
+rotate90.mp4	good	1	1	显示矩阵写了旋转 90 度，像素没动
+vfr.mp4	good	1	1	可变帧率：平均 15.4 帧/秒，r_frame_rate 25，时间戳有空洞
+video_only.mp4	good	1	0	没有音频流
+audio_only.m4a	good	0	1	没有视频流，AAC 在 MP4 里
+mono_8k.wav	good	0	1	没有视频流，单声道 8 kHz 的 PCM
+tiny_16x14.mp4	good	1	0	很小的画面，16x14
+long_gop.mp4	good	1	1	整段 5 秒只有开头一个关键帧
+empty.mp4	bad	0	0	空文件
+not_media.mp4	bad	0	0	一行文字，扩展名是 .mp4
+truncated_nomoov.mp4	bad	0	0	MP4 只剩前 40%，文件尾的 moov 没了
+bad_header.mp4	bad	0	0	MP4 开头 32 个字节被清零
+truncated.ts	damaged	1	1	TS 只剩前 40%：能打开能解码，只是短了（时长约 2.06 秒）
+corrupt_mid.mp4	damaged	1	1	一个视频包（第 60 个）和一个音频包（第 100 个）的中间被换成伪随机数：能打开；视频有 25 帧和原文件不同（错误一直传到这个 GOP 的末尾），解码时 h264 报错
