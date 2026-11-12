@@ -1,0 +1,63 @@
+From 59f4e3b93274b05be75409d5c682194f475d3deb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 15:30:33 +0000
+Subject: [PATCH 75/76] doc/examples/transcode: copy the metadata and the
+ dispositions
+
+The output file gets none of the input's metadata: the title and the
+other tags of the file, the language and handler name of the streams,
+and the default/forced flags that tell a player which audio or subtitle
+track to use. For example, for an input with
+
+  title=My Title, video: language=chi, audio: language=eng, both default
+
+the output has no title, no languages, and no default stream:
+
+  format|tag:title=My Title                 (input)
+  stream|index=1|tag:language=eng           (input)
+  stream|index=1|disposition:default=1      (input)
+  format                                    (output)
+  stream|index=1|disposition:default=0      (output)
+
+Copy the metadata of the container and of each stream and the stream
+dispositions, like doc/examples/remux does.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/doc/examples/transcode.c b/doc/examples/transcode.c
+index 7c0f73c..909c6b6 100644
+--- a/doc/examples/transcode.c
++++ b/doc/examples/transcode.c
+@@ -142,6 +142,11 @@ static int open_output_file(const char *filename)
+         return ret;
+     }
+ 
++    ret = av_dict_copy(&ofmt_ctx->metadata, ifmt_ctx->metadata, 0);
++    if (ret < 0) {
++        av_log(NULL, AV_LOG_ERROR, "Failed to copy metadata\n");
++        return ret;
++    }
+ 
+     for (i = 0; i < ifmt_ctx->nb_streams; i++) {
+         out_stream = avformat_new_stream(ofmt_ctx, NULL);
+@@ -153,6 +158,13 @@ static int open_output_file(const char *filename)
+         in_stream = ifmt_ctx->streams[i];
+         dec_ctx = stream_ctx[i].dec_ctx;
+ 
++        ret = av_dict_copy(&out_stream->metadata, in_stream->metadata, 0);
++        if (ret < 0) {
++            av_log(NULL, AV_LOG_ERROR, "Failed to copy metadata of stream #%u\n", i);
++            return ret;
++        }
++        out_stream->disposition = in_stream->disposition;
++
+         if (dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO
+                 || dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) {
+             /* in this example, we choose transcoding to same codec */
+-- 
+2.43.0
+

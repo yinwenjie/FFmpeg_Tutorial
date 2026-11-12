@@ -1,0 +1,43 @@
+From 3e9b5b511caa6159f744ee87ff84b5b498bc8bcb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 15:28:44 +0000
+Subject: [PATCH 73/76] doc/examples/transcode: stop with an error when
+ decoding fails
+
+If avcodec_send_packet() fails, the read loop is left with "break". The
+code after the loop then flushes the decoders, filters and encoders,
+writes the trailer and returns 0. A damaged input therefore produces a
+silently truncated output and the example reports success:
+
+  $ doc/examples/transcode damaged.aac out.m4a
+  Decoding failed
+  $ echo $?
+  0
+
+Jump to the cleanup code instead, like the other error paths in the
+loop do, so that the error code is kept. The example now prints
+"Error occurred: Invalid data found when processing input" and returns
+1.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/transcode.c b/doc/examples/transcode.c
+index d735fae..d0ccbf3 100644
+--- a/doc/examples/transcode.c
++++ b/doc/examples/transcode.c
+@@ -599,7 +599,7 @@ int main(int argc, char **argv)
+             ret = avcodec_send_packet(stream->dec_ctx, packet);
+             if (ret < 0) {
+                 av_log(NULL, AV_LOG_ERROR, "Decoding failed\n");
+-                break;
++                goto end;
+             }
+ 
+             while (ret >= 0) {
+-- 
+2.43.0
+
