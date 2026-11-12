@@ -1,0 +1,43 @@
+From afe9385bf3e72dbc5c6b9c1c3488966759018689 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 06:53:57 +0000
+Subject: [PATCH] doc/examples/extract_mvs: check for errors when writing the
+ result
+
+The motion vectors are printed to the standard output, which is usually
+redirected to a file. Nothing notices when that fails:
+
+    $ ./extract_mvs in.mp4 > /dev/full; echo $?
+    ...
+    0
+
+Flush the standard output at the end and return a failure exit status
+if that or an earlier write failed.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/extract_mvs.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/doc/examples/extract_mvs.c b/doc/examples/extract_mvs.c
+index d714d2f..03f9e23 100644
+--- a/doc/examples/extract_mvs.c
++++ b/doc/examples/extract_mvs.c
+@@ -191,6 +191,13 @@ int main(int argc, char **argv)
+     /* flush cached frames */
+     decode_packet(NULL);
+ 
++    /* the motion vectors are the result of this program, so make sure
++     * that they were actually written */
++    if (ret >= 0 && (fflush(stdout) == EOF || ferror(stdout))) {
++        fprintf(stderr, "Error writing to the standard output\n");
++        ret = AVERROR(EIO);
++    }
++
+ end:
+     avcodec_free_context(&video_dec_ctx);
+     avformat_close_input(&fmt_ctx);
+-- 
+2.43.0
+

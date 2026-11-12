@@ -1,0 +1,42 @@
+From 8bab4f19a5fd161eda2e083cfd2ab09c97ce263d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 06:53:57 +0000
+Subject: [PATCH] doc/examples/extract_mvs: do not leak the codec context
+
+open_codec_context() frees the codec context when
+avcodec_parameters_to_context() fails, but not when avcodec_open2()
+fails. The context is only stored in video_dec_ctx on success, so main()
+cannot free it either.
+
+While at it, report a failed allocation as ENOMEM instead of EINVAL.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/extract_mvs.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/extract_mvs.c b/doc/examples/extract_mvs.c
+index 73c8570..d714d2f 100644
+--- a/doc/examples/extract_mvs.c
++++ b/doc/examples/extract_mvs.c
+@@ -103,7 +103,7 @@ static int open_codec_context(AVFormatContext *fmt_ctx, enum AVMediaType type)
+         dec_ctx = avcodec_alloc_context3(dec);
+         if (!dec_ctx) {
+             fprintf(stderr, "Failed to allocate codec\n");
+-            return AVERROR(EINVAL);
++            return AVERROR(ENOMEM);
+         }
+ 
+         ret = avcodec_parameters_to_context(dec_ctx, st->codecpar);
+@@ -120,6 +120,7 @@ static int open_codec_context(AVFormatContext *fmt_ctx, enum AVMediaType type)
+         if (ret < 0) {
+             fprintf(stderr, "Failed to open %s codec\n",
+                     av_get_media_type_string(type));
++            avcodec_free_context(&dec_ctx);
+             return ret;
+         }
+ 
+-- 
+2.43.0
+
