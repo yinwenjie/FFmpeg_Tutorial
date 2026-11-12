@@ -3,7 +3,7 @@
 #
 # 用法（在仓库根目录，先编译 mtool）：
 #   mtool/tests/run_tests.sh                 全部子命令
-#   mtool/tests/run_tests.sh info cut        只测这几个（common info cut thumb audio）
+#   mtool/tests/run_tests.sh info cut        只测这几个（common info cut thumb audio transcode push）
 #   BUILD=mtool/build-asan mtool/tests/run_tests.sh      测 ASan 构建（验收标准：无泄漏、无越界）
 #
 # 测什么、怎么判断（每一项的标准写死在这里）：
@@ -32,7 +32,7 @@ mapfile -t BAD < <(awk -F'\t' '!/^#/ && $2=="bad" {print $1}' $T/testfiles.tsv)
 mapfile -t DAMAGED < <(awk -F'\t' '!/^#/ && $2=="damaged" {print $1}' $T/testfiles.tsv)
 
 W=$(mktemp -d out/mtool_test.XXXXXX 2>/dev/null || { mkdir -p out && mktemp -d out/mtool_test.XXXXXX; })
-trap 'rm -rf "$W"' EXIT
+trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$W"' EXIT
 export ASAN_OPTIONS=detect_leaks=1:abort_on_error=0 UBSAN_OPTIONS=print_stacktrace=1
 
 pass=0; fail=0; failed=()
@@ -506,8 +506,376 @@ test_audio() {
     run audio audio -y --bogus "$S/h264_aac.mp4" "$W/u.wav";      eq "audio 不认识的选项：退出码 2" 2 $RC
 }
 
+# ================================================================== transcode
+fmt_dur() { ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" 2>/dev/null | head -n 1; }
+stream_field() { ffprobe -v error -select_streams "$2" -show_entries "stream=$3" -of csv=p=0 "$1" 2>/dev/null | head -n 1; }
+side_rotation() { ffprobe -v error -select_streams v:0 -show_entries stream_side_data=rotation -of csv=p=0 "$1" | head -n 1; }
+# 输出里视频（音频）包的清单（解码时间戳、显示时间戳、时长、大小、CRC）的 md5
+vpkt_md5() { ffmpeg -v error -i "$1" -map 0:v:0 -c copy -f framecrc - 2>/dev/null | awk -F',' '!/^#/ {gsub(/ /, ""); print $2 "," $3 "," $4 "," $5 "," $6}' | md5sum | cut -d' ' -f1; }
+apkt_md5() { ffmpeg -v error -i "$1" -map 0:a:0 -c copy -f framecrc - 2>/dev/null | awk -F',' '!/^#/ {gsub(/ /, ""); print $2 "," $3 "," $4 "," $5 "," $6}' | md5sum | cut -d' ' -f1; }
+# 帧的时间（3 位小数，按显示顺序）
+fmt_start() { ffprobe -v error -show_entries format=start_time -of csv=p=0 "$1" 2>/dev/null | head -n 1; }
+frame_times() { ffprobe -v error -select_streams v:0 -show_entries frame=pts_time -of csv=p=0 "$1" | awk '{printf "%.3f\n", $1}'; }
+# tc_same 名字 输入 输出扩展名 模式(bytes|packets) "mtool 的参数" "ffmpeg 命令行的参数"：两边同样的设置（单线程），结果要相同。
+# bytes 逐字节相同；packets 视频包、音频包逐包相同（解码时间戳、显示时间戳、时长、大小、CRC）加起始时间相同
+tc_same() {
+    local name=$1 in=$2 ext=$3 mode=$4 ma=$5 fa=$6
+    run "transcode $name" transcode -y --threads 1 $ma "$S/$in" "$W/tm.$ext"
+    ffmpeg -v error -y -i "$S/$in" -threads 1 $fa "$W/tc.$ext" 2>/dev/null
+    eq "transcode $name：退出码" 0 $RC
+    if [ "$mode" = bytes ]; then
+        yes "transcode $name：输出和 ffmpeg 命令行逐字节相同" cmp -s "$W/tm.$ext" "$W/tc.$ext"
+    else
+        eq "transcode $name：视频包和 ffmpeg 命令行逐包相同" "$(vpkt_md5 "$W/tc.$ext")" "$(vpkt_md5 "$W/tm.$ext")"
+        eq "transcode $name：音频包和 ffmpeg 命令行逐包相同" "$(apkt_md5 "$W/tc.$ext")" "$(apkt_md5 "$W/tm.$ext")"
+        eq "transcode $name：起始时间和 ffmpeg 命令行相同" "$(fmt_start "$W/tc.$ext")" "$(fmt_start "$W/tm.$ext")"
+    fi
+}
+
+test_transcode() {
+    echo "-- transcode"
+    local f ext o nv na src vd ad vs as want n
+    # 所有测试文件转成 MP4：能完整解码，时长和输入相差不到 0.1 秒，音视频的开头和结尾差不到 0.1 秒
+    for f in "${GOOD[@]}"; do
+        nv=$(awk -F'\t' -v f="$f" '$1==f {print $3}' $T/testfiles.tsv); na=$(awk -F'\t' -v f="$f" '$1==f {print $4}' $T/testfiles.tsv)
+        o=$W/tc_$f.mp4; src=$(fmt_dur "$S/$f")
+        run "transcode $f" transcode -y "$S/$f" "$o"
+        eq "transcode $f → mp4：退出码" 0 $RC
+        yes "transcode $f → mp4：输出能完整解码" decodes_clean "$o"
+        yes "transcode $f → mp4：时长和输入的 $src 秒相差不到 0.1 秒" close_to "$(fmt_dur "$o")" "$src" 0.1
+        eq "transcode $f → mp4：流的种类不变" "$({ [ "$nv" -gt 0 ] && echo video; [ "$na" -gt 0 ] && echo audio; } | tr '\n' ' ')" \
+            "$(ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$o" | sort -r | tr '\n' ' ')"
+        if [ "$nv" -gt 0 ] && [ "$na" -gt 0 ]; then
+            vs=$(stream_field "$o" v:0 start_time); as=$(stream_field "$o" a:0 start_time)
+            vd=$(stream_field "$o" v:0 duration); ad=$(stream_field "$o" a:0 duration)
+            yes "transcode $f → mp4：音视频不同步不明显（开头差 $vs/$as，时长差 $vd/$ad，都不到 0.1 秒）" \
+                awk -v a="$vs" -v b="$as" -v c="$vd" -v d="$ad" 'BEGIN {x = a - b; y = c - d; if (x < 0) x = -x; if (y < 0) y = -y; exit (x < 0.1 && y < 0.1) ? 0 : 1}'
+        fi
+    done
+    for f in "${DAMAGED[@]}"; do
+        run "transcode $f" transcode -y "$S/$f" "$W/tcd_$f.mp4"
+        eq "transcode $f（损坏但能打开）：退出码 0，不崩溃" 0 $RC
+        yes "transcode $f（损坏）：输出能完整解码" decodes_clean "$W/tcd_$f.mp4"
+    done
+    for f in "${BAD[@]}"; do
+        run "transcode $f" transcode -y "$S/$f" "$W/tcb_$f.mp4"
+        eq "transcode $f（打不开）：退出码 1" 1 $RC
+        yes "transcode $f（打不开）：stderr 有“mtool：错误：”" grep -q '^mtool：错误：' "$ERR"
+        yes "transcode $f（打不开）：不留下输出" test ! -e "$W/tcb_$f.mp4"
+    done
+
+    # 和 ffmpeg 命令行同样的设置（都用单线程）：MP4 逐字节相同，其他容器逐包相同
+    tc_same "mp4→mp4 默认" h264_aac.mp4 mp4 bytes "" "-c:v libx264 -c:a aac"
+    tc_same "avi(mpeg4+mp2)→mp4" mpeg4_mp2.avi mp4 bytes "" "-c:v libx264 -c:a aac"
+    tc_same "ts→mp4（时间戳不从 0 开始）" h264_aac.ts mp4 bytes "" "-c:v libx264 -c:a aac"
+    tc_same "旋转的视频→mp4（转正）" rotate90.mp4 mp4 bytes "" "-c:v libx264 -c:a aac"
+    tc_same "没有音频→mp4" video_only.mp4 mp4 bytes "" "-c:v libx264"
+    tc_same "只有音频 m4a→m4a" audio_only.m4a m4a bytes "--no-video" "-c:a aac"
+    tc_same "很小的画面→mp4" tiny_16x14.mp4 mp4 bytes "" "-c:v libx264 -c:a aac"
+    tc_same "单声道 8 kHz 的 WAV→m4a" mono_8k.wav m4a bytes "" "-c:a aac"
+    tc_same "--crf 28 --preset veryfast -w 320" h264_aac.mp4 mp4 bytes "--crf 28 --preset veryfast -w 320" "-c:v libx264 -c:a aac -crf 28 -preset veryfast -vf scale=320:-2"
+    tc_same "--vb 1500k --ab 96k" h264_aac.mp4 mp4 bytes "--vb 1500k --ab 96k" "-c:v libx264 -c:a aac -b:v 1500k -b:a 96k"
+    tc_same "--gop 12" h264_aac.mp4 mp4 bytes "--gop 12" "-c:v libx264 -c:a aac -g 12"
+    tc_same "--ar 16000 --ac 1" h264_aac.mp4 mp4 bytes "--ar 16000 --ac 1" "-c:v libx264 -c:a aac -ar 16000 -ac 1"
+    tc_same "--vf eq=brightness=0.1" h264_aac.mp4 mp4 bytes "--vf eq=brightness=0.1" "-c:v libx264 -c:a aac -vf eq=brightness=0.1"
+    tc_same "--af volume=0.5" h264_aac.mp4 mp4 bytes "--af volume=0.5" "-c:v libx264 -c:a aac -af volume=0.5"
+    tc_same "--vopt tune=film --aopt aac_coder=twoloop" h264_aac.mp4 mp4 bytes "--vopt tune=film --aopt aac_coder=twoloop" "-c:v libx264 -c:a aac -tune film -aac_coder twoloop"
+    tc_same "-s 1 -d 2（精确裁剪）" h264_aac.mp4 mp4 bytes "-s 1 -d 2" "-ss 1 -t 2 -c:v libx264 -c:a aac"
+    tc_same "-s 1.5 -d 2（起点不在关键帧上）" h264_aac.mp4 mp4 bytes "-s 1.5 -d 2" "-ss 1.5 -t 2 -c:v libx264 -c:a aac"
+    tc_same "可变帧率→mp4（保持可变）" vfr.mp4 mp4 packets "" "-c:v libx264 -c:a aac"
+    for ext in ts flv; do
+        tc_same "mp4→$ext" h264_aac.mp4 $ext bytes "" "-c:v libx264 -c:a aac"
+    done
+    tc_same "mp4→avi（H.264 加 AAC）" h264_aac.mp4 avi bytes "" "-c:v libx264 -c:a aac"
+    tc_same "--vcodec mpeg4 --acodec mp2 → avi" h264_aac.mp4 avi bytes "--vcodec mpeg4 --acodec mp2" "-c:v mpeg4 -c:a mp2"
+    # MKV 每次写的 SegmentUID、TrackUID 和它们的 CRC-32 是随机的，文件不可能逐字节相同：包逐个相同，其余的元素（名字、大小、内容）逐个相同，文件大小相同
+    tc_same "mp4→mkv" h264_aac.mp4 mkv packets "" "-c:v libx264 -c:a aac"
+    eq "transcode mp4→mkv：文件大小和 ffmpeg 命令行相同" "$(stat -c %s "$W/tc.mkv")" "$(stat -c %s "$W/tm.mkv")"
+    eq "transcode mp4→mkv：除随机值外的头部元素和 ffmpeg 命令行逐个相同" \
+        "$(python3 -I L22_engineering/ebml_dump.py "$W/tc.mkv" | grep -vE 'CRC-32|SegmentUID|TrackUID' | md5sum)" \
+        "$(python3 -I L22_engineering/ebml_dump.py "$W/tm.mkv" | grep -vE 'CRC-32|SegmentUID|TrackUID' | md5sum)"
+
+    # 具体的特征
+    run transcode transcode -y "$S/rotate90.mp4" "$W/rot.mp4"
+    eq "transcode 旋转的视频：转正成 360x640，输出里没有旋转信息" "360x640 " "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$W/rot.mp4") $(side_rotation "$W/rot.mp4")"
+    run transcode transcode -y --no-rotate "$S/rotate90.mp4" "$W/rot2.mp4"
+    eq "transcode --no-rotate：保持 640x360，旋转信息带到输出里" "640x360 90" "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$W/rot2.mp4") $(side_rotation "$W/rot2.mp4")"
+    run transcode transcode -y "$S/vfr.mp4" "$W/vfr.mp4"
+    eq "transcode 可变帧率：每一帧的时间和输入相同" "$(frame_times "$S/vfr.mp4" | md5sum)" "$(frame_times "$W/vfr.mp4" | md5sum)"
+    run transcode transcode -y --fps 15 "$S/h264_aac.mp4" "$W/fps.mp4"
+    eq "transcode --fps 15：15 帧每秒，75 帧" "15/1,75" "$(ffprobe -v error -count_packets -select_streams v:0 -show_entries stream=avg_frame_rate,nb_read_packets -of csv=p=0 "$W/fps.mp4")"
+    run transcode transcode -y -w 320 "$S/h264_aac.mp4" "$W/w.mp4";                     eq "transcode -w 320：320x180" 320x180 "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$W/w.mp4")"
+    run transcode transcode -y --size 200x200 "$S/h264_aac.mp4" "$W/sz.mp4";           eq "transcode --size 200x200：缩进框里，200x112" 200x112 "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$W/sz.mp4")"
+    run transcode transcode -y --no-video "$S/h264_aac.mp4" "$W/nv.mp4";              eq "transcode --no-video：只有音频" audio "$(ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$W/nv.mp4" | tr '\n' ' ' | sed 's/ $//')"
+    run transcode transcode -y --no-audio "$S/h264_aac.mp4" "$W/na.mp4";              eq "transcode --no-audio：只有视频" video "$(ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$W/na.mp4" | tr '\n' ' ' | sed 's/ $//')"
+    run transcode transcode -y "$S/h264_aac.mp4" "$W/to.m4a";                         eq "transcode 视频转 .m4a：丢掉视频，只留音频" audio "$(ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$W/to.m4a" | tr '\n' ' ' | sed 's/ $//')"
+    yes "transcode 视频转 .m4a：警告丢掉了视频" grep -q '丢掉视频' "$ERR"
+    run transcode transcode -y --faststart "$S/h264_aac.mp4" "$W/fs.mp4"
+    eq "transcode --faststart：moov 在 mdat 前面" moov "$(python3 -I - "$W/fs.mp4" <<'PY'
+import struct, sys
+d = open(sys.argv[1], 'rb').read(); i = 0
+while i < len(d):
+    sz, t = struct.unpack('>I4s', d[i:i + 8])
+    if t in (b'moov', b'mdat'): print(t.decode()); break
+    i += sz
+PY
+)"
+    run transcode transcode -y "$S/h264_aac.mp4" "$W/prog.mp4"
+    yes "transcode 进度：stderr 不是终端时在结束时打印一行 100%" grep -q '转码 100.0%' "$ERR"
+    yes "transcode 摘要：时长和要求的差不到 0.1 秒（程序自己重新打开输出读的）" grep -q '相差 0.0' "$OUT"
+    # 裁剪
+    for f in h264_aac.mp4 h264_aac.mkv h264_aac.ts h264_aac.flv mpeg4_mp2.avi rotate90.mp4 vfr.mp4 audio_only.m4a mono_8k.wav; do
+        run "transcode $f -s 1 -d 1.5" transcode -y -s 1 -d 1.5 "$S/$f" "$W/trim.mp4"
+        eq "transcode $f -s 1 -d 1.5：退出码" 0 $RC
+        yes "transcode $f -s 1 -d 1.5：时长 1.5 秒，差不到 0.1 秒" close_to "$(fmt_dur "$W/trim.mp4")" 1.5 0.1
+    done
+    tc_same "-s 2.5 -e 4.25（-e 是结束时间，不是时长）" h264_aac.mp4 mp4 bytes "-s 2.5 -e 4.25" "-ss 2.5 -to 4.25 -c:v libx264 -c:a aac"
+    run transcode transcode -y -s 2.5 -e 4.25 "$S/h264_aac.mp4" "$W/trim2.mp4"
+    eq "transcode -s 2.5 -e 4.25：视频 43 帧（帧落在 0.04 到 1.72 秒，1.76 秒那一帧超过终点，不要）" 43 "$(ffprobe -v error -count_packets -select_streams v:0 -show_entries stream=nb_read_packets -of csv=p=0 "$W/trim2.mp4")"
+    # 硬件：没有显卡的机器上，--hw vaapi 要失败，--hw auto 要退回软件
+    if [ ! -e /dev/dri ]; then
+        run transcode transcode -y --hw vaapi "$S/h264_aac.mp4" "$W/hw.mp4"
+        eq "transcode --hw vaapi 没有显卡：退出码 1" 1 $RC
+        yes "transcode --hw vaapi 没有显卡：说明原因" grep -q 'VAAPI 设备' "$ERR"
+        yes "transcode --hw vaapi 没有显卡：不留下输出" test ! -e "$W/hw.mp4"
+        run transcode transcode -y --hw auto "$S/h264_aac.mp4" "$W/hwa.mp4"
+        eq "transcode --hw auto 没有显卡：退出码 0，退回软件" 0 $RC
+        yes "transcode --hw auto 没有显卡：警告并改用软件" grep -q '改用软件编码' "$ERR"
+        eq "transcode --hw auto 没有显卡：用的是 libx264" libx264 "$(grep -o 'libx264' "$OUT" | head -n 1)"
+        run transcode transcode -y --threads 1 --hw auto "$S/h264_aac.mp4" "$W/hwa1.mp4"
+        run transcode transcode -y --threads 1 --hw none "$S/h264_aac.mp4" "$W/hwn1.mp4"
+        yes "transcode --hw auto 没有显卡：输出和 --hw none 的逐字节相同" cmp -s "$W/hwa1.mp4" "$W/hwn1.mp4"
+        run transcode transcode -y --vcodec h264_vaapi "$S/h264_aac.mp4" "$W/hwb.mp4"
+        eq "transcode --vcodec h264_vaapi 没有 --hw：退出码 1" 1 $RC
+    else
+        echo "  （这台机器有 /dev/dri：跳过上面 13 项“没有显卡时”的检查，总数会比没有 /dev/dri 的机器少 13 项）"
+    fi
+    run transcode transcode -y --hw none "$S/h264_aac.mp4" "$W/hwn.mp4";   eq "transcode --hw none：退出码 0" 0 $RC
+    run transcode transcode -y --hw vaapi --hw-device /nonexistent_device "$S/h264_aac.mp4" "$W/hwd.mp4"
+    eq "transcode --hw vaapi --hw-device 不存在的设备：退出码 1" 1 $RC
+    yes "transcode --hw-device 不存在的设备：错误里有设备路径" grep -q '/nonexistent_device' "$ERR"
+    yes "transcode --hw-device 不存在的设备：不留下输出" test ! -e "$W/hwd.mp4"
+    run transcode transcode -y --hw auto --hw-device /nonexistent_device "$S/h264_aac.mp4" "$W/hwd2.mp4"
+    eq "transcode --hw auto --hw-device 不存在的设备：退回软件，退出码 0" 0 $RC
+    run transcode transcode -y --hw-device /dev/dri/renderD128 "$S/h264_aac.mp4" "$W/hwd3.mp4"
+    eq "transcode --hw-device 没有 --hw：退出码 2" 2 $RC
+
+    # 该拒绝的
+    run transcode transcode -y --vcodec bogus "$S/h264_aac.mp4" "$W/u.mp4";   eq "transcode 没有这个视频编码器：退出码 1" 1 $RC
+    run transcode transcode -y --vcodec aac "$S/h264_aac.mp4" "$W/u.mp4";     eq "transcode 音频编码器当视频编码器：退出码 1" 1 $RC
+    run transcode transcode -y --acodec bogus "$S/h264_aac.mp4" "$W/u.mp4";   eq "transcode 没有这个音频编码器：退出码 1" 1 $RC
+    run transcode transcode -y --ar 7000 "$S/h264_aac.mp4" "$W/u.mp4";        eq "transcode AAC 不支持的采样率 7000：退出码 1" 1 $RC
+    yes "transcode 不支持的采样率：列出支持的" grep -q '44100' "$ERR"
+    yes "transcode 不支持的采样率：不留下输出" test ! -e "$W/u.mp4"
+    run transcode transcode -y --vopt bogus=1 "$S/h264_aac.mp4" "$W/u.mp4";   eq "transcode 编码器不认识的选项：退出码 1" 1 $RC
+    yes "transcode 编码器不认识的选项：说出选项名" grep -q 'bogus' "$ERR"
+    yes "transcode 编码器不认识的选项：不留下输出" test ! -e "$W/u.mp4"
+    run transcode transcode -y --vf bogusfilter "$S/h264_aac.mp4" "$W/u.mp4"; eq "transcode 滤镜图写错：退出码 1" 1 $RC
+    yes "transcode 滤镜图写错：说出滤镜图" grep -q 'bogusfilter' "$ERR"
+    run transcode transcode -y --faststart "$S/h264_aac.mp4" "$W/u.mkv";      eq "transcode --faststart 输出 mkv：退出码 1" 1 $RC
+    yes "transcode --faststart 输出 mkv：不留下输出" test ! -e "$W/u.mkv"
+    run transcode transcode -y -s 99 "$S/h264_aac.mp4" "$W/u.mp4";            eq "transcode 起点超过文件长度：退出码 1" 1 $RC
+    yes "transcode 起点超过文件长度：不留下输出" test ! -e "$W/u.mp4"
+    run transcode transcode -y "$S/h264_aac.mp4" "$W/u.xyz";                  eq "transcode 不认识的扩展名：退出码 1" 1 $RC
+    run transcode transcode -y "$S/h264_aac.mp4" /nonexistent_dir/u.mp4;      eq "transcode 输出目录不存在：退出码 1" 1 $RC
+    run transcode transcode -y "$S/nonexistent.mp4" "$W/u.mp4";               eq "transcode 文件不存在：退出码 1" 1 $RC
+    run transcode transcode -y --no-audio "$S/audio_only.m4a" "$W/u.mp4";     eq "transcode 只有音频的输入加 --no-audio：退出码 1" 1 $RC
+    cp "$S/h264_aac.mp4" "$W/exists.mp4"
+    run transcode transcode "$S/h264_aac.mp4" "$W/exists.mp4";                eq "transcode 输出已存在不加 -y：退出码 1" 1 $RC
+    yes "transcode 输出已存在：说明加 -y" grep -q '加 -y' "$ERR"
+    yes "transcode 输出已存在：原来的文件没有被动" cmp -s "$S/h264_aac.mp4" "$W/exists.mp4"
+    cp "$S/h264_aac.mp4" "$W/same.mp4"
+    run transcode transcode -y "$W/same.mp4" "$W/same.mp4";                   eq "transcode 输入输出同一个文件：退出码 1" 1 $RC
+    yes "transcode 输入输出同一个文件：输入没有被写坏" cmp -s "$S/h264_aac.mp4" "$W/same.mp4"
+    for a in "--crf abc" "--vb 5" "--ab 5" "--gop 0" "--threads x" "--hw gpu" "-w 5" "--size 100" "--fps 0" "--ar 5" "--ac 9" "-s abc" "-s 3 -e 2" "-e 2 -d 1" "-w 100 --size 100x100" "--no-video --no-audio" "--vopt novalue" "--bogus"; do
+        run transcode transcode -y $a "$S/h264_aac.mp4" "$W/u.mp4"
+        eq "transcode $a：退出码 2" 2 $RC
+    done
+    run transcode transcode -y "$S/h264_aac.mp4";                             eq "transcode 缺输出：退出码 2" 2 $RC
+}
+
+# ================================================================== push
+# 接收端都是本机上的 ffmpeg：rtmp 用 -listen 1 收成 FLV，tcp 用 ?listen 收成 MPEG-TS。端口不重复使用。
+PORT=$((21000 + $$ % 20000))
+RECV_PID=
+# 等端口进入监听状态。不能用“连一下试试”：只接受一个连接的接收端会把这次试探当成推流的客户端
+wait_listen() {
+    local hex; hex=$(printf '%04X' "$1")
+    for _ in $(seq 80); do
+        cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk -v p="$hex" '$2 ~ (":" p "$") && $4 == "0A" {f = 1} END {exit !f}' && return 0
+        sleep 0.1
+    done
+    return 1
+}
+# recv 种类 输出文件 [rtmp 的流名]：换一个端口，后台起接收端，等它开始监听。PORT、RECV_PID 是结果
+recv() {
+    PORT=$((PORT + 1))
+    case $1 in
+        rtmp) ffmpeg -v error -y -listen 1 -i "rtmp://127.0.0.1:$PORT/live/${3:-t}" -c copy -f flv "$2" 2>"$W/recv.err" & ;;
+        tcp)  ffmpeg -v error -y -i "tcp://127.0.0.1:$PORT?listen" -c copy -f mpegts "$2" 2>"$W/recv.err" & ;;
+    esac
+    RECV_PID=$!
+    wait_listen $PORT || bad "push：接收端没有开始监听 $PORT"
+}
+# 等接收端自己结束（对方关了连接），最多 10 秒，超时杀掉
+recv_wait() {
+    for _ in $(seq 100); do kill -0 $RECV_PID 2>/dev/null || break; sleep 0.1; done
+    kill $RECV_PID 2>/dev/null; wait $RECV_PID 2>/dev/null
+}
+now() { date +%s.%N; }
+no_match() { ! grep -q "$1" "${@:2}"; }
+# 一行输出里某一路的包数：“  video：52 个包，…”
+sent_packets() { sed -n "s/^  $1：\([0-9]*\) 个包.*/\1/p" "$OUT"; }
+
+test_push() {
+    echo "-- push"
+    local f ref got t0 t1 sv sa url v a n
+    # 逐个测试文件推到 TCP（MPEG-TS），不等待：收到的每个包要和 ffmpeg -c copy 出来的相同
+    for f in h264_aac.mp4 h264_aac.mkv h264_aac.ts h264_aac.flv mpeg4_mp2.avi rotate90.mp4 vfr.mp4 video_only.mp4 audio_only.m4a tiny_16x14.mp4 long_gop.mp4 truncated.ts corrupt_mid.mp4; do
+        ref=$W/ref_$f.ts; got=$W/got_$f.ts
+        ffmpeg -v error -y -i "$S/$f" -c copy -f mpegts "$ref" 2>/dev/null
+        recv tcp "$got"
+        run "push $f" push --no-pace "$S/$f" "tcp://127.0.0.1:$PORT"
+        recv_wait
+        eq "push $f → tcp：退出码" 0 $RC
+        eq "push $f → tcp：收到的视频包和 ffmpeg -c copy 的逐包相同" "$(crcs "$ref" v | md5sum)" "$(crcs "$got" v | md5sum)"
+        eq "push $f → tcp：收到的音频包和 ffmpeg -c copy 的逐包相同" "$(crcs "$ref" a | md5sum)" "$(crcs "$got" a | md5sum)"
+        yes "push $f → tcp：收到的时长和 ffmpeg -c copy 的相差不到 0.15 秒" close_to "$(fmt_dur "$got")" "$(fmt_dur "$ref")" 0.15
+        yes "push $f → tcp：stdout 有推流完成" grep -q '^推流完成' "$OUT"
+    done
+    # 输出格式装不下的编码：连接之前就报错
+    run push push --no-pace -f flv "$S/mpeg4_mp2.avi" "tcp://127.0.0.1:1";   eq "push MPEG-4+MP2 → FLV：退出码 1" 1 $RC
+    yes "push MPEG-4+MP2 → FLV：说明装不下" grep -q '装不下' "$ERR"
+    yes "push MPEG-4+MP2 → FLV：没有去连接（错误里没有 Connection refused）" no_match 'refused' "$ERR"
+    # avformat_query_codec 对 FLV 装 MPEG-4 视频说“可以”，要靠 avformat_init_output 才查得出来
+    ffmpeg -v error -y -i "$S/mpeg4_mp2.avi" -c:v copy -c:a aac "$W/mpeg4_aac.mkv" 2>/dev/null
+    run push push "$W/mpeg4_aac.mkv" "rtmp://127.0.0.1:1/live/k";    eq "push MPEG-4+AAC → RTMP：退出码 1" 1 $RC
+    yes "push MPEG-4+AAC → RTMP：说 flv 装不下" grep -q 'flv 装不下' "$ERR"
+    yes "push MPEG-4+AAC → RTMP：没有去连接（错误里没有 Connection refused）" no_match 'refused' "$ERR"
+
+    # RTMP：按播放速度推 2 秒。时长对得上、收到的包数和发出的相同、包内容和输入开头逐包相同、密钥不出现在输出里
+    got=$W/got_rtmp.flv
+    recv rtmp "$got" s3cr3tkey
+    t0=$(now); run "push rtmp" push -d 2 "$S/h264_aac.mp4" "rtmp://127.0.0.1:$PORT/live/s3cr3tkey"; t1=$(now)
+    recv_wait
+    eq "push → rtmp：退出码" 0 $RC
+    yes "push → rtmp：用时 $(awk -v a=$t0 -v b=$t1 'BEGIN {printf "%.2f", b - a}') 秒，和内容的 2 秒相差不到 0.5 秒（按播放速度推）" close_to "$(awk -v a=$t0 -v b=$t1 'BEGIN {print b - a}')" 2.2 0.5
+    yes "push → rtmp：stdout 里“推了”的内容是 2 秒左右" grep -qE '推了 (1\.9|2\.0)[0-9]* 秒' "$OUT"
+    yes "push → rtmp：stdout 和 stderr 里没有推流密钥" no_match s3cr3tkey "$OUT" "$ERR"
+    yes "push → rtmp：stdout 里是 rtmp://127.0.0.1:$PORT/live/***" grep -q "rtmp://127.0.0.1:$PORT/live/\*\*\*" "$OUT"
+    yes "push → rtmp：不报“Failed to update header”（FLV 不写时长和文件大小）" no_match 'Failed to update' "$ERR"
+    sv=$(sent_packets video); sa=$(sent_packets audio)
+    eq "push → rtmp：收到的视频包数等于发出的 $sv" "$sv" "$(crcs "$got" v | wc -l)"
+    eq "push → rtmp：收到的音频包数等于发出的 $sa" "$sa" "$(crcs "$got" a | wc -l)"
+    eq "push → rtmp：收到的视频包和输入开头的逐包相同" "$(crcs "$S/h264_aac.mp4" v | head -n "$sv" | md5sum)" "$(crcs "$got" v | md5sum)"
+    eq "push → rtmp：收到的音频包和输入开头的逐包相同" "$(crcs "$S/h264_aac.mp4" a | head -n "$sa" | md5sum)" "$(crcs "$got" a | md5sum)"
+    yes "push → rtmp：收到的时长 2.0 到 2.3 秒" close_to "$(fmt_dur "$got")" 2.15 0.15
+    # 输入是 TS：AAC 是 ADTS，FLV 要的是 AudioSpecificConfig，封装器要自动转（aac_adtstoasc）
+    got=$W/got_rtmp_ts.flv
+    recv rtmp "$got"
+    run "push ts → rtmp" push -d 1 "$S/h264_aac.ts" "rtmp://127.0.0.1:$PORT/live/t"
+    recv_wait
+    eq "push h264_aac.ts → rtmp：退出码" 0 $RC
+    eq "push h264_aac.ts → rtmp：收到 H.264 和 AAC" "h264 aac" "$(ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$got" | tr '\n' ' ' | sed 's/ $//')"
+    yes "push h264_aac.ts → rtmp：收到的能完整解码" decodes_clean "$got"
+
+    # 循环：时间戳要单调递增，包数是 (N+1) 倍，时长也是
+    for f in h264_aac.mp4 h264_aac.mkv h264_aac.ts vfr.mp4; do
+        got=$W/got_loop_$f.ts
+        v=$(crcs "$S/$f" v | wc -l); a=$(crcs "$S/$f" a | wc -l)
+        recv tcp "$got"
+        run "push $f --loop 2" push --no-pace --loop 2 "$S/$f" "tcp://127.0.0.1:$PORT"
+        recv_wait
+        eq "push $f --loop 2：退出码" 0 $RC
+        eq "push $f --loop 2：视频包数是 3 倍" $((v * 3)) "$(crcs "$got" v | wc -l)"
+        eq "push $f --loop 2：音频包数是 3 倍" $((a * 3)) "$(crcs "$got" a | wc -l)"
+        yes "push $f --loop 2：时长是输入的 3 倍，相差不到 0.3 秒" close_to "$(fmt_dur "$got")" "$(awk -v d="$(fmt_dur "$S/$f")" 'BEGIN {print d * 3}')" 0.3
+        yes "push $f --loop 2：stdout 说循环 2 遍" grep -q '循环 2 遍' "$OUT"
+        yes "push $f --loop 2：收到的能完整解码" decodes_clean "$got"
+    done
+    # -d 把循环也算进去：--loop -1 -d 7 等于推 7 秒
+    got=$W/got_d7.ts
+    recv tcp "$got"
+    t0=$(now); run "push --loop -1 -d 7" push --no-pace --loop -1 -d 7 "$S/h264_aac.mp4" "tcp://127.0.0.1:$PORT"; t1=$(now)
+    recv_wait
+    eq "push --loop -1 -d 7：退出码" 0 $RC
+    yes "push --loop -1 -d 7：收到的时长 7 秒，相差不到 0.3 秒" close_to "$(fmt_dur "$got")" 7.1 0.3
+    yes "push --loop -1 -d 7 --no-pace：不等待，不到 3 秒就推完" close_to "$(awk -v a=$t0 -v b=$t1 'BEGIN {print b - a}')" 0 3
+
+    # Ctrl-C（SIGINT）和 SIGTERM：写完文件尾再退出，退出码 0；收到的文件是完整的
+    for sig in INT TERM; do
+        got=$W/got_sig$sig.ts
+        recv tcp "$got"
+        t0=$(now)
+        "$MT" push --loop -1 "$S/h264_aac.mp4" "tcp://127.0.0.1:$PORT" >"$OUT" 2>"$ERR" &
+        n=$!
+        sleep 2; kill -$sig $n; wait $n; RC=$?; t1=$(now)
+        recv_wait
+        eq "push SIG$sig：退出码 0" 0 $RC
+        yes "push SIG$sig：收到信号后 0.5 秒内退出" close_to "$(awk -v a=$t0 -v b=$t1 'BEGIN {print b - a}')" 2.1 0.5
+        yes "push SIG$sig：stdout 说收到中断信号" grep -q '收到中断信号' "$OUT"
+        yes "push SIG$sig：没有 sanitizer 报告" no_match -E 'Sanitizer|runtime error' "$ERR"
+        yes "push SIG$sig：收到的时长约 2 秒" close_to "$(fmt_dur "$got")" 2.1 0.5
+        yes "push SIG$sig：收到的能完整解码" decodes_clean "$got"
+    done
+    # 对方中途断开：退出码 1，说明原因，不能卡住，也不能被 SIGPIPE 杀掉
+    recv tcp "$W/got_die.ts"
+    "$MT" push --loop -1 "$S/h264_aac.mp4" "tcp://127.0.0.1:$PORT" >"$OUT" 2>"$ERR" &
+    n=$!
+    sleep 1.5; kill -9 $RECV_PID; wait $RECV_PID 2>/dev/null
+    for _ in $(seq 50); do kill -0 $n 2>/dev/null || break; sleep 0.1; done
+    if kill -0 $n 2>/dev/null; then kill -9 $n; wait $n 2>/dev/null; bad "push 对方断开：5 秒后还没有退出"; else wait $n; RC=$?; eq "push 对方断开：退出码 1（不是被信号杀掉）" 1 $RC; fi
+    yes "push 对方断开：stderr 有“mtool：错误：往”" grep -q '^mtool：错误：往' "$ERR"
+    yes "push 对方断开：说明原因" grep -qE 'Broken pipe|Connection reset' "$ERR"
+
+    # UDP 发出去不需要有人在收：能推、按播放速度、退出码 0
+    t0=$(now); run "push udp" push -d 1 "$S/h264_aac.mp4" "udp://127.0.0.1:$((PORT + 100))"; t1=$(now)
+    eq "push → udp：退出码" 0 $RC
+    yes "push → udp：按播放速度，1 秒的内容用 1 秒推" close_to "$(awk -v a=$t0 -v b=$t1 'BEGIN {print b - a}')" 1.1 0.3
+    # -o：交给协议和封装器的选项
+    recv tcp "$W/got_o.ts"
+    run "push -o" push --no-pace -o pes_payload_size=2930 "$S/h264_aac.mp4" "tcp://127.0.0.1:$PORT"
+    recv_wait
+    eq "push -o pes_payload_size=2930（封装器认识的选项）：退出码 0" 0 $RC
+    recv tcp "$W/got_o2.ts"
+    run "push -o bogus" push --no-pace -o bogus=1 "$S/h264_aac.mp4" "tcp://127.0.0.1:$PORT"
+    recv_wait
+    eq "push -o bogus=1（谁也不认识）：退出码 1" 1 $RC
+    yes "push -o bogus=1：说出选项名" grep -q 'bogus' "$ERR"
+
+    # 该拒绝的
+    run push push "$S/h264_aac.mp4" "tcp://127.0.0.1:1";                   eq "push 连不上（端口没人监听）：退出码 1" 1 $RC
+    yes "push 连不上：说明原因" grep -q '^mtool：错误：连不上' "$ERR"
+    run push push "$S/h264_aac.mp4" "rtmp://u:p4ss@127.0.0.1:1/live/s3cr3tkey?token=t0k3n"
+    eq "push 连不上 RTMP：退出码 1" 1 $RC
+    yes "push 连不上 RTMP：错误里没有用户名密码、流名、token" no_match -E 'p4ss|s3cr3tkey|t0k3n' "$ERR"
+    run push push "$S/mpeg4_mp2.avi" "rtmp://127.0.0.1:1/live/s3cr3tkey"; eq "push MPEG-4+MP2 → RTMP：退出码 1" 1 $RC
+    yes "push MPEG-4+MP2 → RTMP：说 flv 装不下，提示 mtool transcode" grep -q 'flv 装不下.*mtool transcode' "$ERR"
+    yes "push MPEG-4+MP2 → RTMP：错误里没有流名" no_match s3cr3tkey "$ERR"
+    run push push "$S/h264_aac.mp4" "srt://127.0.0.1:9000";               eq "push → srt：退出码 1" 1 $RC
+    yes "push → srt：这份 FFmpeg 没有就说没有，不是一句 Protocol not found" grep -qE 'srt 协议|SRT 协议|srt' "$ERR"
+    run push push "$S/h264_aac.mp4" "rtmps://127.0.0.1:1/live/k";          eq "push → rtmps：退出码 1" 1 $RC
+    run push push "$S/h264_aac.mp4" "$W/out.flv";                         eq "push 地址是文件路径：退出码 1" 1 $RC
+    yes "push 地址是文件路径：不写文件" test ! -e "$W/out.flv"
+    run push push "$S/h264_aac.mp4" "file://$W/out.flv";                  eq "push 地址是 file://：退出码 1" 1 $RC
+    yes "push 地址是 file://：不写文件" test ! -e "$W/out.flv"
+    run push push "$S/h264_aac.mp4" "foo://127.0.0.1/x";                  eq "push 不认识的协议：退出码 1" 1 $RC
+    run push push "$S/nonexistent.mp4" "tcp://127.0.0.1:1";               eq "push 输入不存在：退出码 1" 1 $RC
+    for f in "${BAD[@]}"; do
+        run "push $f" push "$S/$f" "tcp://127.0.0.1:1"
+        eq "push $f（打不开）：退出码 1" 1 $RC
+        yes "push $f（打不开）：stderr 有“mtool：错误：打不开”" grep -q 'mtool：错误：打不开' "$ERR"
+    done
+    for a in "--loop abc" "--loop -2" "--loop 1.5" "-d 0" "-d abc" "-o novalue" "-o =x" "--bogus"; do
+        run push push $a "$S/h264_aac.mp4" "tcp://127.0.0.1:1";           eq "push $a：退出码 2" 2 $RC
+    done
+    run push push;                                                        eq "push 没有参数：退出码 2" 2 $RC
+    run push push "$S/h264_aac.mp4";                                      eq "push 缺地址：退出码 2" 2 $RC
+    run push push -h;                                                     eq "push -h：退出码 0" 0 $RC
+}
+
 SECTIONS=("$@")
-[ ${#SECTIONS[@]} -eq 0 ] && SECTIONS=(common info cut thumb audio)
+[ ${#SECTIONS[@]} -eq 0 ] && SECTIONS=(common info cut thumb audio transcode push)
 for s in "${SECTIONS[@]}"; do
     case $s in
         common) test_common ;;
@@ -515,6 +883,8 @@ for s in "${SECTIONS[@]}"; do
         cut)  test_cut ;;
         thumb) test_thumb ;;
         audio) test_audio ;;
+        transcode) test_transcode ;;
+        push) test_push ;;
         *) echo "不认识的测试：$s" >&2; exit 2 ;;
     esac
 done

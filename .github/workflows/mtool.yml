@@ -1,0 +1,56 @@
+# mtool 的持续集成：每次改动 mtool 或者编译 FFmpeg 的脚本，都用课程固定的那一版 FFmpeg 编译、跑全部自动化测试
+# （普通构建和 ASan+UBSan 构建各一遍，警告当错误）。实际执行的就是 mtool/scripts/check.sh，本机也可以跑。
+#
+# 编译 FFmpeg 要十几分钟，所以把装好的结果缓存起来；缓存的键是 scripts/build_ffmpeg.sh 的内容，
+# 脚本里的版本号（FFMPEG_REF）或者编译选项一改，缓存就换新的。
+name: mtool
+
+on:
+  push:
+    paths:
+      - 'mtool/**'
+      - 'scripts/build_ffmpeg.sh'
+      - '.github/workflows/mtool.yml'
+  pull_request:
+    paths:
+      - 'mtool/**'
+      - 'scripts/build_ffmpeg.sh'
+      - '.github/workflows/mtool.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PREFIX: ${{ github.workspace }}/ffmpeg_build
+      SRC_DIR: ${{ github.workspace }}/ffmpeg_src
+    steps:
+      - uses: actions/checkout@v4
+
+      # 依赖和 scripts/build_ffmpeg.sh 里的 APT_PACKAGES 一致
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git pkg-config nasm cmake \
+            libx264-dev libsdl2-dev libfreetype-dev libharfbuzz-dev libfontconfig-dev libva-dev libdrm-dev
+
+      - name: 取 FFmpeg 的缓存
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PREFIX }}
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/build_ffmpeg.sh') }}
+
+      - name: 编译 FFmpeg（缓存没有命中时）
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: scripts/build_ffmpeg.sh
+
+      - name: 编译、测试（普通加 ASan）
+        run: |
+          export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig PATH=$PREFIX/bin:$PATH LD_LIBRARY_PATH=$PREFIX/lib
+          ffmpeg -version | head -n 1
+          mtool/scripts/check.sh

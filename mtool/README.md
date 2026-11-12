@@ -10,8 +10,8 @@
 | `mtool cut` | 不转码截取一段，可同时换容器 | L4、L15 | 已完成 |
 | `mtool thumb` | 缩略图、拼图 | L7、L9、L12、L13 | 已完成 |
 | `mtool audio` | 提取音频，转 WAV、AAC、FLAC、MP2 | L6、L10、L14、L17 | 已完成 |
-| `mtool transcode` | 转码，带进度，可选硬件加速 | L12、L16、L20 | 后面的提交 |
-| `mtool push` | 按实际速度推流 | L19 | 后面的提交 |
+| `mtool transcode` | 转码，带进度，可选 VAAPI 硬件编码 | L12、L16、L21 | 已完成（硬件部分没有在真实设备上验证，见【待补 1】） |
+| `mtool push` | 按播放速度推流到 RTMP、UDP、TCP | L15、L19 | 已完成 |
 
 ## 构建和运行
 
@@ -56,10 +56,15 @@ mtool/
   src/media.c       解码器和滤镜图的公共部分（打开解码器、建 buffer→…→buffersink 的图、旋转滤镜），thumb 等用
   src/cmd_thumb.c   thumb
   src/cmd_audio.c   audio
+  src/cmd_transcode.c   transcode
+  src/cmd_push.c    push
   scripts/gen_testfiles.sh   生成 18 个测试文件
+  scripts/check.sh           一条命令：普通加 ASan 两份构建（-Werror），各跑全部测试；CI 跑的就是它
+  scripts/verify_hw.sh       有 VAAPI 设备时验证 transcode --hw vaapi（没有设备退出码 77）
   tests/testfiles.tsv        每个测试文件是好是坏、有几路流
   tests/run_tests.sh         自动化测试
   tests/helpers.py           测试脚本用的几个小帮手
+.github/workflows/mtool.yml   CI（在仓库根目录下）
 ```
 
 ## 约定（沿用 L22）
@@ -126,11 +131,11 @@ mtool/scripts/gen_testfiles.sh
 
 ```bash
 mtool/tests/run_tests.sh                                  # 全部
-mtool/tests/run_tests.sh thumb audio                      # 只测这几个
+mtool/tests/run_tests.sh thumb audio                      # 只测这几个（common info cut thumb audio transcode push）
 BUILD=mtool/build-asan mtool/tests/run_tests.sh           # 测 ASan 构建
 ```
 
-每一次运行都检查有没有 sanitizer 报告，每一项“算通过”的标准写死在脚本里。数字都是和 ffprobe、ffmpeg 命令行对出来的，不是“看着差不多”。当前（`common`、`info`、`cut`、`thumb`、`audio`）共 824 项，普通构建和 ASan 加 UBSan 构建都全部通过，分别约 20 秒和 25 秒。
+每一次运行都检查有没有 sanitizer 报告，每一项“算通过”的标准写死在脚本里。数字都是和 ffprobe、ffmpeg 命令行对出来的，不是“看着差不多”。当前共 1360 项（`common` 12、`info` 150、`cut` 161、`thumb` 166、`audio` 335、`transcode` 320、`push` 216），普通构建和 ASan 加 UBSan 构建都全部通过，各约 85 到 90 秒（`push` 一节要按播放速度推流，占其中约 18 秒）。这个总数是在没有 `/dev/dri` 的机器上数的：有 `/dev/dri` 时，`transcode` 里 13 项“没有显卡时 `--hw vaapi` 要失败、`--hw auto` 要退回软件”的检查会跳过（那时有没有设备要看设备本身），脚本会打印一行说明；GitHub Actions 上跑出来是 1347 项，差的正好是这 13 项。一条命令做完编译加两份测试：`mtool/scripts/check.sh`（约 3 分钟）。`push` 的测试要在本机起 `ffmpeg` 当接收端：端口从 21000 到 41000 之间随机选一个起点，每个接收端往上用一个，共几十个。
 
 ## mtool info
 
@@ -342,9 +347,201 @@ mtool：警告：解码时遇到 1 个出错的包，对应的声音可能有杂
   时长 1.858 秒（81920 个采样），81 个包
 ```
 
+## mtool transcode
+
+```bash
+mtool transcode [选项] <输入> <输出>
+```
+
+转码：换编码、换容器、改码率、缩放、加滤镜、裁剪，带进度。只处理第一路视频和第一路音频，字幕等丢掉。默认的编码器：视频先试 H.264（libx264；有 `--hw` 的设备时是 h264_vaapi），输出格式装不下就用这种格式自己的默认视频编码器；音频先试 AAC，装不下就用格式自己的默认音频编码器，再不行用 MP2。MP4、MKV、FLV、TS、AVI 的默认都是 H.264 加 AAC。用 `--vcodec`、`--acodec` 换；选项的完整列表见 `mtool transcode --help`。
+
+```
+$ mtool transcode -y samples/mtool/h264_aac.mp4 out/t1.mp4
+转码 100.0%  已处理 5.0 秒，125 帧，速度 9.64x
+转码完成：samples/mtool/h264_aac.mp4 → out/t1.mp4（mp4）
+  视频：h264 640x360 → libx264 640x360 yuv420p，125 帧，25.000 帧/秒，约 742 kb/s
+  音频：aac 44100 Hz → aac 44100 Hz stereo，217 个包，约 122 kb/s
+  时长 5.000 秒（要求的 5.000 秒，相差 0.000 秒），用时 0.53 秒（9.5 倍速）
+$ mtool transcode -y -w 320 --crf 28 --preset veryfast samples/mtool/h264_aac.mp4 out/t2.mp4
+  视频：h264 640x360 → libx264 320x180 yuv420p，125 帧，25.000 帧/秒，约 92 kb/s
+$ mtool transcode -y -s 1.5 -d 2 samples/mtool/h264_aac.mp4 out/t3.mp4
+  视频：h264 640x360 → libx264 640x360 yuv420p，49 帧，25.000 帧/秒，约 806 kb/s
+  时长 2.000 秒（要求的 2.000 秒，相差 0.000 秒），用时 0.28 秒（7.1 倍速）
+$ mtool transcode -y samples/mtool/rotate90.mp4 out/t4.mp4
+  视频：h264 640x360 → libx264 360x640 yuv420p，125 帧，25.000 帧/秒，约 699 kb/s
+$ mtool transcode -y samples/mtool/vfr.mp4 out/t5.mp4
+  视频：h264 640x360 → libx264 640x360 yuv420p，77 帧，可变帧率，约 511 kb/s
+  时长 5.000 秒（要求的 5.000 秒，相差 0.000 秒），用时 0.32 秒（15.8 倍速）
+```
+
+做法是 L16 的转码程序加上一个工具该有的东西，每一步对应一课：
+
+1. **每一路流一条流水线**：解码（L5）→ 滤镜图（L12）→ 编码（L13、L14）→ 复用（L15）。滤镜图的描述是 `[trim,setpts,][转正,][--vf,][scale,][fps,][format=nv12,hwupload]`，音频是 `[atrim,asetpts,][--af,][aformat=…]`，都是按用户给的选项拼出来的；图的出口只接受编码器支持的格式，对不上时图自己插 `scale`、`aresample`。
+2. **先建图，再开编码器**：编码器的宽高、像素格式、帧率、采样率、声道布局都从图的出口读（`av_buffersink_get_*`），不是照抄输入。所以 `-w 320`、`--ar 16000`、转正之后宽高互换，编码器都能拿到对的参数。
+3. **时间戳**（L16、L17）：固定帧率时编码器的时间基是帧率的倒数，每帧 pts 差 1，送去编码的帧带上 `duration`（`AV_CODEC_FLAG_FRAME_DURATION`，不然 MP4 最后一帧没有时长，patch 0011）；音频帧的 pts 用 `av_rescale_delta` 接成连续的（FLV、MKV 的毫秒时间基把每一帧都舍入过）。可变帧率的输入（`r_frame_rate` 和 `avg_frame_rate` 差 2% 以上）保持可变：编码器用滤镜图出口的时间基，每一帧的时间原样保留。
+4. **精确裁剪**（L16）：`-s` 之前 1 秒（有音频时）定位，从那里解码，解出来的帧交给 `trim`、`atrim` 精确裁到帧和采样；`-e`、`-d` 同样。固定帧率会把时间戳取整到帧的格子上，起点不在格子上时（`-s 1.5`，25 帧每秒），裁剪放过的最后一帧取整后可能正好落在终点上，所以**输出里时间在终点之后的视频帧不要**，输出时长不会超过要求的。
+5. **转正**：和 ffmpeg 命令行自动旋转同样的做法（见 `mt_rotation_filter`），转完把帧上的 `AV_FRAME_DATA_DISPLAYMATRIX` 去掉，否则编码器或复用器把它写进输出，播放器转第二次（和 `thumb` 的 PNG 是同一个坑）。`--no-rotate` 反过来：像素不动，旋转信息复制到输出流上，`ffprobe` 看到的还是 90 度。
+6. **容器的要求**：复用器要全局头（MP4、MKV、FLV……）就给编码器设 `AV_CODEC_FLAG_GLOBAL_HEADER`；`oc->max_delay` 设成 0.7 秒（ffmpeg 的 `-muxdelay` 默认值，MPEG-TS 的 PCR 时间从它来，不设的话 TS 的起始时间和命令行差 0.7 秒）；输出的扩展名是只放音频的（`.m4a`、`.wav`、`.flac`……）而输入有视频，丢掉视频并警告；`--faststart` 只对 MP4、MOV 有用，别的容器直接报错，不是悄悄忽略。
+7. **自检**：转完以后把输出文件重新打开，读它的时长，和要求的比，差超过 0.1 秒就警告（验收标准）。上面输出里的“相差 0.000 秒”就是这么来的，不是程序自己算的估计值。
+
+### 和 ffmpeg 命令行对
+
+`--threads 1` 的 mtool 和同样设置的 `ffmpeg -threads 1 -c:v libx264 -c:a aac` 比，24 种设置里 **22 种输出文件逐字节相同**：MP4 的 16 种（默认、AVI 输入、TS 输入、旋转的输入、没有音频、很小的画面、`--crf 28 --preset veryfast -w 320`、`--vb 1500k --ab 96k`、`--gop 12`、`--ar 16000 --ac 1`、`--vf eq=brightness=0.1`、`--af volume=0.5`、`--vopt tune=film --aopt aac_coder=twoloop` 这 13 种，加 `-s 1 -d 2`、`-s 1.5 -d 2`、`-s 2.5 -e 4.25` 三种裁剪），M4A 两种（`audio_only.m4a` 和单声道 8 kHz 的 WAV 转 AAC），FLV、TS 各一种，AVI 两种（H.264 加 AAC，MPEG-4 加 MP2）。剩下 2 种的差别都有原因：
+
+- **MKV**：每次写的 `SegmentUID`、`TrackUID` 和它们的 CRC-32 是随机的，不可能逐字节相同。测试里比的是：文件大小相同；用 L22 的 `ebml_dump.py` 列出头部元素，除了这三个随机值，名字、大小、内容逐个相同；视频包、音频包的解码时间戳、显示时间戳、时长、大小、CRC 逐包相同。
+- **可变帧率的 MP4**（`vfr.mp4`）：包逐个相同，文件大 1 字节：命令行把编码器的时间基设成 1/帧率，x264 写进 SPS 的 VUI 时间信息是 1/50；mtool 用滤镜图出口的时间基（1/12800），保持每一帧原来的时间，不取整到帧格子上，SPS 里的时间信息是 1/25600。`vfr.mp4` 的每一帧恰好都在 1/25 的格子上，所以两边的时间戳一样；真正的可变帧率（屏幕录像之类，时间戳不在格子上）命令行会取整，mtool 不会。
+
+踩过的坑（都是和命令行对出来的）：
+
+- **MKV 少了 `DefaultDuration`、FLV 元数据少了 `framerate`**：输出流的 `avg_frame_rate` 没设（15 字节和 20 字节的差别就是这两项）。
+- **MKV 少了 `Colour` 里的 `Range`、`FlagInterlaced`**：没有 VUI 的 H.264 解码器不会说颜色范围，但解出来的帧标的是电视范围；编码器的 `color_range`、`field_order` 要自己补上。
+- **TS 的起始时间差 0.7 秒**：`max_delay`，见上。
+- **`avformat_query_codec` 说“不知道”（负数）**：别当成“不行”。TS 容器对每一种编码都答“不知道”，当成“不行”的话默认编码器选成了 MPEG-2 加 MP2。
+- **MP4 最后一帧没有时长**：送给编码器的帧不带 `duration`，编码器出来的包就没有时长，MP4 最后一帧的时长不对（patch 0011），所以设 `AV_CODEC_FLAG_FRAME_DURATION`，每一帧都给 `duration`。
+
+### 时长误差和音视频同步
+
+验收标准：时长误差小于 0.1 秒，没有明显的音视频不同步。每个测试文件转成 MP4，用 ffprobe 读输入和输出的时长，有音视频两路的再比两路流的开头和时长：
+
+| 文件 | 输入时长 | 输出时长 | 误差 | 音视频开头差 | 音视频时长差 |
+| --- | --- | --- | --- | --- | --- |
+| `h264_aac.mp4` | 5.000 | 5.000 | 0.000 | 0.000 | 0.000 |
+| `h264_aac.mkv` | 5.038 | 5.000 | 0.038 | 0.000 | 0.000 |
+| `h264_aac.ts` | 5.039 | 5.040 | 0.001 | 0.040 | 0.039 |
+| `h264_aac.flv` | 5.095 | 5.040 | 0.055 | 0.040 | 0.039 |
+| `mpeg4_mp2.avi` | 5.016 | 5.016 | 0.000 | 0.000 | 0.016 |
+| `rotate90.mp4`、`vfr.mp4`、`long_gop.mp4` | 5.000 | 5.000 | 0.000 | 0.000 | 0.000 |
+| `video_only.mp4`、`audio_only.m4a` | 5.000 | 5.000 | 0.000 | — | — |
+| `mono_8k.wav` | 3.000 | 3.000 | 0.000 | — | — |
+| `tiny_16x14.mp4` | 2.000 | 2.000 | 0.000 | — | — |
+| `truncated.ts`（损坏） | 2.063 | 2.080 | 0.017 | 0.040 | 0.182 |
+| `corrupt_mid.mp4`（损坏） | 5.000 | 5.000 | 0.000 | 0.000 | 0.000 |
+
+最大误差是 `h264_aac.flv` 的 0.055 秒：输入的“5.095 秒”是 FLV 里最后一个音频帧的时间戳加上它的时长，输出是 5.040 秒（视频 5.000 加上 AAC 预热的 0.040）。有音视频两路的 8 个好文件，开头差和时长差都不到 0.1 秒，最大是 TS、FLV 的 0.040 和 0.039（TS、FLV 里的 AAC 没有预热信息，解码出来比 MP4 的多 1708 个采样，合 38.7 毫秒，L17 里量过；这是同一个量级的数，我没有把每一项拆开验证）。`truncated.ts` 的音视频时长差 0.182 秒不是转码造成的：输入文件被截断时，音频比视频多出了 0.18 秒，输出把它们原样保留。
+
+### 硬件加速
+
+`--hw vaapi` 只做**编码**（和 L21 一样，解码留在 CPU 上；解码到编码之间的数据在内存里，经 `format=nv12,hwupload` 上传）：编码器换成 `h264_vaapi`，`--crf` 变成 `qp` 选项（VAAPI 编码器没有 crf），`--vcodec h264_vaapi` 必须同时给 `--hw vaapi`。`--hw auto` 有设备就用，没有设备退回软件并警告；`--hw vaapi` 没有设备就报错退出，不留下输出文件。`--hw-device /dev/dri/renderD129` 指定设备。
+
+```
+$ mtool transcode -y --hw vaapi -d 1 samples/mtool/h264_aac.mp4 out/h1.mp4
+mtool：错误：打不开 VAAPI 设备（没有显卡、没有 /dev/dri，或者驱动没装）：Generic error in an external library
+$ mtool transcode -y --hw auto -d 1 samples/mtool/h264_aac.mp4 out/h2.mp4
+mtool：警告：没有可用的 VAAPI 设备（Generic error in an external library），改用软件编码
+转码完成：samples/mtool/h264_aac.mp4 → out/h2.mp4（mp4）
+  视频：h264 640x360 → libx264 640x360 yuv420p，25 帧，25.000 帧/秒，约 719 kb/s
+```
+
+**【待补 1】** 开发这个项目的机器没有显卡（`/dev/dri` 不存在），上面两条是它能验证的全部：没有设备时的报错和退回软件，已经在自动化测试里（`--hw vaapi`、`--hw auto`、`--hw-device` 指向不存在的设备、`--vcodec h264_vaapi` 没有 `--hw`）。有设备时的路径写好了，但**没有在真实的设备上跑过**。有 VAAPI 设备的人运行：
+
+```bash
+mtool/scripts/verify_hw.sh
+```
+
+它做 7 项检查（用的是 h264_vaapi、时长误差 <0.1 秒、帧数不变、能完整解码；`--crf` 越大文件越小；`-w 320` 缩放；`-s 1.5 -d 2` 裁剪；旋转的输入；`--hw auto` 用 VAAPI；帧数和 `ffmpeg -vaapi_device … -c:v h264_vaapi` 相同），打印一张结果表，把表填到这里。没有设备时它退出码 77（跳过）。
+
+### 出错
+
+```
+$ mtool transcode -y --vcodec bogus samples/mtool/h264_aac.mp4 out/x.mp4
+mtool：错误：没有叫 bogus 的视频编码器（ffmpeg -encoders 能看到这份 FFmpeg 有哪些）
+$ mtool transcode -y --ar 7000 samples/mtool/h264_aac.mp4 out/x.mp4
+mtool：错误：编码器 aac 不支持采样率 7000 Hz，它支持：96000、88200、64000、48000、44100、32000、24000、22050、16000、12000、11025、8000、7350
+$ mtool transcode -y --vopt bogus=1 samples/mtool/h264_aac.mp4 out/x.mp4
+mtool：错误：视频编码器 libx264 不认识选项 bogus（--preset、--crf、--vopt 里的名字）
+$ mtool transcode -y --faststart samples/mtool/h264_aac.mp4 out/x.mkv
+mtool：错误：复用器 matroska 不认识选项 movflags（--faststart 只对 MP4、MOV 有用）
+$ mtool transcode -y -s 99 samples/mtool/h264_aac.mp4 out/x.mp4
+mtool：错误：起点 99.000 秒超过了文件的长度 5.000 秒
+$ mtool transcode -y --crf abc samples/mtool/h264_aac.mp4 out/x.mp4
+mtool：用法错误：--crf abc 不是数字
+```
+
+前五个退出码 1，最后一个 2；这些失败以后都不留下输出文件（出错时 `unlink` 掉这次创建的文件）。输入输出是同一个文件、输出已存在不加 `-y`、输出目录不存在、扩展名认不出来、不认识的滤镜（`--vf bogusfilter`）也是 1。损坏但能打开的文件（`truncated.ts`、`corrupt_mid.mp4`）退出码 0：能解的帧照常编码，库会打印解码的错误（`error while decoding MB`），输出本身完整、能解码。
+
+## mtool push
+
+```bash
+mtool push [-f 格式] [--loop N] [-d 时长] [--no-pace] [-o 键=值]... <输入> <地址>
+```
+
+把一个文件**不转码**地、按播放的速度推到流媒体地址。来自 L19（协议层）和 L15（复用）：读包，换时间戳，按 `dts` 对着墙上的时钟等，写给输出。地址的协议决定默认的封装格式：`rtmp://` 用 FLV，`udp://`、`tcp://`、`srt://` 用 MPEG-TS，`rtsp://` 用 RTSP，别的按地址的扩展名猜，`-f` 可以指定。
+
+```
+$ mtool push -d 2 samples/mtool/h264_aac.mp4 rtmp://127.0.0.1:19351/live/s3cr3tkey
+推流  99.8%  已处理 2.0 秒，速度 1.00x
+推流完成：samples/mtool/h264_aac.mp4 → rtmp://127.0.0.1:19351/live/***（flv）
+  video：52 个包，202815 字节
+  audio：88 个包，27921 字节
+  共 140 个包、230736 字节，推了 1.997 秒的内容，用时 1.997 秒，循环 0 遍
+$ mtool push --no-pace --loop 2 samples/mtool/h264_aac.mp4 tcp://127.0.0.1:19370
+推流完成：samples/mtool/h264_aac.mp4 → tcp://127.0.0.1:19370（mpegts）
+  video：375 个包，1444815 字节
+  audio：651 个包，228642 字节
+  共 1026 个包、1673457 字节，推了 15.070 秒的内容，用时 0.003 秒（没有按播放速度等待），循环 2 遍
+```
+
+做法和要注意的：
+
+1. **按 `dts` 对着时钟等**：连接成功、文件头写完以后开始计时，每个包等到“它的 dts 减去文件起始时间”到了再发（`av_gettime_relative` 加 `av_usleep`，切成 50 毫秒一段，好让 Ctrl-C 马上生效）。和 `ffmpeg -re` 一样；`--no-pace` 取消等待。
+2. **连接之前先检查**：地址必须是这份 FFmpeg 能**写**的网络协议（`avio_enum_protocols`）；这份没有 libsrt，`srt://` 会说“这份 FFmpeg 没有 srt 协议（编译时要加 --enable-libsrt）”，而不是一句 `Protocol not found`；普通文件路径和 `file://` 拒绝（写文件请用 `cut`、`transcode`）。输入的编码装不装得下输出格式，用 `avformat_init_output` 在连接之前查：`avformat_query_codec` 对 FLV 装 MPEG-4 视频说“可以”，只有 `avformat_init_output` 才会拒绝（FLV 的原话是 `Codec mpeg4 is not supported in the official FLV specification`）。
+3. **时间戳**：整体减去文件的起始时间（TS 的时间不从 0 开始），再交给复用器。FLV 开头的元数据有时长和文件大小，往网络上推时回不去改，会打印两条警告，所以对 FLV 设 `flvflags=no_duration_filesize`，直播本来就没有时长。
+4. **循环**：`--loop N` 播完以后**重新打开输入**再播，时间戳往后挪“最长的一路流的长度”（结束时间减这一路第一个包的 dts）。两个坑：直接用结束时间的话，MP4 的音频第一个包的 dts 是负的，下一遍的第一个音频包会和这一遍的最后一个重合（复用器报 `non monotonically increasing dts`）；用 `seek` 回到开头的话，TS 这类没有索引的容器不一定落在第一个包上，落在 P 帧上接收端从第二遍起会花屏（测试里 TS 的第三遍少了 2 个视频包，还有解码错误）。`-d` 把循环也算在内：`--loop -1 -d 7` 是推 7 秒。
+5. **信号**：Ctrl-C（SIGINT）和 SIGTERM 只设一个标志，主循环看到以后写完文件尾再退出，**退出码 0**（直播推流本来就是靠 Ctrl-C 停的）；连接和握手这类阻塞的操作用 `AVIOInterruptCB` 打断（这一条没有单独测，测的是推流途中收到信号）。SIGPIPE 被忽略：对方断开时写操作返回错误，而不是进程被信号杀掉，退出码 1，说明原因：
+
+   ```
+   mtool：错误：往 tcp://127.0.0.1:19362 发数据失败（对方断开了？）：Broken pipe（对方关闭了连接）
+   ```
+6. **地址里的密钥不出现在输出里**：用户名密码、查询串（常常带 token）、RTMP 的最后一段（流名就是推流密钥）在 stdout 和错误信息里都被去掉：`rtmp://u:p4ss@主机/live/s3cr3tkey?token=t0k3n` 显示成 `rtmp://主机/live/***`。库自己的日志（`[tcp @ …] Connection to … failed`）只带主机和端口。
+7. **`-o 键=值`** 把选项交给协议或者封装器（`-o rtsp_transport=tcp`、`-o pes_payload_size=2930`）：封装器认识的在 `avformat_init_output` 里取走，协议认识的在 `avio_open2` 里取走，剩下谁也不认识的报错并说出选项名。
+
+### 测试：本机的 ffmpeg 当接收端
+
+没有外部服务器也能测：RTMP 用 `ffmpeg -listen 1 -i rtmp://127.0.0.1:端口/live/流名 -c copy -f flv 收到的.flv`，TCP 用 `ffmpeg -i "tcp://127.0.0.1:端口?listen" -c copy -f mpegts 收到的.ts`。测试脚本先等端口进入监听状态（读 `/proc/net/tcp`，不能“连一下试试”：只接受一个连接的接收端会把试探当成推流的客户端），再推。判断标准：
+
+- 13 个测试文件（好的和损坏的）推到 TCP（`--no-pace`）：收到的视频包、音频包的 CRC 清单，和 `ffmpeg -c copy -f mpegts` 直接转出来的逐包相同，收到的时长相差不到 0.15 秒。
+- RTMP 按播放速度推 2 秒：mtool 用了 1.997 秒的内容、总共用时 2.0 到 2.4 秒；收到的包数等于发出的（视频 52、音频 88），包内容和输入开头逐包相同（FLV 里 H.264 还是 AVCC，包内容逐字节没变）；stdout、stderr 里没有流名。输入是 TS 时（AAC 是 ADTS，FLV 要 AudioSpecificConfig）封装器自动转，收到的能完整解码。
+- 循环 2 遍：视频包、音频包的数量是输入的 3 倍（375、651），时长是 3 倍，收到的能完整解码；`h264_aac.mp4`、`.mkv`、`.ts` 和可变帧率的 `vfr.mp4` 都测。
+- Ctrl-C 和 SIGTERM：收到信号后 0.5 秒内退出，退出码 0，收到的文件能完整解码。对方被杀掉：退出码 1，5 秒内退出。
+- 失败：连不上（端口没人监听）、`srt://`、`rtmps://`、文件路径、不认识的协议、编码装不下（MP2 装不进 FLV，MPEG-4 装不进 FLV，两种都在连接之前报错）、打不开的输入、用法错误。
+
+**接收端是 ffmpeg 时，RTMP 不要加 `--no-pace`**：发得太快、发完立刻关闭连接，接收端的 ffmpeg 回确认消息时碰到已关闭的连接（`Broken pipe`），把缓冲区里还没读的包丢掉（本机测的 3 遍循环只收到 229 个视频包，应该是 375 个）。这是接收端的行为，真实的 RTMP 服务器不会这样，也不是发送端丢了包；按播放速度推没有这个问题（上面 3 次、每次 40 个视频包 66 个音频包，收到的和发出的一样多）。SRT 在这份 FFmpeg 里没法测（没有 libsrt）。
+
+## 验收标准对照
+
+课程规划里对综合项目的验收标准，和这里怎么验证的：
+
+| 验收标准 | 怎么验证 | 结果 |
+| --- | --- | --- |
+| 至少 10 个不同格式的测试文件，含旋转、可变帧率、无音频、损坏 | `scripts/gen_testfiles.sh` 合成 18 个 | 好的 12（MP4、MKV、TS、FLV、AVI、M4A、WAV，含 `rotate90`、`vfr`、`video_only`、`audio_only`）；打不开的 4；能打开的损坏 2 |
+| 每个文件不崩溃，错误提示能看懂 | 每个子命令对每一类文件都跑，检查退出码（0、1、2）、stderr 有“mtool：错误：”、打不开的不留下输出 | 全部通过 |
+| `transcode` 输出时长误差 < 0.1 秒（ffprobe） | 14 个文件转 MP4，读输入输出的 `format=duration`；程序自己转完也重新打开输出读一遍 | 最大 0.055 秒（`h264_aac.flv`），见上面的表 |
+| 没有明显的音视频不同步 | 输出里音视频两路的开头差和时长差 | 8 个有音视频两路的好文件最大 0.040 秒、0.039 秒 |
+| ASan 无泄漏、无越界 | `make SANITIZE=address,undefined`，每次运行都检查 sanitizer 报告，同样的全部测试再跑一遍 | 通过 |
+| 有 README、自动化测试、CI 配置 | 本文件；`tests/run_tests.sh`；`.github/workflows/mtool.yml` | 都有；CI 在 GitHub Actions 上第一次运行就通过了，见“持续集成” |
+| L22 的约定：退出码只有 0/1/2、错误写 stderr、版本检查、ASan 构建 | `mtool --version`（头文件和运行时库的版本检查）；测试里逐项检查 | 通过 |
+| VAAPI 硬件编码 | `scripts/verify_hw.sh` | **没有验证**（没有显卡），见【待补 1】 |
+
+## 持续集成
+
+`.github/workflows/mtool.yml`：改了 `mtool/` 或者 `scripts/build_ffmpeg.sh` 就跑。步骤：装依赖（和 `build_ffmpeg.sh` 里的 `APT_PACKAGES` 一致）→ 取 FFmpeg 的缓存（键是 `scripts/build_ffmpeg.sh` 的内容，里面的 FFmpeg 版本号或者编译选项改了，缓存就换新的）→ 缓存没有命中时编译 FFmpeg（十几分钟）→ 运行 `mtool/scripts/check.sh`：
+
+```bash
+mtool/scripts/check.sh           # 普通构建加 ASan+UBSan 构建，都用 -Werror 编译，生成测试文件，各跑一遍全部测试
+mtool/scripts/check.sh plain     # 只有普通构建
+mtool/scripts/check.sh asan      # 只有 ASan 构建
+```
+
+CI 跑的就是 `check.sh`，所以本机改完代码跑它，结果和 CI 一致。
+
+**GitHub Actions 上的第一次运行**（PR #33，`ubuntu-24.04`，没有改过工作流）通过了：装依赖约 23 秒，缓存没有命中所以编译 FFmpeg 用了约 5 分钟，`check.sh` 约 2 分 40 秒；普通构建和 ASan 加 UBSan 构建的 `-Werror` 编译都过，两份构建各 **1347 项全部通过**，最后一行是“mtool 全部检查通过”。1347 比本机的 1360 少 13 项，原因见上面“自动化测试”：GitHub 的运行器上有 `/dev/dri`，那 13 项没有跑（第二次运行的日志里有脚本打印的那一行说明）。工作流最后把 `ffmpeg_build` 存进了缓存，**第二次运行（提交 f70a81d）命中了缓存**：跳过编译 FFmpeg，装依赖 18 到 35 秒，`check.sh` 约 2 分 40 秒，整个运行 3 分多钟；`--enable-rpath` 编译的库从缓存还原后能正常使用，两份构建同样各 1347 项全部通过。CI 里没有跑 `verify_hw.sh`，所以 VAAPI 编码仍然没有在真实设备上验证过（见【待补 1】）；运行器上有 `/dev/dri` 不等于有能用的 VAAPI 驱动，这一点也没有查过。
+
 ## 练习
 
 1. 给 `info` 加一个 `--frames` 选项，把每一帧的类型、pts、大小打印出来（参考 L08 的 `frame_info`）。想一想：JSON 输出里怎么表示？（数据量会很大，要不要一行一个？）
 2. `cut` 的终点是按 dts 判断的，有 B 帧时会多出几帧。改成“按 pts 判断，多余的 B 帧丢掉”会遇到什么问题？（提示：丢掉一个 P 帧却留下依赖它的 B 帧。）
 3. `info` 判断可变帧率的容差（2 个刻度、5%）是怎么来的？自己造一个 29.97 帧/秒的文件，看看在 1/1000 时间基的 MKV 里判断得对不对。
 4. 把 `mtool info` 的统计改成不用全局数组、不把所有 pts 存下来（边读边算最小最大间隔），可以吗？（提示：包的 pts 不是单调的，有 B 帧时会先出后面的帧。）
+5. `transcode` 对可变帧率的输入保持每一帧原来的时间，命令行会取整到 1/帧率 的格子上。造一个时间戳不在格子上的文件（例如每帧间隔 33 毫秒到 41 毫秒随机），两种做法输出的 pts 差多少？取整以后会不会有两帧落在同一个格子里？（提示：命令行的 `-vsync vfr` 会丢掉其中一帧。）
+6. `push` 对方断开就退出。加一个 `--retry N`：断开以后重新连接，接着推。要想清楚三件事：时间戳要接着往后（不能从 0 重来，播放器会认为是新的流）；FLV 要重新写文件头和 H.264 的序列头；重连以后第一个视频包必须是关键帧，不然接收端花屏到下一个关键帧。
+7. `--hw vaapi` 现在只加速编码。把解码也放到 VAAPI 上（L20 的 `hw_device_ctx` 和 `get_format`），解码出来的帧留在显存里，缩放换成 `scale_vaapi`，这样 `hwupload` 就不需要了。`--vf` 里用户写的软件滤镜怎么办？
