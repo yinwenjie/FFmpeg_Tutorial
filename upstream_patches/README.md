@@ -58,6 +58,10 @@
 | [0031](0031-doc-examples-extract_mvs-return-a-failure-exit-statu.patch) | extract_mvs.c | 错误 | 输入里没有视频流时报了错，退出码却是 0 | L08 |
 | [0032](0032-doc-examples-extract_mvs-do-not-leak-the-codec-conte.patch) | extract_mvs.c | 不符合规范 | 解码器打不开时不释放解码器上下文 | L08 |
 | [0033](0033-doc-examples-extract_mvs-check-for-errors-when-writi.patch) | extract_mvs.c | 错误 | 结果写不出去时照常结束，退出码是 0 | L08 |
+| [0034](0034-doc-examples-scale_video-do-not-free-uninitialized-p.patch) | scale_video.c | 错误 | 建立缩放上下文失败时，对没有初始化的指针调用 `av_freep()` | L09 |
+| [0035](0035-doc-examples-scale_video-fix-the-end-of-the-usage-me.patch) | scale_video.c | 错误 | 用法说明最后一句的句号印到了下一行开头 | L09 |
+| [0036](0036-doc-examples-scale_video-check-for-scaling-and-write.patch) | scale_video.c | 错误 | 不检查 `sws_scale()` 和 `fwrite()` 的返回值，写不出去时照常报告成功 | L09 |
+| [0037](0037-doc-examples-scale_video-use-sws_scale_frame.patch) | scale_video.c | 不符合规范 | 用的是 swscale.h 标为 legacy 的 `sws_getContext()` 加 `sws_scale()`，以及已不推荐的 `SWS_BILINEAR` 标志 | L09 |
 
 ## 怎么使用
 
@@ -66,7 +70,8 @@
 0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c，
 0006、0016、0019 到 0024 都改 decode_audio.c，
 0008、0025 到 0030 都改 demux_decode.c，
-0031 到 0033 都改 extract_mvs.c），所以要按编号顺序应用：
+0031 到 0033 都改 extract_mvs.c，
+0034 到 0037 都改 scale_video.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -87,7 +92,8 @@ make -j"$(nproc)" examples
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
 4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
    remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
-   demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组。
+   demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
+   scale_video（0034 到 0037）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -625,13 +631,78 @@ exit=0
 修复后在结束前 `fflush(stdout)` 并检查错误标志，失败时打印 `Error writing to the standard output`，退出码是 1。
 正常情况下的输出与修复前逐字节相同（174,394 行）。
 
+### 0034 scale_video 释放没有初始化的指针
+
+```console
+$ valgrind -q doc/examples/scale_video /tmp/out.rgb 100000x100000
+Impossible to create scale context for the conversion fmt:yuv420p s:320x240 -> fmt:rgb24 s:100000x100000
+==8392== Conditional jump or move depends on uninitialised value(s)
+==8392==    at 0x4849845: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==8392==    by 0x109477: main (scale_video.c:137)
+==8392==
+==8392== Conditional jump or move depends on uninitialised value(s)
+==8392==    at 0x4849845: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==8392==    by 0x109481: main (scale_video.c:138)
+```
+
+`src_data` 和 `dst_data` 两个数组定义时没有初始化。`sws_getContext()` 失败后直接跳到清理代码，那时图像缓冲区还没有分配，
+`av_freep(&src_data[0])` 释放的是栈上的随机值。不用 valgrind 时这次运行碰巧没有崩溃，但这是未定义行为。
+源图像分配失败时 `dst_data[0]` 也有同样的问题。
+
+修复后两个数组初始化为 `NULL`，valgrind 不再报告。
+
+### 0035 scale_video 用法说明末尾的句号
+
+```console
+$ doc/examples/scale_video 2>&1 | cat -A | tail -3
+This program generates a series of pictures, rescales them to the given output_size and saves them to an output file named output_file$
+.$
+$
+```
+
+字符串里写的是 `output_file\n.`，换行和句号的顺序反了。修复后句号在行尾。
+
+### 0036 scale_video 不检查缩放和写文件是否成功
+
+```console
+$ doc/examples/scale_video /dev/full 320x240; echo "exit=$?"
+Scaling succeeded. Play the output file with the command:
+ffplay -f rawvideo -pix_fmt rgb24 -video_size 320x240 /dev/full
+exit=0
+```
+
+`sws_scale()` 和 `fwrite()` 的返回值都没有检查。修复后两处都检查，报告成功之前再 `fflush()` 一次，
+上面的命令打印 `Error writing to /dev/full`，退出码是 1。正常情况下的输出与修复前逐字节相同。
+
+### 0037 scale_video 改用 sws_scale_frame()
+
+`libswscale/swscale.h` 把 `sws_getContext()`、`sws_scale()` 归在“Legacy (stateful) API”一节，
+`sws_init_context()` 的说明写着推荐的用法是把帧的属性设置好、直接调用 `sws_scale_frame()`；
+`SWS_BILINEAR` 这类选择缩放算法的标志也注明“Deprecated in favor of `SwsContext.scaler`”。
+旧接口没有加废弃标记，仍然可以用（`doc/APIchanges` 里写过 `sws_getContext` 不会被移除），所以这个 patch 的类型是“不符合规范”而不是错误。
+示例是新用户照着写代码的地方，应该演示推荐的写法。
+
+修改后：图像放在 `AVFrame` 里（`av_frame_get_buffer()` 分配），上下文用 `sws_alloc_context()` 分配，
+缩放算法用 `sws_ctx->scaler = SWS_SCALE_BILINEAR` 选择，转换用 `sws_scale_frame()`，释放用 `sws_free_context()`。
+`AVFrame` 的每一行可能有填充，所以输出改成逐行写。
+
+```console
+$ for s in 100x75 320x240 640x480; do old/scale_video a.rgb $s; new/scale_video b.rgb $s; cmp a.rgb b.rgb && echo "$s same"; done 2>/dev/null
+100x75 same
+320x240 same
+640x480 same
+```
+
+输出尺寸为 1x1 这种极端情况下两种接口的结果不同（新接口走的是另一条初始化路径），常规尺寸逐字节相同。
+这个 patch 改动的行数多，上游是否接受要看维护者的意见，提交时建议和 0034 到 0036 分开。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
 
 | 涉及文件 | 观察 | 计划处理的课次 |
 | --- | --- | --- |
-| scale_video.c、mux.c | 使用 `sws_getContext()` 加 `sws_scale()` 的旧式写法。libswscale 已提供 `sws_alloc_context()` 和按帧工作的 `sws_scale_frame()`，旧接口尚未标记废弃 | L09 |
+| mux.c | 和 scale_video.c 一样使用 `sws_getContext()` 加 `sws_scale()` 的旧式写法（scale_video.c 已在 0037 改掉）。mux.c 的改法要和它的编码流程一起考虑 | L15 |
 | transcode.c | 编码器没有继承输入的色彩属性，BT.709 的输入转码后 `color_space` 和 `color_range` 变成 unknown | L16 |
 | avio_read_callback.c | 只提供读回调、没有 seek 回调。`moov` 在文件末尾的 MP4 读不到完整的流参数（报 `partial file` 和 `unspecified pixel format`） | L18 |
 | avio_http_serve_files.c、filter_audio.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告 | L11、L19 |

@@ -1,0 +1,30 @@
+From fbadcc6634459276b2c8be695d63590bc8d88c50 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:08:26 +0000
+Subject: [PATCH] doc/examples/scale_video: fix the end of the usage message
+
+The full stop of the last sentence was printed at the start of the
+next line.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/scale_video.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/scale_video.c b/doc/examples/scale_video.c
+index c2fd161..62417cb 100644
+--- a/doc/examples/scale_video.c
++++ b/doc/examples/scale_video.c
+@@ -67,7 +67,7 @@ int main(int argc, char **argv)
+         fprintf(stderr, "Usage: %s output_file output_size\n"
+                 "API example program to show how to scale an image with libswscale.\n"
+                 "This program generates a series of pictures, rescales them to the given "
+-                "output_size and saves them to an output file named output_file\n."
++                "output_size and saves them to an output file named output_file.\n"
+                 "\n", argv[0]);
+         exit(1);
+     }
+-- 
+2.43.0
+
