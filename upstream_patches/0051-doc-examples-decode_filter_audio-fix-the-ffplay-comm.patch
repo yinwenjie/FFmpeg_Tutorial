@@ -1,0 +1,34 @@
+From 4676a8c2bc255ee8ef72dbc66c621e2c67dacd35 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:55:52 +0000
+Subject: [PATCH] doc/examples/decode_filter_audio: fix the ffplay command in
+ the usage message
+
+ffplay no longer has an -ac option:
+
+    Failed to set value '1' for option 'ac': Option not found
+
+Use -ch_layout mono, which is what the raw PCM demuxer understands.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_filter_audio.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/decode_filter_audio.c b/doc/examples/decode_filter_audio.c
+index be21776..c88e6f214 100644
+--- a/doc/examples/decode_filter_audio.c
++++ b/doc/examples/decode_filter_audio.c
+@@ -39,7 +39,7 @@
+ #include <libavutil/opt.h>
+ 
+ static const char *filter_descr = "aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono";
+-static const char *player       = "ffplay -f s16le -ar 8000 -ac 1 -";
++static const char *player       = "ffplay -f s16le -ar 8000 -ch_layout mono -";
+ 
+ static AVFormatContext *fmt_ctx;
+ static AVCodecContext *dec_ctx;
+-- 
+2.43.0
+

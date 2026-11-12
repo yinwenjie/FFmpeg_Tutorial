@@ -1,0 +1,87 @@
+From 75e08d6fd9d169c231099e68d09f853dad897151 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:52:59 +0000
+Subject: [PATCH] doc/examples/decode_filter_{audio,video}: stop when feeding
+ the filtergraph fails
+
+When av_buffersrc_add_frame_flags() failed, the examples logged an
+error and left the inner decoding loop with break. ret still held the
+non-negative result of avcodec_receive_frame() at that point, so the
+main loop went on with the next packet, the same error was logged for
+every following frame and the program finally exited with status 0.
+
+This happens for instance with an ADTS file whose sample rate changes
+mid-stream:
+
+    Changing audio frame properties on the fly is not supported.
+    Error while feeding the audio filtergraph
+    (repeated for every remaining frame, exit status 0)
+
+Keep the error code and jump to the cleanup code, as is done for the
+errors of av_buffersink_get_frame(). Do the same when signalling EOF to
+the filtergraph fails, where the error code was lost as well.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_filter_audio.c | 8 +++++---
+ doc/examples/decode_filter_video.c | 8 +++++---
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/doc/examples/decode_filter_audio.c b/doc/examples/decode_filter_audio.c
+index c6a8063..56952dd 100644
+--- a/doc/examples/decode_filter_audio.c
++++ b/doc/examples/decode_filter_audio.c
+@@ -270,9 +270,10 @@ int main(int argc, char **argv)
+ 
+                 if (ret >= 0) {
+                     /* push the audio data from decoded frame into the filtergraph */
+-                    if (av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
++                    ret = av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF);
++                    if (ret < 0) {
+                         av_log(NULL, AV_LOG_ERROR, "Error while feeding the audio filtergraph\n");
+-                        break;
++                        goto end;
+                     }
+ 
+                     /* pull filtered audio from the filtergraph */
+@@ -293,7 +294,8 @@ int main(int argc, char **argv)
+     }
+     if (ret == AVERROR_EOF) {
+         /* signal EOF to the filtergraph */
+-        if (av_buffersrc_add_frame_flags(buffersrc_ctx, NULL, 0) < 0) {
++        ret = av_buffersrc_add_frame_flags(buffersrc_ctx, NULL, 0);
++        if (ret < 0) {
+             av_log(NULL, AV_LOG_ERROR, "Error while closing the filtergraph\n");
+             goto end;
+         }
+diff --git a/doc/examples/decode_filter_video.c b/doc/examples/decode_filter_video.c
+index 88db795..fee1aa9 100644
+--- a/doc/examples/decode_filter_video.c
++++ b/doc/examples/decode_filter_video.c
+@@ -268,9 +268,10 @@ int main(int argc, char **argv)
+                 frame->pts = frame->best_effort_timestamp;
+ 
+                 /* push the decoded frame into the filtergraph */
+-                if (av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
++                ret = av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF);
++                if (ret < 0) {
+                     av_log(NULL, AV_LOG_ERROR, "Error while feeding the filtergraph\n");
+-                    break;
++                    goto end;
+                 }
+ 
+                 /* pull filtered frames from the filtergraph */
+@@ -290,7 +291,8 @@ int main(int argc, char **argv)
+     }
+     if (ret == AVERROR_EOF) {
+         /* signal EOF to the filtergraph */
+-        if (av_buffersrc_add_frame_flags(buffersrc_ctx, NULL, 0) < 0) {
++        ret = av_buffersrc_add_frame_flags(buffersrc_ctx, NULL, 0);
++        if (ret < 0) {
+             av_log(NULL, AV_LOG_ERROR, "Error while closing the filtergraph\n");
+             goto end;
+         }
+-- 
+2.43.0
+
