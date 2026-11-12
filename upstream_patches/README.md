@@ -101,11 +101,12 @@
 | [0074](0074-doc-examples-transcode-pass-the-color-properties-on-.patch) | transcode.c | 错误 | 编码器没有继承输入的色彩属性，BT.709 的输入转码后范围、原色、传输特性、矩阵全变成 unknown | L16 |
 | [0075](0075-doc-examples-transcode-copy-the-metadata-and-the-dis.patch) | transcode.c | 不满足现有需求 | 不拷贝容器和流的元数据（标题、语言），也不拷贝 default 等标志，播放器选不对默认音轨 | L16 |
 | [0076](0076-doc-examples-transcode-terminate-the-Could-not-open-.patch) | transcode.c | 错误 | `Could not open output file` 后面没有换行，下一行日志接在同一行里 | L16 |
+| [0077](0077-doc-examples-transcode-make-the-audio-timestamps-con.patch) | transcode.c | 错误 | 输入的时间基很粗（FLV、MKV 是毫秒）时，音频帧的时间戳被取整，间隔是 1014、1015、1058 个采样而不是 1024，输出的音频包时间戳也跟着不均匀 | L16 |
 
 ## 怎么使用
 
 应用到 FFmpeg 源码树。各个问题在逻辑上互相独立，但有几个 patch 改的是同一个文件里相邻的行
-（0003 到 0005 都改 Makefile.example，0001、0007、0011、0014、0071 到 0076 都改 transcode.c，
+（0003 到 0005 都改 Makefile.example，0001、0007、0011、0014、0071 到 0077 都改 transcode.c，
 0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c，
 0006、0016、0019 到 0024 都改 decode_audio.c，
 0008、0025 到 0030 都改 demux_decode.c，
@@ -135,7 +136,7 @@ make -j"$(nproc)" examples
 3. **选择提交渠道**。按 `doc/developer.texi` 的说明，可以在
    <https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls> 提 pull request，
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
-4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011、0071 到 0076）一组、
+4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011、0071 到 0077）一组、
    remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
    demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
@@ -1164,6 +1165,26 @@ Could not open output file '/nonexistent/x.mp4'Qavg: nan  Tr: 0.0%  TNS(L): 0.0%
 ```
 
 加上换行之后，编码器的日志另起一行，带上 `[aac @ ...]` 前缀。
+
+### 0077 transcode 的音频时间戳不连续
+
+音频帧是用输入流的时间基交给滤镜图的。FLV、MKV 的时间基是 1/1000，包的时间戳被取整到毫秒；
+44100 Hz 下 1024 个采样是 23.22 毫秒，所以相邻两帧的 pts 换到 1/44100 以后相差 1014、1015、1058……而不是 1024，
+输出文件里的音频包也是这样。用 L16 的 FLV 样本验证：
+
+```console
+$ ffmpeg -v error -y -i $S/small_360p25.mp4 -c copy /tmp/in.flv
+$ doc/examples/transcode /tmp/in.flv /tmp/out.mp4 >/dev/null 2>&1
+$ ffprobe -v error -select_streams a -show_entries packet=pts -of csv=p=0 /tmp/out.mp4 |
+    awk 'NR>1{d=$1-p; c[d]++} {p=$1} END{for(k in c) printf "%s×%s ", k, c[k]}'
+1014×120 1015×49 1058×27 1059×20 1024×1
+```
+
+（样本是 `samples/small_360p25.flv`，上面的输出是对它跑的结果。）
+修复后，在解码出帧时用 `av_rescale_delta()` 把时间戳换成 1/采样率：它利用“每帧正好 `nb_samples` 个采样”把取整的误差接平，
+真的出现断档时自动退回普通的换算；滤镜图入口也改用 1/采样率做时间基。ffmpeg 命令行是同样的做法。
+修复后相邻帧都相差 1024（输入本身有断档的两处除外，命令行的结果也是这样）；
+时间基本来就是 1/采样率的输入（MP4 里的音频）不受影响。
 
 ## 已记录、暂未制作 patch 的观察项
 
