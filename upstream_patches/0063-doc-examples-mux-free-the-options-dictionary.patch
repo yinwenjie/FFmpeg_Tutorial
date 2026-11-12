@@ -1,0 +1,29 @@
+From 737b369cebea8d7ea6d71e22b044ecd2ebd6679a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:25:39 +0000
+Subject: [PATCH] doc/examples/mux: free the options dictionary
+
+The dictionary filled from the -flags and -fflags arguments was never
+freed. valgrind reports it as definitely lost.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index b15b881..2b5b4b9 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -623,6 +623,7 @@ int main(int argc, char **argv)
+ 
+     /* Write the stream header, if any. */
+     ret = avformat_write_header(oc, &opt);
++    av_dict_free(&opt);
+     if (ret < 0) {
+         fprintf(stderr, "Error occurred when opening output file: %s\n",
+                 av_err2str(ret));
+-- 
+2.43.0
+

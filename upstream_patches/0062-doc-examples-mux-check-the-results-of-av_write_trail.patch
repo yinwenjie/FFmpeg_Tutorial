@@ -1,0 +1,54 @@
+From 8ca9c5503a0ccd0bc716f1ac203829a2a734ed80 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:21:35 +0000
+Subject: [PATCH] doc/examples/mux: check the results of av_write_trailer() and
+ avio_closep()
+
+Muxers like mov write essential data in the trailer. When that fails,
+for example because the disk is full, the example still exited with
+status 0 and left an unreadable file behind without any message.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index e037bc7..b15b881 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -640,7 +640,11 @@ int main(int argc, char **argv)
+         }
+     }
+ 
+-    av_write_trailer(oc);
++    ret = av_write_trailer(oc);
++    if (ret < 0) {
++        fprintf(stderr, "Error writing the trailer: %s\n", av_err2str(ret));
++        return 1;
++    }
+ 
+     /* Close each codec. */
+     if (have_video)
+@@ -648,9 +652,15 @@ int main(int argc, char **argv)
+     if (have_audio)
+         close_stream(oc, &audio_st);
+ 
+-    if (!(fmt->flags & AVFMT_NOFILE))
++    if (!(fmt->flags & AVFMT_NOFILE)) {
+         /* Close the output file. */
+-        avio_closep(&oc->pb);
++        ret = avio_closep(&oc->pb);
++        if (ret < 0) {
++            fprintf(stderr, "Error closing '%s': %s\n", filename,
++                    av_err2str(ret));
++            return 1;
++        }
++    }
+ 
+     /* free the stream */
+     avformat_free_context(oc);
+-- 
+2.43.0
+

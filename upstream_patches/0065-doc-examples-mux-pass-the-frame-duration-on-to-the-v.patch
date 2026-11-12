@@ -1,0 +1,48 @@
+From e99d89ebdef72af55f20a0bccb3a885c42c335e5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:26:40 +0000
+Subject: [PATCH] doc/examples/mux: pass the frame duration on to the video
+ packets
+
+The video frames had no duration and AV_CODEC_FLAG_FRAME_DURATION was
+not set, so the video encoder produced packets with a duration of 0.
+
+Muxers that need the duration of the last packet get zero. With MP4
+output the last video sample lies outside the edit list and is dropped
+on playback: of the 250 frames written only 249 can be read back and
+the stream is 9.96 instead of 10 seconds long.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index 0b695ba..2206ea6 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -203,6 +203,10 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
+         ost->st->time_base = (AVRational){ 1, STREAM_FRAME_RATE };
+         c->time_base       = ost->st->time_base;
+ 
++        /* The frames sent to the encoder carry a duration, which the
++         * encoder should pass on to the packets it outputs. */
++        c->flags |= AV_CODEC_FLAG_FRAME_DURATION;
++
+         c->gop_size      = 12; /* emit one intra frame every twelve frames at most */
+         c->pix_fmt       = STREAM_PIX_FMT;
+         if (c->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
+@@ -520,7 +524,8 @@ static AVFrame *get_video_frame(OutputStream *ost)
+         fill_yuv_image(ost->frame, ost->next_pts, c->width, c->height);
+     }
+ 
+-    ost->frame->pts = ost->next_pts++;
++    ost->frame->pts      = ost->next_pts++;
++    ost->frame->duration = 1;
+ 
+     return ost->frame;
+ }
+-- 
+2.43.0
+

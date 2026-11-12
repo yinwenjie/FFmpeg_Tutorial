@@ -1,0 +1,38 @@
+From 6a196210909adc1fede70d78b08e3b9045f42e63 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:27:17 +0000
+Subject: [PATCH] doc/examples/mux: make image sequence output work
+
+The usage text says that images can be written by using '%d' in the
+file name, but this failed with 'Could not open video codec': the
+default encoder of the image2 muxer is MJPEG, which refuses limited
+range YUV unless strict compliance is relaxed.
+
+Mark the stream as full range for MJPEG. The generated picture uses
+the whole range of sample values anyway.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index a145eec..124f464 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -235,6 +235,11 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
+              * the motion of the chroma plane does not match the luma plane. */
+             c->mb_decision = 2;
+         }
++        if (c->codec_id == AV_CODEC_ID_MJPEG) {
++            /* The MJPEG encoder only accepts full range YUV, which is what
++             * the generated picture uses anyway. */
++            c->color_range = AVCOL_RANGE_JPEG;
++        }
+         break;
+     }
+ 
+-- 
+2.43.0
+

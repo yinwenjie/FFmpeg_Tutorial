@@ -1,0 +1,40 @@
+From 09ad75a8bc1200f338ce6f8ca3aba1e3e44f1258 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:25:57 +0000
+Subject: [PATCH] doc/examples/mux: do not generate one video frame too many
+
+The check for the end of the stream compared the next timestamp with
+STREAM_DURATION using '>', so a frame starting exactly at 10 seconds
+was still generated: 251 video frames, 10.04 seconds.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index 2b5b4b9..0b695ba 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -328,7 +328,7 @@ static AVFrame *get_audio_frame(OutputStream *ost)
+ 
+     /* check if we want to generate more frames */
+     if (av_compare_ts(ost->next_pts, ost->enc->time_base,
+-                      STREAM_DURATION, (AVRational){ 1, 1 }) > 0)
++                      STREAM_DURATION, (AVRational){ 1, 1 }) >= 0)
+         return NULL;
+ 
+     for (j = 0; j <frame->nb_samples; j++) {
+@@ -489,7 +489,7 @@ static AVFrame *get_video_frame(OutputStream *ost)
+ 
+     /* check if we want to generate more frames */
+     if (av_compare_ts(ost->next_pts, c->time_base,
+-                      STREAM_DURATION, (AVRational){ 1, 1 }) > 0)
++                      STREAM_DURATION, (AVRational){ 1, 1 }) >= 0)
+         return NULL;
+ 
+     /* when we pass a frame to the encoder, it may keep a reference to it
+-- 
+2.43.0
+

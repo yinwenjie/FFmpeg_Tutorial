@@ -1,0 +1,67 @@
+From 8a97cf660e69adb89ec0aeadbd0c10ee4fdcbe9f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:27:05 +0000
+Subject: [PATCH] doc/examples/mux: use a pixel format supported by the video
+ encoder
+
+The pixel format was always yuv420p, so the code which converts the
+generated picture to another pixel format was never reached, and
+formats whose default encoder does not accept yuv420p, like gif and
+apng, failed with 'Could not open video codec'.
+
+Query the formats of the encoder and use its first one when yuv420p is
+not among them, as is done for the sample rate of the audio encoder.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index 2206ea6..a145eec 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -189,7 +189,8 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
+         break;
+     }
+ 
+-    case AVMEDIA_TYPE_VIDEO:
++    case AVMEDIA_TYPE_VIDEO: {
++        const enum AVPixelFormat *pix_fmts = NULL;
+         c->codec_id = codec_id;
+ 
+         c->bit_rate = 400000;
+@@ -209,6 +210,21 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
+ 
+         c->gop_size      = 12; /* emit one intra frame every twelve frames at most */
+         c->pix_fmt       = STREAM_PIX_FMT;
++        ret = avcodec_get_supported_config(c, NULL, AV_CODEC_CONFIG_PIX_FORMAT,
++                                           0, (const void **)&pix_fmts, NULL);
++        if (ret < 0) {
++            fprintf(stderr, "Failed to get supported pixel formats\n");
++            exit(1);
++        }
++        if (pix_fmts) {
++            /* use the first format of the encoder if it does not support
++             * the default one; the picture is converted in that case */
++            c->pix_fmt = pix_fmts[0];
++            for (; *pix_fmts != AV_PIX_FMT_NONE; pix_fmts++) {
++                if (*pix_fmts == STREAM_PIX_FMT)
++                    c->pix_fmt = STREAM_PIX_FMT;
++            }
++        }
+         if (c->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
+             /* just for testing, we also add B-frames */
+             c->max_b_frames = 2;
+@@ -220,6 +236,7 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
+             c->mb_decision = 2;
+         }
+         break;
++    }
+ 
+     default:
+         break;
+-- 
+2.43.0
+
