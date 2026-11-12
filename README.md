@@ -62,7 +62,7 @@ cmake -S . -B build && cmake --build build
 | | [L08 帧类型、GOP 与 side data](L08_frame_types/README.md) | extract_mvs.c |
 | 3 原始数据处理 | [L09 图像缩放与像素格式转换](L09_scale_video/README.md) | scale_video.c |
 | | [L10 音频重采样](L10_resample_audio/README.md) | resample_audio.c |
-| | L11 滤镜图基础 | filter_audio.c |
+| | [L11 滤镜图基础](L11_filter_audio/README.md) | filter_audio.c |
 | | L12 解码 + 滤镜 | decode_filter_video.c、decode_filter_audio.c |
 | 4 编码 | L13 视频编码 | encode_video.c |
 | | L14 音频编码 | encode_audio.c |
