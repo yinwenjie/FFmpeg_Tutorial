@@ -1,0 +1,85 @@
+From 9f4eb96d0b259991c60eb0d8fe4801df79afc378 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 18:52:13 +0000
+Subject: [PATCH 94/95] doc/examples/mux: free everything when the output
+ cannot be set up
+
+If the output file could not be opened, the header could not be written
+or the trailer could not be written, main() returned straight away and
+leaked the format context, both codec contexts, their frames and the
+scaler and resampler. The normal path frees all of them. Jump to a
+common exit that releases what exists so far, also on these errors, and
+free the options dictionary there as well.
+
+The helper functions still call exit(1) on their own errors, as before.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 22 ++++++++++++++++++----
+ 1 file changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index 3ab5167e85..b1743c0eb9 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -646,18 +646,18 @@ int main(int argc, char **argv)
+         if (ret < 0) {
+             fprintf(stderr, "Could not open '%s': %s\n", filename,
+                     av_err2str(ret));
+-            return 1;
++            goto fail;
+         }
+     }
+ 
+     /* Write the stream header, if any. */
+     ret = avformat_write_header(oc, &opt);
+-    av_dict_free(&opt);
+     if (ret < 0) {
+         fprintf(stderr, "Error occurred when opening output file: %s\n",
+                 av_err2str(ret));
+-        return 1;
++        goto fail;
+     }
++    av_dict_free(&opt);
+ 
+     while (encode_video || encode_audio) {
+         /* select the stream to encode */
+@@ -673,7 +673,7 @@ int main(int argc, char **argv)
+     ret = av_write_trailer(oc);
+     if (ret < 0) {
+         fprintf(stderr, "Error writing the trailer: %s\n", av_err2str(ret));
+-        return 1;
++        goto fail;
+     }
+ 
+     /* Close each codec. */
+@@ -688,6 +688,7 @@ int main(int argc, char **argv)
+         if (ret < 0) {
+             fprintf(stderr, "Error closing '%s': %s\n", filename,
+                     av_err2str(ret));
++            avformat_free_context(oc);
+             return 1;
+         }
+     }
+@@ -696,4 +697,17 @@ int main(int argc, char **argv)
+     avformat_free_context(oc);
+ 
+     return 0;
++
++fail:
++    /* Release everything that has been set up so far. */
++    av_dict_free(&opt);
++    if (have_video)
++        close_stream(oc, &video_st);
++    if (have_audio)
++        close_stream(oc, &audio_st);
++    if (!(fmt->flags & AVFMT_NOFILE))
++        avio_closep(&oc->pb);
++    avformat_free_context(oc);
++
++    return 1;
+ }
+-- 
+2.43.0
+

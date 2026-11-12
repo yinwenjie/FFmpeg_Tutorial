@@ -18,7 +18,8 @@
 | 复核时的上游 master | `21ae927dc6`（2026-11-12）。`doc/examples`、`libavformat/aviobuf.c`、`file.c`、`tcp.c`、`avio.c` 与 `a337e8ddaa` 完全相同；`configure` 只有一行（AMF 版本号）不同；`libavformat/http.c` 多了三处改动（拒绝主机名和 CONNECT 目标里的控制字符、只对同一个主机复用连接），不在 patch 改的地方附近 |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `21ae927dc6` 上用 `git am` 按顺序应用无冲突（0001 到 0093）。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `21ae927dc6` 上用 `git am` 按顺序应用无冲突（0001 到 0103）。
+例外：0096 到 0103 修的是硬件加速示例（`hw_decode`、`vaapi_*`、`qsv_*`），作者的机器没有显卡，这些 patch 里只有不需要硬件设备的部分（错误路径、读输入的代码、时间戳逻辑，后者用把 VAAPI 换成 libx264 的软件替身）验证过，各个问题下面写明了验证到了什么程度。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -118,6 +119,16 @@
 | [0091](0091-doc-examples-avio_http_serve_files-open-the-input-be.patch) | avio_http_serve_files.c | 错误 | 先回复“200 OK”、后打开文件：要发送的文件不存在时，客户端收到一个成功的、空的回复 | L19 |
 | [0092](0092-doc-examples-avio_http_serve_files-do-not-leave-zomb.patch) | avio_http_serve_files.c | 不符合规范 | 每个客户端 fork 一个子进程却从不回收，子进程退出后留下僵尸进程（代码里的注释自己承认了） | L19 |
 | [0093](0093-avformat-file-do-not-close-file-descriptor-0-when-cl.patch) | **libavformat/file.c**（不是示例） | 错误 | `avio_close_dir()` 会 `close(0)`：file 协议的关闭函数去关一个从没打开过的 0 号描述符，标准输入被关掉，多线程程序里别人的连接也可能被关掉 | L19 |
+| [0094](0094-doc-examples-mux-free-everything-when-the-output-can.patch) | mux.c | 错误 | 输出文件打不开、写文件头失败、写文件尾失败时，`main()` 直接 `return 1`，格式上下文、两个编码器上下文、帧、缩放器、重采样器全部泄漏（正常路径都释放了），ASan 报告泄漏 | L22 |
+| [0095](0095-doc-examples-transcode_aac-return-a-plain-exit-statu.patch) | transcode_aac.c | 不符合规范 | `main()` 出错时返回 `AVERROR_EXIT`（一个很大的负数），进程的退出码是它的低 8 位 187，不管是什么错；其他示例返回 1 | L22 |
+| [0096](0096-doc-examples-hw_decode-free-everything-and-return-a-.patch) | hw_decode.c | 错误 | 每一个启动错误都从 `main()` 中间 `return -1`，包、格式上下文、解码器上下文、硬件设备全部泄漏，退出码 255；开始解码之后退出码永远是 0，读、解码、写出错也一样 | L20 |
+| [0097](0097-doc-examples-hw_decode-say-why-the-HW-device-could-n.patch) | hw_decode.c | 不符合规范 | 创建硬件设备失败时只说 “Failed to create specified HW device.”，没有错误码，原因（VAAPI 是 “No render device /dev/dri/renderD128”）只在 verbose 日志里；`av_buffer_ref()` 的结果没检查 | L20 |
+| [0098](0098-doc-examples-hw_decode-fix-the-signed-comparison-and.patch) | hw_decode.c | 不符合规范 | `fwrite()` 的返回值（`size_t`）和 `int` 比较（`-Wsign-compare`）；`av_image_get_buffer_size()` 出错返回负数，没检查就传给 `av_malloc()` | L20 |
+| [0099](0099-doc-examples-vaapi_encode-read-the-input-frame-line-.patch) | vaapi_encode.c | 错误 | 用两个 `fread()` 把 NV12 输入直接读进 `data[0]`、`data[1]`，假设每行恰好 `width` 个字节；`av_frame_get_buffer()` 会把行补齐，宽度是 176、352、720、854、1000、1366 时画面错位（PSNR 8.4 dB） | L21 |
+| [0100](0100-doc-examples-vaapi_encode-return-a-plain-exit-status.patch) | vaapi_encode.c | 不符合规范 | `main()` 把内部错误码当退出码：创建设备失败是 187，用法错误和文件错误是 255 | L21 |
+| [0101](0101-doc-examples-vaapi_transcode-use-the-encoder-time-ba.patch) | vaapi_transcode.c | 错误 | 解码后的帧时间戳在输入流的时间基里，编码器却被告知时间基是 1/帧率，包也是从输入流的时间基换算：编码器看到的帧间隔是几百“帧”，码率控制按错的目标工作，包没有时长，平均帧率写错 | L21 |
+| [0102](0102-doc-examples-vaapi_transcode-report-errors-and-do-no.patch) | vaapi_transcode.c | 错误 | 读包循环的错误被后面的冲刷结果覆盖，解码出错报成功；有视频流但一帧也解不出时，仍然调用 `av_write_trailer()`（没写过文件头，崩溃）；失败路径的退出码是 255、183、254 | L21 |
+| [0103](0103-doc-examples-qsv_transcode-keep-the-error-of-the-dec.patch) | qsv_transcode.c | 错误 | 读包循环的错误被解码器冲刷的结果覆盖；分配包失败返回 0；失败时退出码是负的 AVERROR 码（244、187）；赋值当条件没加括号（`-Wparentheses`） | L21 |
 
 ## 怎么使用
 
@@ -133,11 +144,12 @@
 0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c，
 0016、0053 到 0055 都改 encode_video.c，
 0010、0016、0056 到 0061 都改 encode_audio.c，
-0062 到 0070 都改 mux.c，0078 到 0081 都改 transcode_aac.c，0082、0083 都改 avio_read_callback.c），所以要按编号顺序应用：
+0062 到 0070 都改 mux.c，0078 到 0081 都改 transcode_aac.c，0082、0083 都改 avio_read_callback.c，
+0096 到 0098 都改 hw_decode.c，0099、0100 都改 vaapi_encode.c，0101、0102 都改 vaapi_transcode.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
-git am /path/to/FFmpeg_Tutorial/upstream_patches/00*.patch
+git am /path/to/FFmpeg_Tutorial/upstream_patches/*.patch
 make -j"$(nproc)" examples
 ```
 
@@ -158,8 +170,10 @@ make -j"$(nproc)" examples
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
    filter_audio（0042 到 0047）一组、
    decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组，
-   encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组，transcode_aac（0078 到 0081）一组，
-   avio_read_callback（0082、0083）一组，avio_list_dir（0085）一组，avio_http_serve_files（0089 到 0092）一组。
+   encode_audio（0056 到 0061）一组，mux（0062 到 0070、0094）一组，transcode_aac（0078 到 0081、0095）一组，
+   avio_read_callback（0082、0083）一组，avio_list_dir（0085）一组，avio_http_serve_files（0089 到 0092）一组，
+   hw_decode（0096 到 0098）一组，vaapi_encode（0099、0100）一组，vaapi_transcode（0101、0102）一组，qsv_transcode（0103）一组。
+   **0096 到 0103 的硬件部分没有在真实的硬件上运行过**（作者的机器没有显卡）。提交之前请在有 VAAPI（和 QSV）设备的机器上跑一遍，见各个问题下面“验证到了什么程度”的说明。
    **0084、0086、0087、0088、0093 改的是 libavformat，不是示例**，要单独提交，邮件主题和评审的人都不一样（`avformat/aviobuf: ...`、`avformat/file: ...`、`avformat/http: ...`、`avformat/tcp, avformat/http: ...`），不要和示例的 patch 放在一组。
    0086 和 0093 都改 `libavformat/file.c` 的目录函数，可以一起提交。0087 和 0088 都改 `http.c` 里 `http_close()` 的同一处，0088 在 0087 的基础上改，要按顺序提交。
 
@@ -1483,6 +1497,139 @@ $ curl -s http://127.0.0.1:8080/sub                                      # 第�
 
 修复：`file_open_dir()` 把 `c->fd` 设成 -1，`file_close()` 看到 `c->fd < 0` 什么也不做。ftp、sftp 有自己的 `url_close`，不受影响；smb 没有环境，没有验证。
 
+### 0094 mux 出错时泄漏所有资源
+
+输出文件打不开的时候，`main()` 在 `avio_open()` 之后直接 `return 1`，前面分配的东西都没有释放；写文件头、写文件尾失败的两处也一样。
+用 ASan（LeakSanitizer）一跑就看到：
+
+```console
+$ doc/examples/mux /nonexistent/dir/x.mp4 2>&1 >/dev/null | grep -E 'Could not open|SUMMARY'    # 用 -fsanitize=address 编译
+Could not open '/nonexistent/dir/x.mp4': No such file or directory
+SUMMARY: AddressSanitizer: 1264716 byte(s) leaked in 64 allocation(s).
+```
+
+修复：这三处改成跳到 `fail:`，释放选项字典、两个流的编码器等、输出文件、格式上下文。成功路径的输出没有变化（用 `-flags +bitexact -fflags +bitexact` 生成的 MP4 和 MKV，修复前后 `md5sum` 相同）。
+各个辅助函数（`add_stream()`、`open_audio()` 等）自己出错时还是 `exit(1)`，这个 patch 不动它们。
+
+### 0095 transcode_aac 的退出码永远是 187
+
+`main()` 里的 `ret` 初始值是 `AVERROR_EXIT`，成功时才改成 0，最后 `return ret;`。`AVERROR_EXIT` 是 `-MKTAG('E','X','I','T')`，一个很大的负数，进程的退出码只有低 8 位：
+
+```console
+$ doc/examples/transcode_aac /nonexistent.mp2 /tmp/x.m4a 2>/dev/null; echo $?
+187
+```
+
+脚本里没法从退出码得到任何信息，而且和其他示例（出错返回 1）不一致。`transcode.c` 的最后一行是 `return ret ? 1 : 0;`，这里照着改。修复后同样的命令退出码是 1，成功时仍是 0。
+
+### 0096 hw_decode 出错时泄漏所有资源，退出码不可信
+
+`main()` 里每个启动错误（参数不对、输入打不开、找不到视频流、没有这种硬件配置、创建设备失败……）都是中途 `return -1`，没有释放包、格式上下文、解码器上下文和硬件设备引用，进程退出码是 255。开始解码之后 `ret` 被当成“最后一次 `decode_write()` 的结果”，
+最后 `return 0`，读包、解码、写输出文件出错都不影响退出码。
+
+用 ASan 在没有显卡的机器上能走到的几条路径（不需要设备，也不需要解码）：
+
+```console
+$ doc/examples/hw_decode vaapi in.mp4 out.nv12      # 机器上没有 /dev/dri
+Failed to create specified HW device.
+$ echo $?
+255                                                 # LeakSanitizer：包、格式上下文、解码器上下文泄漏
+$ doc/examples/hw_decode nonexistent in.mp4 out.nv12   # 不支持的设备类型
+$ doc/examples/hw_decode vaapi /nonexistent out.nv12    # 输入文件不存在
+```
+
+修复：全部改成跳到 `fail:`，统一释放；成功返回 0，失败返回 1，和其他示例一致；输出文件只在末尾关一次，并检查关闭是否出错（磁盘满）。
+上面几条路径修复后不再泄漏，退出码都是 1。
+
+**验证到了什么程度**：错误路径用 ASan 验证过；真正解码的路径需要硬件设备，没有运行。
+
+### 0097 hw_decode 创建设备失败时不说原因
+
+`av_hwdevice_ctx_create()` 失败时只打印 “Failed to create specified HW device.”，错误码和原因都没有。VAAPI 的原因（“No render device /dev/dri/renderD128”、“Cannot open a VA display”）
+由硬件后端用 `AV_LOG_VERBOSE` 级别输出，默认看不到，所以用户没有任何线索。修复：把错误码翻译成文字打印出来，并提示用 `-v verbose` 之类的方式提高日志级别。`av_buffer_ref()` 复制设备引用的结果也加了检查。
+
+没有显卡的机器上，修复后的提示是 “Failed to create specified HW device: Generic error in an external library”；把日志级别设成 verbose 之后能看到上面两条原因。
+
+### 0098 hw_decode 的符号比较和缓冲区大小
+
+`fwrite()` 返回 `size_t`，和 `int` 比较，`-Wextra` 下警告。`av_image_get_buffer_size()` 出错时返回负数，没检查就传给 `av_malloc()`。写输出失败时返回 -1，改成正确的错误码。
+
+**验证到了什么程度**：只做了编译检查（解码路径需要硬件设备）。
+
+### 0099 vaapi_encode 的输入读错了位置
+
+示例要把一个 NV12 文件喂给编码器，做法是 `fread(frame->data[0], 1, w*h, f)` 再 `fread(frame->data[1], 1, w*h/2, f)`，等于假设帧缓冲里每一行恰好 `width` 个字节。
+可是帧缓冲是 `av_frame_get_buffer(frame, 0)` 分配的，行会被补齐到对齐值的整数倍（`frame->linesize[0]` 不一定等于宽度）：
+
+| 宽度 | 176 | 352 | 720 | 854 | 1000 | 1366 | 320、640、1280、1920 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `linesize[0]` | 192 | 384 | 768 | 896 | 1024 | 1408 | 等于宽度 |
+
+宽度是后一类时示例碰巧能工作；是前一类时每一行都存在错误的位置，画面被切歪（每行多出来的字节挤到下一行）。
+修复：先把一整帧读进一个紧密排列的缓冲区，再用 `av_image_copy2()` 按两边各自的行距复制进帧；读失败时停下来报错，而不是当作文件结束去冲刷编码器；命令行算出来的帧大小也做了检查。
+
+用软件编码器替身验证（把 `h264_vaapi` 换成 `libx264`，不用硬件帧，读文件的代码一字不改），解码后和输入比较 PSNR：
+
+| 输入 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 352×288，10 帧 | 8.4 dB | 38.3 dB |
+| 1000×562 | 8.7 dB | 40.9 dB |
+| 320×240（宽度本来就对齐） | 38.5 dB | 38.5 dB |
+
+**验证到了什么程度**：读输入的代码用软件替身验证；VAAPI 的部分（上传帧、`h264_vaapi` 编码）没有运行。
+
+### 0100 vaapi_encode 的退出码
+
+`main()` 返回内部错误码：创建 VAAPI 设备失败（`AVERROR_EXTERNAL`）退出码是 187，用法错误和文件错误返回 -1 即 255。改成失败返回 1、成功返回 0。
+在没有显卡的机器上检查过：修复前 187（设备）、255（用法）、255（输入不存在），修复后三种都是 1。
+
+### 0101 vaapi_transcode 用错了时间基
+
+解码出来的帧，时间戳在输入流的时间基里（常见的 MP4 是 1/12800，Matroska 和 FLV 是 1/1000），而示例告诉编码器“时间基是 1/帧率”，写包时又从输入流的时间基换算。
+文件里的数字碰巧是对的，但编码器看到的是相隔几百“帧”的帧：码率控制（用时间基和帧率）瞄着错的目标，编码器输出的包没有时长，复用器丢掉最后一帧的时长，写出来的平均帧率也是错的。
+
+修复：解码器设好 `pkt_timebase` 和 `av_guess_frame_rate()`（流参数里没有帧率时也能工作），编码器设好帧率，编码前把帧的 pts 和 duration 换算到编码器的时间基，写包时从编码器的时间基换算，没有时长的包补一帧。
+同一个思路在 L16 的 transcode.c 里已经有了，`qsv_transcode.c` 本来就是这样做的。
+
+用软件编码器替身（VAAPI 换成 libx264，其他不变）量过：一个 125 帧、25 fps 的 MP4，以及同样内容的 MKV、TS、FLV，和一个 300 帧、30 fps 的 1080p 文件：
+
+| 指标 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 平均帧率 | 3125/124（1080p：9000/299） | 25/1（1080p：30/1） |
+| 时长 | 4.96 秒（9.97 秒） | 5.0 秒（10 秒） |
+| 码率 | 1.32 Mb/s（1080p：10.9 Mb/s） | 0.75 Mb/s（1080p：5.9 Mb/s） |
+
+修复后输出里每个包的 pts、dts、duration 和输入 MP4 的完全一样。码率偏高是因为 x264 把帧率估成了 0.05 fps，在每帧可用的比特数上算错了。
+
+**验证到了什么程度**：时间戳逻辑用软件替身验证；VAAPI 的部分没有运行。
+
+### 0102 vaapi_transcode 的错误处理
+
+读包循环的错误被解码器冲刷的结果覆盖，再被编码器冲刷的结果覆盖，解码出错报成功；`av_write_trailer()` 和 `avio_closep()` 的结果没有检查；失败路径返回 -1（255）或负的 AVERROR 码（183、254……）。
+更严重的是：输入有视频流但一帧也解不出来时，编码器和输出文件头都还没建立，示例仍然去冲刷编码器、调用 `av_write_trailer()`，而没有写过文件头的复用器 `av_write_trailer()` 会崩溃。
+
+修复：保留第一个错误；已经解出来的帧照常收尾（输出文件是完整的、能播放的）；什么都没解出来时跳过冲刷和写文件尾，并说明；检查写文件尾和关闭文件；失败返回 1、成功返回 0；分配包失败时返回错误而不是 0。
+
+用软件编码器替身在 ASan 下对比，退出码修复前 / 修复后：
+
+| 输入 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 有视频流但解不出一帧 | 崩溃（`av_write_trailer()` 里 SEGV） | 1 |
+| 文件中间有解码错误 | 0 | 1 |
+| 乱码文件 | 183 | 1 |
+| 输入不存在 | 254 | 1 |
+| 编码器名字不对 | 255 | 1 |
+| 正常输入 | 0 | 0（输出文件逐字节相同） |
+
+**验证到了什么程度**：错误处理用软件替身验证；VAAPI 的部分没有运行。
+
+### 0103 qsv_transcode 的错误处理
+
+和 0102 同一类问题：读包、转码循环的错误被解码器冲刷的结果覆盖，转码失败可能报成功；分配包失败返回 0；失败路径把负的 AVERROR 码当退出码（没有 QSV 设备时 `AVERROR(ENOMEM)` 的低 8 位是 244，别的机器上 `AVERROR_EXTERNAL` 是 187）；还有一个把赋值当条件、没加括号的地方（`-Wparentheses`）。
+修复：出现第一个错误就停下，失败返回 1，成功返回 0。
+
+**验证到了什么程度**：只在没有 QSV 设备的机器上检查：修复前创建设备失败时退出码是 244，修复后是 1；编译除了一个没用的参数，没有别的警告。真正的转码需要 QSV 设备，没有运行。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
@@ -1503,7 +1650,7 @@ transcode_aac.c 在 L17 研究过，除了 0078 到 0081，下面几处也看到
 - `avctx->pkt_timebase` 设在 `avcodec_open2()` 之后。目前的解码器是每解一帧才读它，碰巧没有问题，但接口没有这样保证。
 
 用 `-Wdeprecated-declarations` 编译全部能独立编译的示例，没有发现使用已标记废弃的函数。
-qsv_decode.c 和 qsv_transcode.c 需要 Intel 的库才能编译，还没有检查。
+qsv_transcode.c 在 L21 看过（0103）。qsv_decode.c 需要 Intel 的 libvpl 头文件（`mfxvideo.h`），作者的机器上没有，没法编译，也没有检查。
 
 示例之外顺带看到的：`libavfilter/buffersink.c` 里 `alphamodes` 和 `samplerates` 两个选项的说明文字是从别的选项复制来的
 （分别写成了 color ranges 和 sample formats）。不在本目录的范围内，没有制作 patch。

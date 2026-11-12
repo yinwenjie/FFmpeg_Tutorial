@@ -8,3 +8,4 @@ out/
 *.yuv
 *.rgb
 *.pcm
+build-*/

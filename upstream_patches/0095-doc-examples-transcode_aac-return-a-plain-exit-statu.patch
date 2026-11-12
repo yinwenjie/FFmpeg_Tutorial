@@ -1,0 +1,30 @@
+From 50153aaad7d3468c8926fc9228273dba049ab274 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 18:52:14 +0000
+Subject: [PATCH 95/95] doc/examples/transcode_aac: return a plain exit status
+
+main() returned its internal status, AVERROR_EXIT, on every failure.
+That is a large negative number, so the process exit status was its low
+byte, 187, whatever went wrong. Return 1 on failure and 0 on success
+like the other examples do (transcode.c uses "ret ? 1 : 0").
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode_aac.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/transcode_aac.c b/doc/examples/transcode_aac.c
+index b7a59adff8..39dd456ebf 100644
+--- a/doc/examples/transcode_aac.c
++++ b/doc/examples/transcode_aac.c
+@@ -944,5 +944,5 @@ cleanup:
+     if (input_format_context)
+         avformat_close_input(&input_format_context);
+ 
+-    return ret;
++    return ret ? 1 : 0;
+ }
+-- 
+2.43.0
+

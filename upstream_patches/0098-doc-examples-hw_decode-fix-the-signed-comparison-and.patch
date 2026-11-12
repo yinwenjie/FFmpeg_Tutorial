@@ -1,0 +1,51 @@
+From 4886a33f4769a4ab89feec6f85331a2005f33ce6 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:16:30 +0000
+Subject: [PATCH 098/103] doc/examples/hw_decode: fix the signed comparison and
+ check the buffer size
+
+fwrite() returns a size_t that was compared with an int (-Wsign-compare
+under -Wextra). The size of the frame buffer, which comes from
+av_image_get_buffer_size() and is negative on error, was passed to
+av_malloc() without being checked. Also return a proper error code instead
+of -1 when the output cannot be written.
+
+Compile-tested only (the decoding path needs a hardware device).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/hw_decode.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/hw_decode.c b/doc/examples/hw_decode.c
+index 5123947354..636a36c559 100644
+--- a/doc/examples/hw_decode.c
++++ b/doc/examples/hw_decode.c
+@@ -122,6 +122,11 @@ static int decode_write(AVCodecContext *avctx, AVPacket *packet)
+ 
+         size = av_image_get_buffer_size(tmp_frame->format, tmp_frame->width,
+                                         tmp_frame->height, 1);
++        if (size < 0) {
++            fprintf(stderr, "Can not get the size of the frame\n");
++            ret = size;
++            goto fail;
++        }
+         buffer = av_malloc(size);
+         if (!buffer) {
+             fprintf(stderr, "Can not alloc buffer\n");
+@@ -137,9 +142,9 @@ static int decode_write(AVCodecContext *avctx, AVPacket *packet)
+             goto fail;
+         }
+ 
+-        if (fwrite(buffer, 1, size, output_file) != size) {
++        if (fwrite(buffer, 1, size, output_file) != (size_t)size) {
+             fprintf(stderr, "Failed to dump raw data.\n");
+-            ret = -1;
++            ret = AVERROR(EIO);
+             goto fail;
+         }
+ 
+-- 
+2.43.0
+

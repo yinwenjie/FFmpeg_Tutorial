@@ -71,7 +71,7 @@ cmake -S . -B build && cmake --build build
 | | [L17 音频转码与帧长适配](L17_transcode_aac/README.md) | transcode_aac.c |
 | 6 I/O 与网络 | [L18 自定义 I/O](L18_avio_callbacks/README.md) | avio_read_callback.c |
 | | [L19 协议层：列目录与 HTTP 服务](L19_avio_network/README.md) | avio_list_dir.c、avio_http_serve_files.c |
-| 7 硬件加速与工程化 | L20 硬件解码 | hw_decode.c |
+| 7 硬件加速与工程化 | [L20 硬件解码](L20_hw_decode/README.md) | hw_decode.c |
 | | L21 硬件编码与全 GPU 转码 | vaapi_encode.c、vaapi_transcode.c |
 | | L22 工程化专题 | 无 |
 | 综合项目 | 命令行媒体工具箱 mtool | 无 |

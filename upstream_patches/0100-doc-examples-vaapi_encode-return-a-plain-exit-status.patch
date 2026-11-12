@@ -1,0 +1,52 @@
+From 0c48018d4c6e318ba1fbed3e8a8d2ed94c84f6bd Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:17:46 +0000
+Subject: [PATCH 100/103] doc/examples/vaapi_encode: return a plain exit status
+
+main() returned the internal error code. A failed VAAPI device creation
+(AVERROR_EXTERNAL) became exit status 187, and usage and file errors
+returned -1, which is exit status 255. Return 1 on failure and 0 on
+success like the other examples.
+
+Checked on a machine without a render node: before, the exit status was
+187 (device), 255 (usage) and 255 (missing input); now it is 1 in all
+three cases.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/vaapi_encode.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/vaapi_encode.c b/doc/examples/vaapi_encode.c
+index 8e1cf06db6..f24ce5487a 100644
+--- a/doc/examples/vaapi_encode.c
++++ b/doc/examples/vaapi_encode.c
+@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
+ 
+     if (argc < 5) {
+         fprintf(stderr, "Usage: %s <width> <height> <input file> <output file>\n", argv[0]);
+-        return -1;
++        return 1;
+     }
+ 
+     width  = atoi(argv[1]);
+@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
+ 
+     if (!(fin = fopen(argv[3], "rb"))) {
+         fprintf(stderr, "Fail to open input file : %s\n", strerror(errno));
+-        return -1;
++        return 1;
+     }
+     if (!(fout = fopen(argv[4], "w+b"))) {
+         fprintf(stderr, "Fail to open output file : %s\n", strerror(errno));
+@@ -244,5 +244,5 @@ close:
+     avcodec_free_context(&avctx);
+     av_buffer_unref(&hw_device_ctx);
+ 
+-    return err;
++    return err < 0 ? 1 : 0;
+ }
+-- 
+2.43.0
+

@@ -91,7 +91,12 @@ static int read_cb(void *opaque, uint8_t *buf, int buf_size)
     } else {
         size_t left = s->size - s->pos;
         n = (int)FFMIN((size_t)buf_size, left);
-        memcpy(buf, s->data + s->pos, n);
+        /*
+         * 空文件的数据指针是 NULL，n 是 0：memcpy 的指针参数按标准不能是 NULL，哪怕长度是 0。
+         * L22 的 ASan/UBSan 扫描在这里报过 “null pointer passed as argument 2”，所以先判断长度。
+         */
+        if (n > 0)
+            memcpy(buf, s->data + s->pos, n);
     }
 
     if (n == 0) {

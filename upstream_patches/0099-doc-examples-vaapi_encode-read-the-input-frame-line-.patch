@@ -1,0 +1,126 @@
+From 8217aa41850429224afa8e118594021d69dbb1e8 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:17:35 +0000
+Subject: [PATCH 099/103] doc/examples/vaapi_encode: read the input frame line
+ by line
+
+The example read the NV12 input with one fread() straight into data[0]
+and one into data[1] of an AVFrame, as if the lines were "width" bytes
+apart. av_frame_get_buffer(frame, 0) pads the lines to a multiple of its
+alignment, so for widths such as 176, 352, 720, 854, 1000 or 1366
+(linesize 192, 384, 768, 896, 1024, 1408) every line was stored in the
+wrong place and the picture was sheared. Widths that are already aligned
+(320, 640, 1280, 1920) worked.
+
+Read the packed frame into a buffer and copy it into the frame with
+av_image_copy2(). Also stop with an error when reading the input fails,
+instead of flushing the encoder as if it had ended, and check the size
+that is computed from the command line.
+
+The input of a PSNR check, run with a software stand-in (h264_vaapi
+replaced by libx264, no hardware frames, the reading code unchanged):
+352x288 NV12 input, 10 frames: 8.4 dB before, 38.3 dB after; 1000x562:
+8.7 dB before, 40.9 dB after; 320x240: 38.5 dB before and after. The
+VAAPI part of the example was not run: it needs a hardware device.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/vaapi_encode.c | 39 +++++++++++++++++++++++++++++--------
+ 1 file changed, 31 insertions(+), 8 deletions(-)
+
+diff --git a/doc/examples/vaapi_encode.c b/doc/examples/vaapi_encode.c
+index a27bb03da2..8e1cf06db6 100644
+--- a/doc/examples/vaapi_encode.c
++++ b/doc/examples/vaapi_encode.c
+@@ -34,6 +34,7 @@
+ #include <libavcodec/avcodec.h>
+ #include <libavutil/pixdesc.h>
+ #include <libavutil/hwcontext.h>
++#include <libavutil/imgutils.h>
+ 
+ static int width, height;
+ static AVBufferRef *hw_device_ctx = NULL;
+@@ -102,6 +103,9 @@ end:
+ int main(int argc, char *argv[])
+ {
+     int size, err;
++    uint8_t *in_buf = NULL;
++    uint8_t *in_data[4];
++    int in_linesize[4];
+     FILE *fin = NULL, *fout = NULL;
+     AVFrame *sw_frame = NULL, *hw_frame = NULL;
+     AVCodecContext *avctx = NULL;
+@@ -115,7 +119,11 @@ int main(int argc, char *argv[])
+ 
+     width  = atoi(argv[1]);
+     height = atoi(argv[2]);
+-    size   = width * height;
++    size   = av_image_get_buffer_size(AV_PIX_FMT_NV12, width, height, 1);
++    if (size <= 0) {
++        fprintf(stderr, "Invalid frame size %dx%d\n", width, height);
++        return 1;
++    }
+ 
+     if (!(fin = fopen(argv[3], "rb"))) {
+         fprintf(stderr, "Fail to open input file : %s\n", strerror(errno));
+@@ -163,6 +171,13 @@ int main(int argc, char *argv[])
+         goto close;
+     }
+ 
++    /* the input file holds packed NV12 frames: lines are exactly "width" bytes long */
++    if (!(in_buf = av_malloc(size))) {
++        err = AVERROR(ENOMEM);
++        goto close;
++    }
++    av_image_fill_arrays(in_data, in_linesize, in_buf, AV_PIX_FMT_NV12, width, height, 1);
++
+     while (1) {
+         if (!(sw_frame = av_frame_alloc())) {
+             err = AVERROR(ENOMEM);
+@@ -174,10 +189,15 @@ int main(int argc, char *argv[])
+         sw_frame->format = AV_PIX_FMT_NV12;
+         if ((err = av_frame_get_buffer(sw_frame, 0)) < 0)
+             goto close;
+-        if ((err = fread((uint8_t*)(sw_frame->data[0]), size, 1, fin)) <= 0)
+-            break;
+-        if ((err = fread((uint8_t*)(sw_frame->data[1]), size/2, 1, fin)) <= 0)
++        /* the lines of an AVFrame are padded to a multiple of the alignment
++         * chosen by av_frame_get_buffer(), so read the whole frame and copy it
++         * line by line instead of reading straight into the planes */
++        if (fread(in_buf, size, 1, fin) != 1) {
++            err = ferror(fin) ? AVERROR(EIO) : 0;
+             break;
++        }
++        av_image_copy2(sw_frame->data, sw_frame->linesize, in_data, in_linesize,
++                       AV_PIX_FMT_NV12, width, height);
+ 
+         if (!(hw_frame = av_frame_alloc())) {
+             err = AVERROR(ENOMEM);
+@@ -206,16 +226,19 @@ int main(int argc, char *argv[])
+         av_frame_free(&sw_frame);
+     }
+ 
+-    /* flush encoder */
+-    err = encode_write(avctx, NULL, fout);
+-    if (err == AVERROR_EOF)
+-        err = 0;
++    /* flush encoder (unless reading the input failed) */
++    if (err >= 0) {
++        err = encode_write(avctx, NULL, fout);
++        if (err == AVERROR_EOF)
++            err = 0;
++    }
+ 
+ close:
+     if (fin)
+         fclose(fin);
+     if (fout)
+         fclose(fout);
++    av_freep(&in_buf);
+     av_frame_free(&sw_frame);
+     av_frame_free(&hw_frame);
+     avcodec_free_context(&avctx);
+-- 
+2.43.0
+
