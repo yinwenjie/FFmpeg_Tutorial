@@ -1,0 +1,71 @@
+From 34ec8a62bfb657ef441e3a20292417cf81b0d9e1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:15:40 +0000
+Subject: [PATCH 84/84] avformat/aviobuf: pad the dynamic buffer after the last
+ byte
+
+avio_close_dyn_buf() appends AV_INPUT_BUFFER_PADDING_SIZE zero bytes and
+returns the size minus that padding. The padding is written at the
+current write position, which is the end of the data only if the muxer
+left it there.
+
+Muxers that seek back in write_trailer() to patch a field in the header
+and do not seek forward again (flv, aiff, caf and asf, for example) leave
+the position in the middle of the data. The 64 zero bytes of padding then
+overwrote the output right after the patched field, and the returned
+size was 64 bytes too short, so the last 64 bytes were cut off.
+
+Reproduced on current master by muxing the same input with
+avio_open_dyn_buf() and with avio_open() and comparing the results:
+
+  flv   119467 bytes to a file, 119403 bytes from the dynamic buffer
+  aiff  176454 bytes to a file, 176390 bytes from the dynamic buffer
+  caf   176492 bytes to a file, 176428 bytes from the dynamic buffer
+  asf    19644 bytes to a file,  19580 bytes from the dynamic buffer
+
+Flush what is still buffered, move the position to the end of the data
+and only then write the padding. Muxers that finish at the end of the
+data, such as mp4, matroska and mpegts, are not affected, and the output
+is byte for byte the same as before for them.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ libavformat/aviobuf.c | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/libavformat/aviobuf.c b/libavformat/aviobuf.c
+index 43431381b9..5b6a00f3ef 100644
+--- a/libavformat/aviobuf.c
++++ b/libavformat/aviobuf.c
+@@ -1386,15 +1386,24 @@ int avio_close_dyn_buf(AVIOContext *s, uint8_t **pbuffer)
+         return 0;
+     }
+ 
++    /* Write out what is still buffered before looking at the position:
++     * a muxer that seeked back to patch its header can leave its last
++     * bytes there. */
++    avio_flush(s);
++
++    d = s->opaque;
++
+     /* don't attempt to pad fixed-size packet buffers */
+     if (!s->max_packet_size) {
++        /* The muxer may have left the write position in the middle of the
++         * data, e.g. after updating the duration in the header. The padding
++         * belongs after the last byte, not over the data at that position. */
++        d->pos = d->size;
+         ffio_fill(s, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+         padding = AV_INPUT_BUFFER_PADDING_SIZE;
++        avio_flush(s);
+     }
+ 
+-    avio_flush(s);
+-
+-    d = s->opaque;
+     *pbuffer = d->buffer;
+     size = d->size;
+ 
+-- 
+2.43.0
+

@@ -1,5 +1,5 @@
 From 1dc90f92e9aafa8c65068daf09e68058d2d8896b Mon Sep 17 00:00:00 2001
-From: t <a@b>
+From: Claude <noreply@anthropic.com>
 Date: Thu, 12 Nov 2026 15:53:36 +0000
 Subject: [PATCH] doc/examples/transcode: make the audio timestamps continuous
 

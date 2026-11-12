@@ -69,7 +69,7 @@ cmake -S . -B build && cmake --build build
 | 5 封装输出与转码 | [L15 编码并封装](L15_mux/README.md) | mux.c |
 | | [L16 完整转码](L16_transcode/README.md) | transcode.c |
 | | [L17 音频转码与帧长适配](L17_transcode_aac/README.md) | transcode_aac.c |
-| 6 I/O 与网络 | L18 自定义 I/O | avio_read_callback.c |
+| 6 I/O 与网络 | [L18 自定义 I/O](L18_avio_callbacks/README.md) | avio_read_callback.c |
 | | L19 网络协议与流媒体 | avio_list_dir.c、avio_http_serve_files.c |
 | 7 硬件加速与工程化 | L20 硬件解码 | hw_decode.c |
 | | L21 硬件编码与全 GPU 转码 | vaapi_encode.c、vaapi_transcode.c |
