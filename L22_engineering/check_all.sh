@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 用 ASan/UBSan（或 valgrind）检查课程里 L02 到 L19 的全部程序：
+# 用 ASan/UBSan（或 valgrind）检查课程里 L02 到 L20 的全部程序：
 #   1. 每个程序用正常的输入跑一遍，退出码必须是 0；
 #   2. 再用“坏输入”跑一遍（空文件、乱码、截断的文件、只有视频或只有音频的文件、一张图片、
 #      17x15 的奇数尺寸），不要求成功，但不能崩溃、不能超时、不能有任何 sanitizer 报告；
@@ -23,7 +23,7 @@ cd "$(dirname "$0")/.."
 MODE=${1:-asan}
 [ $# -gt 0 ] && shift
 LESSONS=("$@")
-[ ${#LESSONS[@]} -eq 0 ] && LESSONS=(L02 L03 L04 L05 L06 L07 L08 L09 L10 L11 L12 L13 L14 L15 L16 L17 L18 L19)
+[ ${#LESSONS[@]} -eq 0 ] && LESSONS=(L02 L03 L04 L05 L06 L07 L08 L09 L10 L11 L12 L13 L14 L15 L16 L17 L18 L19 L20)
 
 case $MODE in
     asan)
@@ -256,6 +256,9 @@ spec L18 avio_mem_out av @IN@ mp4 @OUT@.mp4 mode=cb
 spec L19 avio_list_dir none samples
 spec L19 avio_ls none samples long=1
 spec L19 avio_cat av @IN@ @OUT@
+spec L20 hw_info none
+spec L20 hw_decode_av av @IN@ @OUT@.nv12 device=none pix_fmt=nv12
+spec L20 hw_decode_av av @IN@ - md5=1 stats=1
 
 # 出错路径：输入文件不存在、输出目录不存在、编码器名字不对（必须不崩溃、不泄漏）
 echo "== 不存在的输入和输出"
@@ -284,6 +287,13 @@ ghost L17 transcode_aac $MP2 $D/out.m4a
 ghost L17 transcode_aac_av $MP2 $D/out.m4a
 ghost L18 avio_mem_out $MP4 mp4 $D/out.mp4 mode=file
 ghost L19 avio_cat $MP4 $D/out.bin
+ghost L20 hw_decode vaapi $MP4 @OUT@.nv12
+ghost L20 hw_decode bogus $MP4 @OUT@.nv12
+ghost L20 hw_decode vaapi $S/video_360p25.m1v @OUT@.nv12
+ghost L20 hw_decode vaapi $D/in.mp4 @OUT@.nv12
+ghost L20 hw_decode_av $D/in.mp4 -
+ghost L20 hw_decode_av $MP4 $D/out.nv12 device=none
+ghost L20 hw_decode_av $MP4 - device=vaapi
 
 echo
 echo "共 $total 项：正常 $pass，已知问题 $known，失败 $fail；退出码大于 10 又没有记录的有 $warn 项（模式 $MODE，结果表 $W/results.tsv）"
