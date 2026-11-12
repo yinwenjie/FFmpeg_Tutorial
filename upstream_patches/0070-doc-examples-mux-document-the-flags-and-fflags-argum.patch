@@ -1,0 +1,37 @@
+From 675ba0bf465fe515ac725291a8b6fac5ba2ce193 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:28:18 +0000
+Subject: [PATCH] doc/examples/mux: document the -flags and -fflags arguments
+
+The example accepts these two arguments, but the usage text did not
+mention them.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index 9bc5375..3ab5167 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -588,12 +588,14 @@ int main(int argc, char **argv)
+     int i;
+ 
+     if (argc < 2) {
+-        printf("usage: %s output_file\n"
++        printf("usage: %s output_file [-flags codec_flags] [-fflags format_flags]\n"
+                "API example program to output a media file with libavformat.\n"
+                "This program generates a synthetic audio and video stream, encodes and\n"
+                "muxes them into a file named output_file.\n"
+                "The output format is automatically guessed according to the file extension.\n"
+                "Raw images can also be output by using '%%d' in the filename.\n"
++               "The flags are passed on to the encoders and to the muxer, for example\n"
++               "-flags +bitexact -fflags +bitexact.\n"
+                "\n", argv[0]);
+         return 1;
+     }
+-- 
+2.43.0
+

@@ -86,6 +86,15 @@
 | [0059](0059-doc-examples-encode_audio-fix-the-comment-of-select_.patch) | encode_audio.c | 不符合规范 | `select_sample_rate()` 的注释说选最高的采样率，实际选最接近 44100 的 | L14 |
 | [0060](0060-doc-examples-encode_audio-check-for-write-errors.patch) | encode_audio.c | 错误 | 不检查 fwrite 和 fclose 的结果，写不出去时照常报告成功 | L14 |
 | [0061](0061-doc-examples-encode_audio-set-the-timestamps-of-the-.patch) | encode_audio.c | 不符合规范 | 送给编码器的帧没有设 pts，编出的包也就没有时间戳 | L14 |
+| [0062](0062-doc-examples-mux-check-the-results-of-av_write_trail.patch) | mux.c | 错误 | 不检查 `av_write_trailer()` 和 `avio_closep()` 的结果，MP4 的索引写不进去时照常返回 0，留下一个打不开的文件 | L15 |
+| [0063](0063-doc-examples-mux-free-the-options-dictionary.patch) | mux.c | 错误 | 用了 `-flags`、`-fflags` 参数时选项字典没有释放，valgrind 报内存泄漏 | L15 |
+| [0064](0064-doc-examples-mux-do-not-generate-one-video-frame-too.patch) | mux.c | 错误 | 结束条件用了 `>`，视频多生成一帧：251 帧、10.04 秒，而不是 250 帧、10 秒 | L15 |
+| [0065](0065-doc-examples-mux-pass-the-frame-duration-on-to-the-v.patch) | mux.c | 错误 | 视频帧没有时长，编出的包时长为 0，MP4 的最后一帧落在编辑列表之外，播放时被丢掉 | L15 |
+| [0066](0066-doc-examples-mux-use-a-pixel-format-supported-by-the.patch) | mux.c | 错误 | 像素格式写死 yuv420p，转换像素格式的代码永远走不到，gif、apng 这些输出格式打不开编码器 | L15 |
+| [0067](0067-doc-examples-mux-make-image-sequence-output-work.patch) | mux.c | 错误 | 用法说明里说文件名带 `%d` 可以输出图片，实际打不开 MJPEG 编码器 | L15 |
+| [0068](0068-doc-examples-mux-use-sws_scale_frame.patch) | mux.c | 不符合规范 | 用 swscale.h 标为 legacy 的 `sws_getContext()` 加 `sws_scale()`，而且不检查转换结果 | L15 |
+| [0069](0069-doc-examples-mux-compute-the-audio-signal-in-double-.patch) | mux.c | 错误 | 音频信号的相位用 float 累加，最后一秒的音高是 1158.7 Hz，应为 1155 Hz | L15 |
+| [0070](0070-doc-examples-mux-document-the-flags-and-fflags-argum.patch) | mux.c | 不符合规范 | 程序接受 `-flags` 和 `-fflags` 两个参数，用法说明里没有提 | L15 |
 
 ## 怎么使用
 
@@ -100,7 +109,8 @@
 0042 到 0047 都改 filter_audio.c，
 0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c，
 0016、0053 到 0055 都改 encode_video.c，
-0010、0016、0056 到 0061 都改 encode_audio.c），所以要按编号顺序应用：
+0010、0016、0056 到 0061 都改 encode_audio.c，
+0062 到 0070 都改 mux.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -125,7 +135,7 @@ make -j"$(nproc)" examples
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
    filter_audio（0042 到 0047）一组、
    decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组，
-   encode_audio（0056 到 0061）一组。
+   encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -977,13 +987,81 @@ $ doc/examples/encode_audio /dev/full; echo $?
 照着这个示例写的程序如果把包交给复用器，就会写出没有时间戳的流。
 修复后 `frame->pts` 设为已经送进去的采样数（音频编码器的 `time_base` 默认是 `1 / sample_rate`）。输出文件不变。
 
+### 0062 mux 不检查写文件尾和关闭文件的结果
+
+`av_write_trailer()` 和 `avio_closep()` 的返回值都被丢掉了。MP4 的索引（`moov`）是在写文件尾时才写的，
+这一步失败，文件就打不开。复现（把输出文件的大小限制在 398 KB，数据写得进去，索引写不进去）：
+
+```bash
+( trap '' XFSZ; ulimit -f 398; ./mux lim.mp4 >/dev/null 2>&1; echo "退出码 $?" )
+ffprobe -v error lim.mp4
+```
+
+修复前退出码是 0，ffprobe 报 `Invalid data found when processing input`。
+修复后打印 `Error writing the trailer: File too large`，退出码 1。
+
+### 0063 mux 没有释放选项字典
+
+`-flags`、`-fflags` 的值放进了一个 `AVDictionary`，用完没有 `av_dict_free()`。
+`valgrind --leak-check=full ./mux v.mp4 -flags +bitexact -fflags +bitexact` 报 `definitely lost`。修复后没有泄漏。
+
+### 0064 mux 多生成一帧视频
+
+判断“是否到了 10 秒”用的是 `av_compare_ts(next_pts, …, STREAM_DURATION, …) > 0`，
+时间戳正好等于 10 秒的那一帧也生成了。修复前视频是 251 帧、10.04 秒，改成 `>= 0` 之后是 250 帧、10 秒。
+音频每帧 1024 个采样，10 秒不是整数帧，前后都是 431 帧。
+
+### 0065 mux 的视频包没有时长
+
+和 0011（transcode）是同一个问题：帧没有设 `duration`，也没有设 `AV_CODEC_FLAG_FRAME_DURATION`，
+视频编码器输出的包时长是 0。MP4 复用器需要最后一个包的时长才能算出流的总时长，拿到 0 之后，
+最后一帧落在编辑列表之外：
+
+```bash
+./mux a.mp4 >/dev/null 2>&1
+ffprobe -v error -count_frames -select_streams v -show_entries stream=nb_frames,nb_read_frames,duration -of default=nw=1 a.mp4
+```
+
+（在 0064 之后）修复前 `nb_frames=250`、`nb_read_frames=249`、`duration=9.960000`：文件里有 250 帧，能读出来的只有 249 帧。
+修复后三个数是 250、250、10.000000。
+
+### 0066 mux 的像素格式写死为 yuv420p
+
+`add_stream()` 里 `c->pix_fmt = STREAM_PIX_FMT`，后面 `get_video_frame()` 里“像素格式不是 yuv420p 就先转换”的分支永远走不到。
+默认编码器不接受 yuv420p 的输出格式直接失败：`./mux a.gif` 报
+`Specified pixel format yuv420p is not supported by the gif encoder` 和 `Could not open video codec`。
+修复后先查询编码器支持的像素格式，不支持 yuv420p 时用它的第一种格式（和音频采样率的选法一致），
+gif、apng 都能输出 250 帧。原来能用的格式输出不变。
+
+### 0067 mux 输出图片序列失败
+
+用法说明写着 `Raw images can also be output by using '%d' in the filename`，
+实际 `./mux 'img/x%03d.jpg'` 报 `Non full-range YUV is non-standard` 和 `Could not open video codec`：
+image2 复用器的默认编码器是 MJPEG，它只接受全范围的 YUV。
+修复后给 MJPEG 设 `color_range = AVCOL_RANGE_JPEG`（示例生成的画面本来就用满了 0 到 255），能写出 250 张 JPEG。
+
+### 0068 mux 使用旧式的 libswscale 接口
+
+和 0037（scale_video）一样，把 `sws_getContext()` 加 `sws_scale()` 换成 `sws_alloc_context()` 加 `sws_scale_frame()`，
+同时检查转换的返回值。这段代码在 0066 之后才真正被执行；修改前后 gif、apng 的输出逐字节相同。
+
+### 0069 mux 的音频信号用 float 累加相位
+
+和 0057（encode_audio）同类。相位 `t` 和它的增量 `tincr` 是 float，累加 44 万次之后误差明显：
+按注释，音高每秒升高 110 Hz，最后一秒（第 9 到 10 秒）的平均频率应为 1155 Hz，实测 1158.7 Hz。
+改成 double 之后是 1154.9 Hz。测法：输出 WAV，取第 9 到 10 秒数过零点。
+
+### 0070 mux 的用法说明没有提 -flags 和 -fflags
+
+程序会把这两个参数的值交给编码器和复用器（例如 `-flags +bitexact -fflags +bitexact` 让输出不带版本信息、可以逐字节比较），
+但用法说明里只写了 `output_file`。修复后用法说明里加上了这两个参数。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
 
 | 涉及文件 | 观察 | 计划处理的课次 |
 | --- | --- | --- |
-| mux.c | 和 scale_video.c 一样使用 `sws_getContext()` 加 `sws_scale()` 的旧式写法（scale_video.c 已在 0037 改掉）。mux.c 的改法要和它的编码流程一起考虑 | L15 |
 | transcode.c | 编码器没有继承输入的色彩属性，BT.709 的输入转码后 `color_space` 和 `color_range` 变成 unknown | L16 |
 | avio_read_callback.c | 只提供读回调、没有 seek 回调。`moov` 在文件末尾的 MP4 读不到完整的流参数（报 `partial file` 和 `unspecified pixel format`） | L18 |
 | avio_http_serve_files.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告（filter_audio.c 的同类问题已在 0042 改掉） | L19 |

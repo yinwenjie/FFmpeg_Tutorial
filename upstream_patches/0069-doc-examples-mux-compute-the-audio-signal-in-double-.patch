@@ -1,0 +1,33 @@
+From bc95a74dba86e7a992ef381f9b41b436ed125496 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 12:28:15 +0000
+Subject: [PATCH] doc/examples/mux: compute the audio signal in double
+ precision
+
+The phase and its increments were accumulated in float over 441000
+samples. The rounding errors add up: the tone, which should rise by
+110 Hz per second, is at 1158.7 instead of 1155 Hz in the last second.
+With double it is at 1154.9 Hz.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/mux.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/mux.c b/doc/examples/mux.c
+index 51a833a..9bc5375 100644
+--- a/doc/examples/mux.c
++++ b/doc/examples/mux.c
+@@ -63,7 +63,7 @@ typedef struct OutputStream {
+ 
+     AVPacket *tmp_pkt;
+ 
+-    float t, tincr, tincr2;
++    double t, tincr, tincr2;
+ 
+     struct SwsContext *sws_ctx;
+     struct SwrContext *swr_ctx;
+-- 
+2.43.0
+
