@@ -348,7 +348,7 @@ L17、L20、L21 都出现了一堆奇怪的退出码。真相只有一条：**�
 | `AVERROR(ENOSYS)`（-38） | **218** | L21：内存里的 nv12 帧直接送给 `h264_vaapi`（缺 `hwupload`） |
 | `AVERROR_ENCODER_NOT_FOUND` | **8** | `ffmpeg -c:v 不存在的名字` |
 | `AVERROR(ENOENT)`（-2） | **254** | 输入文件不存在（`ffmpeg`、L03 `show_metadata`） |
-| `return -1` | **255** | L03、L15、L20、L21 官方示例的用法错误和文件错误 |
+| `return -1` | **255** | L20 `hw_decode` 的启动错误（0096）；L21 `vaapi_encode` 的用法错误和文件错误（0100）、`vaapi_transcode` 的失败路径（0102，255、183、254 都有） |
 
 三个问题：
 
