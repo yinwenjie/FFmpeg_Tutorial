@@ -383,7 +383,7 @@ aac,217
 
 DASH、HLS 的 fMP4 和浏览器里的流式播放用的就是这种形式（输出名没有扩展名时必须给 `format=`）。
 
-## 第 7 步：只有一路流，规范的多声道 WAV
+## 第 7 步：只有一路流，ADTS 头和规范的多声道 WAV
 
 `mux_av` 的视频或音频参数写 `none` 就是不要这一路。只要音频：
 
@@ -397,6 +397,29 @@ ffprobe -v error -show_entries stream=codec_name,duration -of csv=p=0 out/a.m4a
 写出 out/a.m4a
 aac,5.000000
 ```
+
+输出扩展名是 `.aac` 时，复用器是 `adts`。L14 的 `encode_wav` 要自己在每个包前面写 7 字节的 ADTS 头（`write_adts_header()`），
+交给复用器就不用写了。和 L14 写出来的文件比较（需要先 `make -C L14_encode_audio`）：
+
+```bash
+L14_encode_audio/build/encode_wav out/src.wav out/l14.aac aac 2>/dev/null | tail -1
+$B/mux_av none out/src.wav out/l15.aac 2>/dev/null | tail -1
+cmp out/l14.aac out/l15.aac && echo 相同
+ls -l out/l15.aac | awk '{print $5}'
+head -c 7 out/l15.aac | od -An -tx1
+```
+
+```text
+写出 out/l14.aac
+写出 out/l15.aac
+相同
+79029
+ ff f1 50 80 1a 9f fc
+```
+
+手写的和复用器写的逐字节相同。文件比包数据（77,510 字节）多 1,519 字节，正好是 217 个包乘以每个包 7 字节。
+开头 7 个字节是第一个包的 ADTS 头：`ff f` 是同步字，后面依次是 profile 字段 1（AAC-LC）、采样率下标 4（44100 Hz）、
+声道配置 2（立体声）和这个包的长度（212 字节）。
 
 输出扩展名是 `.wav` 时，这种格式的默认音频编码器是 `pcm_s16le`，等于把 PCM 包进 WAV 容器。L10 留下过一个问题：
 `resample_file` 写 5.1 声道的 WAV 时只写了简化的文件头，声道的含义靠约定。规范的做法是带声道掩码的扩展头，交给复用器来写：
