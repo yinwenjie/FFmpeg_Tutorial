@@ -1,0 +1,69 @@
+From e9125be40481fdb079335627b8a28f610b33b517 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:20:32 +0000
+Subject: [PATCH 103/103] doc/examples/qsv_transcode: keep the error of the
+ decoding loop and return a plain status
+
+An error in the loop that reads and transcodes the packets was overwritten
+by the result of the decoder flush, so a failed transcoding could be
+reported as success. A failed allocation of the packet returned 0, and the
+failure paths returned the negative AVERROR code as the exit status (244
+for the AVERROR(ENOMEM) that the missing QSV device produced on the test
+machine, 187 for AVERROR_EXTERNAL elsewhere). Stop at the first error,
+return 1 on failure and 0 on success like the other examples, and add the
+parentheses around the assignment that is used as a condition
+(-Wparentheses).
+
+Checked only without a QSV device: before the exit status was 244 when
+the device cannot be created, now it is 1; the example compiles without
+warnings other than the unused parameter. The transcoding itself needs a
+QSV device and was not run.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/qsv_transcode.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/qsv_transcode.c b/doc/examples/qsv_transcode.c
+index b4230e7a38..b9cbbec8e7 100644
+--- a/doc/examples/qsv_transcode.c
++++ b/doc/examples/qsv_transcode.c
+@@ -225,7 +225,7 @@ static int encode_write(AVPacket *enc_pkt, AVFrame *frame)
+         goto end;
+     }
+     while (1) {
+-        if (ret = avcodec_receive_packet(encoder_ctx, enc_pkt))
++        if ((ret = avcodec_receive_packet(encoder_ctx, enc_pkt)))
+             break;
+         enc_pkt->stream_index = 0;
+         av_packet_rescale_ts(enc_pkt, encoder_ctx->time_base,
+@@ -370,6 +370,7 @@ int main(int argc, char **argv)
+     dec_pkt = av_packet_alloc();
+     if (!dec_pkt) {
+         fprintf(stderr, "Failed to allocate decode packet\n");
++        ret = AVERROR(ENOMEM);
+         goto end;
+     }
+ 
+@@ -410,6 +411,10 @@ int main(int argc, char **argv)
+ 
+         av_packet_unref(dec_pkt);
+     }
++    /* the end of the input is not an error; any other error ends the
++     * transcoding, and must not be overwritten by the result of the flush */
++    if (ret != AVERROR_EOF)
++        goto end;
+ 
+     /* flush decoder */
+     av_packet_unref(dec_pkt);
+@@ -438,5 +443,5 @@ end:
+     av_buffer_unref(&hw_device_ctx);
+     av_packet_free(&dec_pkt);
+     av_freep(&dynamic_setting);
+-    return ret;
++    return ret < 0 ? 1 : 0;
+ }
+-- 
+2.43.0
+

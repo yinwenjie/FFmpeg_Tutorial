@@ -1,0 +1,176 @@
+From b3f1a9bf1d42a0b1230ede810874d7c5609b97c0 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:16:03 +0000
+Subject: [PATCH 096/103] doc/examples/hw_decode: free everything and return a
+ failure status on errors
+
+main() returned -1 from the middle of the function on every setup error,
+without freeing the packet, the format context, the codec context or the
+hardware device. The process exit status was then 255, and the status was
+always 0 once decoding had started, even if reading, decoding or writing
+the output failed.
+
+Jump to a common cleanup instead, and return 1 on failure and 0 on
+success like the other examples do. Also close the output file at the
+end only once, and report an error if closing it fails (for example on a
+full disk).
+
+Found with AddressSanitizer: with a VAAPI device that cannot be created
+("hw_decode vaapi in.mp4 out.nv12" on a machine without a render node),
+with a device type the decoder does not support, and with a missing or
+damaged input file, LeakSanitizer reported leaks and the exit status was
+99/255. With this change none of these paths leaks and all return 1.
+The decoding path itself was not run: it needs a hardware device.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/hw_decode.c | 60 ++++++++++++++++++++++++----------------
+ 1 file changed, 36 insertions(+), 24 deletions(-)
+
+diff --git a/doc/examples/hw_decode.c b/doc/examples/hw_decode.c
+index 7ecb70b181..45c323d2eb 100644
+--- a/doc/examples/hw_decode.c
++++ b/doc/examples/hw_decode.c
+@@ -31,6 +31,7 @@
+  * surfaces.
+  */
+ 
++#include <errno.h>
+ #include <stdio.h>
+ 
+ #include <libavcodec/avcodec.h>
+@@ -160,7 +161,7 @@ int main(int argc, char *argv[])
+ 
+     if (argc < 4) {
+         fprintf(stderr, "Usage: %s <device type> <input file> <output file>\n", argv[0]);
+-        return -1;
++        return 1;
+     }
+ 
+     type = av_hwdevice_find_type_by_name(argv[1]);
+@@ -170,31 +171,33 @@ int main(int argc, char *argv[])
+         while((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
+             fprintf(stderr, " %s", av_hwdevice_get_type_name(type));
+         fprintf(stderr, "\n");
+-        return -1;
++        return 1;
+     }
+ 
+     packet = av_packet_alloc();
+     if (!packet) {
+         fprintf(stderr, "Failed to allocate AVPacket\n");
+-        return -1;
++        return 1;
+     }
+ 
+     /* open the input file */
+-    if (avformat_open_input(&input_ctx, argv[2], NULL, NULL) != 0) {
+-        fprintf(stderr, "Cannot open input file '%s'\n", argv[2]);
+-        return -1;
++    ret = avformat_open_input(&input_ctx, argv[2], NULL, NULL);
++    if (ret < 0) {
++        fprintf(stderr, "Cannot open input file '%s': %s\n", argv[2], av_err2str(ret));
++        goto end;
+     }
+ 
+-    if (avformat_find_stream_info(input_ctx, NULL) < 0) {
++    ret = avformat_find_stream_info(input_ctx, NULL);
++    if (ret < 0) {
+         fprintf(stderr, "Cannot find input stream information.\n");
+-        return -1;
++        goto end;
+     }
+ 
+     /* find the video stream information */
+     ret = av_find_best_stream(input_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, &decoder, 0);
+     if (ret < 0) {
+         fprintf(stderr, "Cannot find a video stream in the input file\n");
+-        return -1;
++        goto end;
+     }
+     video_stream = ret;
+ 
+@@ -203,7 +206,8 @@ int main(int argc, char *argv[])
+         if (!config) {
+             fprintf(stderr, "Decoder %s does not support device type %s.\n",
+                     decoder->name, av_hwdevice_get_type_name(type));
+-            return -1;
++            ret = AVERROR(ENOSYS);
++            goto end;
+         }
+         if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+             config->device_type == type) {
+@@ -212,30 +216,32 @@ int main(int argc, char *argv[])
+         }
+     }
+ 
+-    if (!(decoder_ctx = avcodec_alloc_context3(decoder)))
+-        return AVERROR(ENOMEM);
++    if (!(decoder_ctx = avcodec_alloc_context3(decoder))) {
++        ret = AVERROR(ENOMEM);
++        goto end;
++    }
+ 
+     video = input_ctx->streams[video_stream];
+-    if (avcodec_parameters_to_context(decoder_ctx, video->codecpar) < 0) {
+-        avcodec_free_context(&decoder_ctx);
+-        return -1;
+-    }
++    ret = avcodec_parameters_to_context(decoder_ctx, video->codecpar);
++    if (ret < 0)
++        goto end;
+ 
+     decoder_ctx->get_format  = get_hw_format;
+ 
+-    if (hw_decoder_init(decoder_ctx, type) < 0)
+-        return -1;
++    if ((ret = hw_decoder_init(decoder_ctx, type)) < 0)
++        goto end;
+ 
+     if ((ret = avcodec_open2(decoder_ctx, decoder, NULL)) < 0) {
+         fprintf(stderr, "Failed to open codec for stream #%u\n", video_stream);
+-        return -1;
++        goto end;
+     }
+ 
+     /* open the file to dump raw data */
+     output_file = fopen(argv[3], "w+b");
+     if (!output_file) {
+         fprintf(stderr, "Cannot open output file '%s'\n", argv[3]);
+-        return -1;
++        ret = AVERROR(errno);
++        goto end;
+     }
+ 
+     /* actual decoding and dump the raw data */
+@@ -248,16 +254,22 @@ int main(int argc, char *argv[])
+ 
+         av_packet_unref(packet);
+     }
++    if (ret == AVERROR_EOF)
++        ret = 0;
+ 
+     /* flush the decoder */
+-    ret = decode_write(decoder_ctx, NULL);
++    if (ret >= 0)
++        ret = decode_write(decoder_ctx, NULL);
+ 
+-    if (output_file)
+-        fclose(output_file);
++end:
++    if (output_file && fclose(output_file) && ret >= 0) {
++        fprintf(stderr, "Failed to write the output file\n");
++        ret = AVERROR(EIO);
++    }
+     av_packet_free(&packet);
+     avcodec_free_context(&decoder_ctx);
+     avformat_close_input(&input_ctx);
+     av_buffer_unref(&hw_device_ctx);
+ 
+-    return 0;
++    return ret < 0 ? 1 : 0;
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,47 @@
+From 7e16fe1fa38332f0ae6d81fc5f1e0cb51fe40b80 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:16:30 +0000
+Subject: [PATCH 097/103] doc/examples/hw_decode: say why the HW device could
+ not be created
+
+When av_hwdevice_ctx_create() failed the example only printed "Failed to
+create specified HW device." without the error code, and the reason that
+the hardware backend logs (for VAAPI: "No render device
+/dev/dri/renderD128", "Cannot open a VA display") is only printed at the
+verbose log level, so the user had nothing to go on. Print the error and
+point to the log level. Also check the result of av_buffer_ref() for the
+device reference, which was used unchecked.
+
+Tested without a render node: the message now reads "Failed to create
+specified HW device: Generic error in an external library", and with
+av_log_set_level(AV_LOG_VERBOSE) the reasons mentioned above are printed.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/hw_decode.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/hw_decode.c b/doc/examples/hw_decode.c
+index 45c323d2eb..5123947354 100644
+--- a/doc/examples/hw_decode.c
++++ b/doc/examples/hw_decode.c
+@@ -53,10 +53,14 @@ static int hw_decoder_init(AVCodecContext *ctx, const enum AVHWDeviceType type)
+ 
+     if ((err = av_hwdevice_ctx_create(&hw_device_ctx, type,
+                                       NULL, NULL, 0)) < 0) {
+-        fprintf(stderr, "Failed to create specified HW device.\n");
++        fprintf(stderr, "Failed to create specified HW device: %s\n"
++                "Raise the log level (av_log_set_level(AV_LOG_VERBOSE)) to see "
++                "the reason reported by the hardware backend.\n", av_err2str(err));
+         return err;
+     }
+     ctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
++    if (!ctx->hw_device_ctx)
++        return AVERROR(ENOMEM);
+ 
+     return err;
+ }
+-- 
+2.43.0
+

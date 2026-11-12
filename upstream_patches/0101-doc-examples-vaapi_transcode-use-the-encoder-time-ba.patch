@@ -1,0 +1,94 @@
+From 5dcdf008e9f3fb4b4998ea2220f0812647593d42 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:19:01 +0000
+Subject: [PATCH 101/103] doc/examples/vaapi_transcode: use the encoder time
+ base for the encoder
+
+The decoded frames carry their timestamps in the time base of the input
+stream (1/12800 for the usual MP4 files, 1/1000 for Matroska and FLV),
+but the encoder was told that its time base is 1/frame rate, and the
+packets were converted from the input stream time base instead of from
+the encoder time base. The numbers happened to come out right in the
+file, but the encoder saw frames that were hundreds of "frames" apart:
+rate control (which uses the time base and frame rate) targeted the wrong
+bitrate, and the encoder output carried no packet durations, so the
+muxer lost the duration of the last frame and wrote a wrong average
+frame rate.
+
+Set the time base and frame rate of the decoder (pkt_timebase and
+av_guess_frame_rate(), which also covers streams whose codec parameters
+have no frame rate), give the encoder its frame rate, convert the pts and
+duration of the frames to the encoder time base before encoding, convert
+the packets from the encoder time base, and give packets without a
+duration one frame.
+
+Measured with a software stand-in (VAAPI replaced by libx264, everything
+else unchanged) on a 125 frame 25 fps MP4 and the same content in MKV,
+TS and FLV, and a 300 frame 30 fps 1080p file. Before: average frame rate
+3125/124 and duration 4.96 s instead of 25/1 and 5.0 s (9000/299 and
+9.97 s instead of 30/1 and 10 s for the 1080p file), and a bitrate of
+1.32 Mb/s instead of 0.75 Mb/s (10.9 against 5.9 Mb/s for 1080p) because
+x264 estimated the frame rate as 0.05 fps. After: 25/1 and 5.0 s (30/1 and
+10 s), and the pts, dts and duration of every packet are the same as in
+the input MP4. The VAAPI part of the example was not run: it needs a
+hardware device.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/vaapi_transcode.c | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/vaapi_transcode.c b/doc/examples/vaapi_transcode.c
+index dba37d4bcb..a010e7f154 100644
+--- a/doc/examples/vaapi_transcode.c
++++ b/doc/examples/vaapi_transcode.c
+@@ -92,6 +92,11 @@ static int open_input_file(const char *filename)
+         return ret;
+     }
+ 
++    /* the timestamps of the decoded frames are in the time base of the stream,
++     * and the frame rate is needed below to set up the encoder */
++    decoder_ctx->pkt_timebase = video->time_base;
++    decoder_ctx->framerate    = av_guess_frame_rate(ifmt_ctx, video, NULL);
++
+     decoder_ctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+     if (!decoder_ctx->hw_device_ctx) {
+         fprintf(stderr, "A hardware device reference create failed.\n");
+@@ -122,7 +127,11 @@ static int encode_write(AVPacket *enc_pkt, AVFrame *frame)
+             break;
+ 
+         enc_pkt->stream_index = 0;
+-        av_packet_rescale_ts(enc_pkt, ifmt_ctx->streams[video_stream]->time_base,
++        /* the encoder does not set the duration of the packets: one frame
++         * lasts one tick of the encoder time base (1 / frame rate) */
++        if (enc_pkt->duration <= 0)
++            enc_pkt->duration = 1;
++        av_packet_rescale_ts(enc_pkt, encoder_ctx->time_base,
+                              ofmt_ctx->streams[0]->time_base);
+         ret = av_interleaved_write_frame(ofmt_ctx, enc_pkt);
+         if (ret < 0) {
+@@ -175,6 +184,7 @@ static int dec_enc(AVPacket *pkt, const AVCodec *enc_codec)
+              * the same as decoder.
+              * xxx: now the sample can't handle resolution change case.
+              */
++            encoder_ctx->framerate = decoder_ctx->framerate;
+             encoder_ctx->time_base = av_inv_q(decoder_ctx->framerate);
+             encoder_ctx->pix_fmt   = AV_PIX_FMT_VAAPI;
+             encoder_ctx->width     = decoder_ctx->width;
+@@ -210,6 +220,12 @@ static int dec_enc(AVPacket *pkt, const AVCodec *enc_codec)
+             initialized = 1;
+         }
+ 
++        /* the encoder expects timestamps in its own time base */
++        frame->pts      = av_rescale_q(frame->pts, decoder_ctx->pkt_timebase,
++                                       encoder_ctx->time_base);
++        frame->duration = av_rescale_q(frame->duration, decoder_ctx->pkt_timebase,
++                                       encoder_ctx->time_base);
++
+         if ((ret = encode_write(pkt, frame)) < 0)
+             fprintf(stderr, "Error during encoding and writing.\n");
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,144 @@
+From 178afebf93c6defef6e8d6df2525de12890d5b67 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 12 Nov 2026 19:19:50 +0000
+Subject: [PATCH 102/103] doc/examples/vaapi_transcode: report errors and do
+ not finish a missing output
+
+main() overwrote the status of the read loop with the result of the
+decoder flush and then the encoder flush, so an error while decoding was
+reported as success, av_write_trailer() and avio_closep() were not
+checked, and the failure paths returned -1 (exit status 255) or the
+negative AVERROR code (exit status 183, 254...). If the input had a video
+stream but no frame could be decoded, the encoder and the output header
+had not been set up, and the encoder flush and av_write_trailer() were
+still called: av_write_trailer() on a muxer without a header crashes.
+
+Keep the first error, still finish the output with the frames that were
+decoded, skip the flush and the trailer when nothing was decoded and say
+so, check the trailer and the close of the output file, and return 1 on
+failure and 0 on success like the other examples. Also return an error
+instead of 0 when the packet cannot be allocated.
+
+Checked with a software stand-in (VAAPI replaced by libx264, everything
+else unchanged) under AddressSanitizer. Before / after exit status: input
+with a video stream but no decodable frame: crash (SEGV in
+av_write_trailer) / 1; decoding error in the middle of the file: 0 / 1;
+garbage input: 183 / 1; missing input: 254 / 1; unknown encoder: 255 / 1;
+valid input: 0 / 0, with a byte-identical output file. The VAAPI part of
+the example was not run: it needs a hardware device.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/vaapi_transcode.c | 57 +++++++++++++++++++++++++---------
+ 1 file changed, 42 insertions(+), 15 deletions(-)
+
+diff --git a/doc/examples/vaapi_transcode.c b/doc/examples/vaapi_transcode.c
+index a010e7f154..b77f443894 100644
+--- a/doc/examples/vaapi_transcode.c
++++ b/doc/examples/vaapi_transcode.c
+@@ -238,25 +238,26 @@ fail:
+ int main(int argc, char **argv)
+ {
+     const AVCodec *enc_codec;
+-    int ret = 0;
++    int ret = 0, err;
+     AVPacket *dec_pkt;
+ 
+     if (argc != 4) {
+         fprintf(stderr, "Usage: %s <input file> <encode codec> <output file>\n"
+                 "The output format is guessed according to the file extension.\n"
+                 "\n", argv[0]);
+-        return -1;
++        return 1;
+     }
+ 
+     ret = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, NULL, NULL, 0);
+     if (ret < 0) {
+         fprintf(stderr, "Failed to create a VAAPI device. Error code: %s\n", av_err2str(ret));
+-        return -1;
++        return 1;
+     }
+ 
+     dec_pkt = av_packet_alloc();
+     if (!dec_pkt) {
+         fprintf(stderr, "Failed to allocate decode packet\n");
++        ret = AVERROR(ENOMEM);
+         goto end;
+     }
+ 
+@@ -265,7 +266,7 @@ int main(int argc, char **argv)
+ 
+     if (!(enc_codec = avcodec_find_encoder_by_name(argv[2]))) {
+         fprintf(stderr, "Could not find encoder '%s'\n", argv[2]);
+-        ret = -1;
++        ret = AVERROR_ENCODER_NOT_FOUND;
+         goto end;
+     }
+ 
+@@ -297,25 +298,51 @@ int main(int argc, char **argv)
+ 
+         av_packet_unref(dec_pkt);
+     }
++    if (ret == AVERROR_EOF)
++        ret = 0;
+ 
+-    /* flush decoder */
++    /* flush decoder; even after an error, finish the output with the frames
++     * that were decoded, but report the first error */
+     av_packet_unref(dec_pkt);
+-    ret = dec_enc(dec_pkt, enc_codec);
+-
+-    /* flush encoder */
+-    ret = encode_write(dec_pkt, NULL);
+-
+-    /* write the trailer for output stream */
+-    av_write_trailer(ofmt_ctx);
++    err = dec_enc(dec_pkt, enc_codec);
++    if (ret >= 0)
++        ret = err;
++
++    if (initialized) {
++        /* flush encoder */
++        err = encode_write(dec_pkt, NULL);
++        if (ret >= 0)
++            ret = err;
++
++        /* write the trailer for output stream */
++        err = av_write_trailer(ofmt_ctx);
++        if (err < 0)
++            fprintf(stderr, "Error while writing the trailer. Error code: %s\n",
++                    av_err2str(err));
++        if (ret >= 0)
++            ret = err;
++    } else if (ret >= 0) {
++        /* the encoder and the output header are set up when the first frame is
++         * decoded; without a frame there is nothing to flush or to finish
++         * (calling av_write_trailer() without a header crashes) */
++        fprintf(stderr, "No video frame could be decoded.\n");
++        ret = AVERROR_INVALIDDATA;
++    }
+ 
+ end:
+     avformat_close_input(&ifmt_ctx);
+-    if (ofmt_ctx && !(ofmt_ctx->oformat->flags & AVFMT_NOFILE))
+-        avio_closep(&ofmt_ctx->pb);
++    if (ofmt_ctx && !(ofmt_ctx->oformat->flags & AVFMT_NOFILE)) {
++        err = avio_closep(&ofmt_ctx->pb);
++        if (err < 0 && ret >= 0) {
++            fprintf(stderr, "Error while closing the output file. Error code: %s\n",
++                    av_err2str(err));
++            ret = err;
++        }
++    }
+     avformat_free_context(ofmt_ctx);
+     avcodec_free_context(&decoder_ctx);
+     avcodec_free_context(&encoder_ctx);
+     av_buffer_unref(&hw_device_ctx);
+     av_packet_free(&dec_pkt);
+-    return ret;
++    return ret < 0 ? 1 : 0;
+ }
+-- 
+2.43.0
+
