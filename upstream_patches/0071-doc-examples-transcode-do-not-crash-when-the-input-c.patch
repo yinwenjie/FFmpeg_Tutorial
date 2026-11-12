@@ -1,0 +1,44 @@
+From 77fdee3e951118d4120f0574437740df8d57ac28 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 15:28:05 +0000
+Subject: [PATCH 71/76] doc/examples/transcode: do not crash when the input
+ cannot be opened
+
+If avformat_open_input() fails, ifmt_ctx is NULL and stream_ctx has not
+been allocated yet, but the cleanup code at the end of main() loops over
+ifmt_ctx->nb_streams and indexes stream_ctx unconditionally. A missing
+or unreadable input file therefore ends in a segmentation fault instead
+of the error message:
+
+  $ doc/examples/transcode nonexistent.mp4 out.mp4
+  Cannot open input file
+  Segmentation fault
+
+The same happens when avformat_find_stream_info() fails, which returns
+before stream_ctx is allocated.
+
+Skip the loop when there is nothing to free. The example now prints
+"Error occurred: No such file or directory" and returns 1.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/transcode.c b/doc/examples/transcode.c
+index 76afb32..e0e158c 100644
+--- a/doc/examples/transcode.c
++++ b/doc/examples/transcode.c
+@@ -676,7 +676,7 @@ int main(int argc, char **argv)
+     av_write_trailer(ofmt_ctx);
+ end:
+     av_packet_free(&packet);
+-    for (i = 0; i < ifmt_ctx->nb_streams; i++) {
++    for (i = 0; ifmt_ctx && stream_ctx && i < ifmt_ctx->nb_streams; i++) {
+         avcodec_free_context(&stream_ctx[i].dec_ctx);
+         if (ofmt_ctx && ofmt_ctx->nb_streams > i && ofmt_ctx->streams[i] && stream_ctx[i].enc_ctx)
+             avcodec_free_context(&stream_ctx[i].enc_ctx);
+-- 
+2.43.0
+

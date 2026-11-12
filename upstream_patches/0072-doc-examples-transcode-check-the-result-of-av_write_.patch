@@ -1,0 +1,58 @@
+From e75d3db08cde84c7261086e0336f3f53c436ba21 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 15:28:25 +0000
+Subject: [PATCH 72/76] doc/examples/transcode: check the result of
+ av_write_trailer() and avio_closep()
+
+Both return values are dropped. The MP4 index (moov) is written by
+av_write_trailer(), and the data still buffered in the output context is
+written out by avio_closep(); if either fails the output cannot be
+played, but the example reports success. With the output size limited
+so that the packets fit and the index does not:
+
+  $ ( trap '' XFSZ; ulimit -f 520; doc/examples/transcode in.mp4 out.mp4 \
+      >/dev/null 2>&1; echo "exit $?" )
+  exit 0
+  $ ffprobe out.mp4
+  [mov,mp4,m4a,3gp,3g2,mj2 @ ...] moov atom not found
+
+Keep the result of av_write_trailer() in ret and let a failure of
+avio_closep() set it if nothing failed before. The example now prints
+"Error occurred: File too large" and returns 1 in the case above.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/transcode.c b/doc/examples/transcode.c
+index e0e158c..d735fae 100644
+--- a/doc/examples/transcode.c
++++ b/doc/examples/transcode.c
+@@ -673,7 +673,7 @@ int main(int argc, char **argv)
+         }
+     }
+ 
+-    av_write_trailer(ofmt_ctx);
++    ret = av_write_trailer(ofmt_ctx);
+ end:
+     av_packet_free(&packet);
+     for (i = 0; ifmt_ctx && stream_ctx && i < ifmt_ctx->nb_streams; i++) {
+@@ -691,8 +691,11 @@ end:
+     av_free(filter_ctx);
+     av_free(stream_ctx);
+     avformat_close_input(&ifmt_ctx);
+-    if (ofmt_ctx && !(ofmt_ctx->oformat->flags & AVFMT_NOFILE))
+-        avio_closep(&ofmt_ctx->pb);
++    if (ofmt_ctx && !(ofmt_ctx->oformat->flags & AVFMT_NOFILE)) {
++        int close_ret = avio_closep(&ofmt_ctx->pb);
++        if (close_ret < 0 && ret >= 0)
++            ret = close_ret;
++    }
+     avformat_free_context(ofmt_ctx);
+ 
+     if (ret < 0)
+-- 
+2.43.0
+

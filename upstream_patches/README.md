@@ -15,10 +15,10 @@
 | 项目 | 值 |
 | --- | --- |
 | 制作和测试所用的提交 | `a337e8ddaa`（课程固定使用的版本，2026-11-10） |
-| 复核时的上游 master | `23c4540`（2026-11-12），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
+| 复核时的上游 master | `986bab2`（2026-11-12），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `23c4540` 上用 `git am` 按顺序应用无冲突。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `986bab2` 上用 `git am` 按顺序应用无冲突。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -95,11 +95,18 @@
 | [0068](0068-doc-examples-mux-use-sws_scale_frame.patch) | mux.c | 不符合规范 | 用 swscale.h 标为 legacy 的 `sws_getContext()` 加 `sws_scale()`，而且不检查转换结果 | L15 |
 | [0069](0069-doc-examples-mux-compute-the-audio-signal-in-double-.patch) | mux.c | 错误 | 音频信号的相位用 float 累加，最后一秒的音高是 1158.7 Hz，应为 1155 Hz | L15 |
 | [0070](0070-doc-examples-mux-document-the-flags-and-fflags-argum.patch) | mux.c | 不符合规范 | 程序接受 `-flags` 和 `-fflags` 两个参数，用法说明里没有提 | L15 |
+| [0071](0071-doc-examples-transcode-do-not-crash-when-the-input-c.patch) | transcode.c | 错误 | 输入文件打不开时，收尾代码访问还没有创建的 `ifmt_ctx` 和 `stream_ctx`，段错误 | L16 |
+| [0072](0072-doc-examples-transcode-check-the-result-of-av_write_.patch) | transcode.c | 错误 | 不检查 `av_write_trailer()` 和 `avio_closep()` 的结果，MP4 的索引写不进去时照常返回 0 | L16 |
+| [0073](0073-doc-examples-transcode-stop-with-an-error-when-decod.patch) | transcode.c | 错误 | 解码失败只打印 `Decoding failed`，接着照常收尾、返回 0，输出被悄悄截断 | L16 |
+| [0074](0074-doc-examples-transcode-pass-the-color-properties-on-.patch) | transcode.c | 错误 | 编码器没有继承输入的色彩属性，BT.709 的输入转码后范围、原色、传输特性、矩阵全变成 unknown | L16 |
+| [0075](0075-doc-examples-transcode-copy-the-metadata-and-the-dis.patch) | transcode.c | 不满足现有需求 | 不拷贝容器和流的元数据（标题、语言），也不拷贝 default 等标志，播放器选不对默认音轨 | L16 |
+| [0076](0076-doc-examples-transcode-terminate-the-Could-not-open-.patch) | transcode.c | 错误 | `Could not open output file` 后面没有换行，下一行日志接在同一行里 | L16 |
+| [0077](0077-doc-examples-transcode-make-the-audio-timestamps-con.patch) | transcode.c | 错误 | 输入的时间基很粗（FLV、MKV 是毫秒）时，音频帧的时间戳被取整，间隔是 1014、1015、1058 个采样而不是 1024，输出的音频包时间戳也跟着不均匀 | L16 |
 
 ## 怎么使用
 
 应用到 FFmpeg 源码树。各个问题在逻辑上互相独立，但有几个 patch 改的是同一个文件里相邻的行
-（0003 到 0005 都改 Makefile.example，0001、0007、0011、0014 都改 transcode.c，
+（0003 到 0005 都改 Makefile.example，0001、0007、0011、0014、0071 到 0077 都改 transcode.c，
 0010、0012 到 0015 都改 remux.c，0016 到 0018 都改 decode_video.c，
 0006、0016、0019 到 0024 都改 decode_audio.c，
 0008、0025 到 0030 都改 demux_decode.c，
@@ -129,7 +136,7 @@ make -j"$(nproc)" examples
 3. **选择提交渠道**。按 `doc/developer.texi` 的说明，可以在
    <https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls> 提 pull request，
    也可以用 `git send-email` 发到 ffmpeg-devel 邮件列表。
-4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
+4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011、0071 到 0077）一组、
    remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
    demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
@@ -1056,13 +1063,135 @@ image2 复用器的默认编码器是 MJPEG，它只接受全范围的 YUV。
 程序会把这两个参数的值交给编码器和复用器（例如 `-flags +bitexact -fflags +bitexact` 让输出不带版本信息、可以逐字节比较），
 但用法说明里只写了 `output_file`。修复后用法说明里加上了这两个参数。
 
+### 0071 transcode 输入打不开时崩溃
+
+`avformat_open_input()` 失败时 `ifmt_ctx` 是 NULL，`stream_ctx` 也还没有分配，但 `main()` 末尾的清理代码
+无条件地按 `ifmt_ctx->nb_streams` 循环、访问 `stream_ctx[i]`。输入文件不存在或打不开就直接段错误：
+
+```console
+$ doc/examples/transcode /nonexistent.mp4 /tmp/out.mp4
+Cannot open input file
+Segmentation fault
+```
+
+`avformat_find_stream_info()` 失败（例如输入是个空文件）时同样会走到这里。
+修复后循环前先判断两个指针，打印 `Error occurred: No such file or directory`，返回 1。
+
+### 0072 transcode 不检查写文件尾的结果
+
+和 0062（mux）是同一个问题：`av_write_trailer()` 写 MP4 的 moov 索引，`avio_closep()` 把缓冲区里剩下的数据写出去，
+两个返回值都被丢掉。把输出文件的大小限制在刚好放得下数据、放不下索引的位置：
+
+```console
+$ ( trap '' XFSZ; ulimit -f 520; doc/examples/transcode $S/small_360p25.mp4 /tmp/lim.mp4 >/dev/null 2>&1; echo "exit $?" )
+exit 0
+$ ffprobe -v error /tmp/lim.mp4
+[mov,mp4,m4a,3gp,3g2,mj2 @ 0x...] moov atom not found
+```
+
+修复后最后一行日志是 `Error occurred: File too large`，返回 1。（bash 的 `ulimit -f` 以 1 KB 为单位，
+具体多大能卡出这个效果取决于编码器的输出大小，上面的数在课程素材上可以重现。）
+
+### 0073 transcode 解码失败后仍然返回成功
+
+读循环里 `avcodec_send_packet()` 失败时只打印 `Decoding failed` 然后 `break`，后面的冲刷、写文件尾、返回 0 照常执行。
+把一个 ADTS 文件的两处各改写 300 个字节再转码：
+
+```console
+$ ffmpeg -v error -i $S/small_360p25.mp4 -vn -c:a copy /tmp/a.aac
+$ python3 - <<'EOF'
+import random
+random.seed(5)
+b = bytearray(open('/tmp/a.aac', 'rb').read())
+for off in (20000, 40000):
+    for i in range(300):
+        b[off + i] = random.randrange(256)
+open('/tmp/bad.aac', 'wb').write(b)
+EOF
+$ doc/examples/transcode /tmp/bad.aac /tmp/bad.m4a >/dev/null 2>&1; echo "exit $?"
+exit 0
+```
+
+输出文件被截断，调用方却以为成功。修复后改成 `goto end`，和读循环里其他出错的路径一致，
+最后打印 `Error occurred: Invalid data found when processing input`，返回 1。
+
+### 0074 transcode 没有把色彩属性交给编码器
+
+编码器只拿到了解码器的宽高和像素宽高比，没有拿到色彩范围、原色、传输特性和矩阵系数。
+用 BT.709、limited range 的输入转码，输出里这四项全部是 unknown：
+
+```console
+$ ffmpeg -v error -f lavfi -i testsrc2=size=320x180:rate=25 -t 1 -c:v libx264 -pix_fmt yuv420p \
+    -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv /tmp/bt709.mp4
+$ doc/examples/transcode /tmp/bt709.mp4 /tmp/out.mp4 >/dev/null 2>&1
+$ ffprobe -v error -select_streams v -show_entries stream=color_range,color_space,color_transfer,color_primaries \
+    -of default=nw=1 /tmp/out.mp4
+color_range=unknown
+color_space=unknown
+color_transfer=unknown
+color_primaries=unknown
+```
+
+这些值已经通过 0007 到了滤镜图的入口，只是没有传给编码器，libx264 写进码流的值来自编码器上下文。
+没有这几项，播放器要靠猜：高清视频当成 BT.601 或者 limited range 当成 full range，颜色都会变。
+修复后输出是 `tv`、`bt709`、`bt709`、`bt709`，和输入一致。同时复制了 `chroma_sample_location`。
+
+### 0075 transcode 丢掉元数据和流标志
+
+输出里没有输入的标题、各流的语言和 handler 名，也没有 default 等标志，播放器无法选择默认的音轨或字幕：
+
+```console
+$ ffmpeg -v error -i $S/small_360p25.mp4 -metadata title="My Title" -metadata:s:a:0 language=eng \
+    -metadata:s:v:0 language=chi -disposition:a:0 default -c copy /tmp/meta.mkv
+$ doc/examples/transcode /tmp/meta.mkv /tmp/out.mkv >/dev/null 2>&1
+$ ffprobe -v error -show_entries format_tags=title:stream=index,codec_type:stream_tags=language:stream_disposition=default \
+    -of compact /tmp/out.mkv
+stream|index=0|codec_type=video|disposition:default=0
+stream|index=1|codec_type=audio|disposition:default=0
+format
+```
+
+输入文件的同一条命令输出是 `video|default=1|language=chi`、`audio|default=1|language=eng`、`format|title=My Title`。
+修复后用 `av_dict_copy()` 拷贝容器和每路流的元数据，再复制 `disposition`，做法和 remux.c 一致，
+输出与输入完全相同。
+
+### 0076 transcode 的错误信息没有换行
+
+`Could not open output file '%s'` 的格式串末尾缺 `\n`，后面的日志接在同一行：
+
+```console
+$ doc/examples/transcode $S/small_360p25.mp4 /nonexistent/x.mp4 2>&1 | grep 'Could not open'
+Could not open output file '/nonexistent/x.mp4'Qavg: nan  Tr: 0.0%  TNS(L): 0.0%  TNS(S): 0.0%  M/S: 0.0%  I/S: 0.0%  PNS: 0.0%
+```
+
+加上换行之后，编码器的日志另起一行，带上 `[aac @ ...]` 前缀。
+
+### 0077 transcode 的音频时间戳不连续
+
+音频帧是用输入流的时间基交给滤镜图的。FLV、MKV 的时间基是 1/1000，包的时间戳被取整到毫秒；
+44100 Hz 下 1024 个采样是 23.22 毫秒，所以相邻两帧的 pts 换到 1/44100 以后相差 1014、1015、1058……而不是 1024，
+输出文件里的音频包也是这样。用 L16 的 FLV 样本验证：
+
+```console
+$ ffmpeg -v error -y -i $S/small_360p25.mp4 -c copy /tmp/in.flv
+$ doc/examples/transcode /tmp/in.flv /tmp/out.mp4 >/dev/null 2>&1
+$ ffprobe -v error -select_streams a -show_entries packet=pts -of csv=p=0 /tmp/out.mp4 |
+    awk 'NR>1{d=$1-p; c[d]++} {p=$1} END{for(k in c) printf "%s×%s ", k, c[k]}'
+1014×120 1015×49 1058×27 1059×20 1024×1
+```
+
+（样本是 `samples/small_360p25.flv`，上面的输出是对它跑的结果。）
+修复后，在解码出帧时用 `av_rescale_delta()` 把时间戳换成 1/采样率：它利用“每帧正好 `nb_samples` 个采样”把取整的误差接平，
+真的出现断档时自动退回普通的换算；滤镜图入口也改用 1/采样率做时间基。ffmpeg 命令行是同样的做法。
+修复后相邻帧都相差 1024（输入本身有断档的两处除外，命令行的结果也是这样）；
+时间基本来就是 1/采样率的输入（MP4 里的音频）不受影响。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
 
 | 涉及文件 | 观察 | 计划处理的课次 |
 | --- | --- | --- |
-| transcode.c | 编码器没有继承输入的色彩属性，BT.709 的输入转码后 `color_space` 和 `color_range` 变成 unknown | L16 |
 | avio_read_callback.c | 只提供读回调、没有 seek 回调。`moov` 在文件末尾的 MP4 读不到完整的流参数（报 `partial file` 和 `unspecified pixel format`） | L18 |
 | avio_http_serve_files.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告（filter_audio.c 的同类问题已在 0042 改掉） | L19 |
 

@@ -1,0 +1,55 @@
+From 1be9b5489db23e3d4f500c7255730bb995ce8730 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 15:29:10 +0000
+Subject: [PATCH 74/76] doc/examples/transcode: pass the color properties on to
+ the encoder
+
+The video encoder is set up with the size and the sample aspect ratio
+of the decoder, but not with its color properties. The output is
+written without color range, primaries, transfer characteristics and
+matrix, even though the input has them:
+
+  $ ffprobe -show_entries stream=color_range,color_space,color_transfer,color_primaries in.mp4
+  color_range=tv
+  color_space=bt709
+  color_transfer=bt709
+  color_primaries=bt709
+  $ doc/examples/transcode in.mp4 out.mp4
+  $ ffprobe -show_entries stream=color_range,color_space,color_transfer,color_primaries out.mp4
+  color_range=unknown
+  color_space=unknown
+  color_transfer=unknown
+  color_primaries=unknown
+
+A player then has to guess, and typically treats an HD stream as
+BT.601 or a limited-range stream as full range, which changes the
+colors. Encoders such as libx264 write these values to the stream from
+the codec context, so copy them from the decoder context, next to the
+aspect ratio, together with the chroma sample location. The properties
+already reach the filter graph since the buffer source gets them.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/doc/examples/transcode.c b/doc/examples/transcode.c
+index d0ccbf3..7c0f73c 100644
+--- a/doc/examples/transcode.c
++++ b/doc/examples/transcode.c
+@@ -176,6 +176,11 @@ static int open_output_file(const char *filename)
+                 enc_ctx->height = dec_ctx->height;
+                 enc_ctx->width = dec_ctx->width;
+                 enc_ctx->sample_aspect_ratio = dec_ctx->sample_aspect_ratio;
++                enc_ctx->color_range = dec_ctx->color_range;
++                enc_ctx->color_primaries = dec_ctx->color_primaries;
++                enc_ctx->color_trc = dec_ctx->color_trc;
++                enc_ctx->colorspace = dec_ctx->colorspace;
++                enc_ctx->chroma_sample_location = dec_ctx->chroma_sample_location;
+ 
+                 ret = avcodec_get_supported_config(enc_ctx, NULL,
+                                                    AV_CODEC_CONFIG_PIX_FORMAT, 0,
+-- 
+2.43.0
+

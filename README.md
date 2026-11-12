@@ -67,7 +67,7 @@ cmake -S . -B build && cmake --build build
 | 4 编码 | [L13 视频编码](L13_encode_video/README.md) | encode_video.c |
 | | [L14 音频编码](L14_encode_audio/README.md) | encode_audio.c |
 | 5 封装输出与转码 | [L15 编码并封装](L15_mux/README.md) | mux.c |
-| | L16 完整转码 | transcode.c |
+| | [L16 完整转码](L16_transcode/README.md) | transcode.c |
 | | L17 音频转码与帧长适配 | transcode_aac.c |
 | 6 I/O 与网络 | L18 自定义 I/O | avio_read_callback.c |
 | | L19 网络协议与流媒体 | avio_list_dir.c、avio_http_serve_files.c |
