@@ -1,0 +1,40 @@
+From 9003c56c20f46b8f3e816557758a378099f4c30a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:59:25 +0000
+Subject: [PATCH] doc/examples/encode_audio: keep the phase of the tone in a
+ double
+
+The phase of the generated 440 Hz tone is accumulated in a float for
+230400 samples. Near the end the phase is above 14000 radians, where a
+float can no longer represent the per-sample increment of 0.0627
+accurately, so the tone drifts. Measured on the decoded output by
+counting zero crossings over one second:
+
+    at 0.2 s: 440.30 Hz
+    at 2.0 s: 438.67 Hz
+    at 4.0 s: 439.03 Hz
+
+With a double the tone stays at 440.00 Hz.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_audio.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index d4d756c..0e68b54 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -151,7 +151,7 @@ int main(int argc, char **argv)
+     int i, j, k, ret;
+     FILE *f;
+     uint16_t *samples;
+-    float t, tincr;
++    double t, tincr;
+ 
+     if (argc <= 1) {
+         fprintf(stderr, "Usage: %s <output file>\n", argv[0]);
+-- 
+2.43.0
+

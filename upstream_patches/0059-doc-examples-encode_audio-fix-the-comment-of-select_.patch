@@ -1,0 +1,31 @@
+From 512509b70d5a909b6c1397107bfe839ab1a442bd Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:59:28 +0000
+Subject: [PATCH] doc/examples/encode_audio: fix the comment of
+ select_sample_rate()
+
+The function has not picked the highest supported sample rate for a
+long time; it picks the one closest to 44100 Hz.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_audio.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index 9a87a93..1448fd1 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -61,7 +61,7 @@ static int check_sample_fmt(const AVCodec *codec, enum AVSampleFormat sample_fmt
+     return 0;
+ }
+ 
+-/* just pick the highest supported samplerate */
++/* pick the supported samplerate closest to 44100 Hz */
+ static int select_sample_rate(const AVCodec *codec)
+ {
+     const void *out_config;
+-- 
+2.43.0
+

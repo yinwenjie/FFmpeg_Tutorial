@@ -80,6 +80,12 @@
 | [0053](0053-doc-examples-encode_video-check-for-write-errors.patch) | encode_video.c | 错误 | 不检查 fwrite 和 fclose 的结果，写不出去时照常报告成功 | L13 |
 | [0054](0054-doc-examples-encode_video-report-a-failure-to-set-th.patch) | encode_video.c | 不符合规范 | 给所有 H.264 编码器设 `preset` 私有选项却不看结果，编码器没有这个选项时没有任何提示 | L13 |
 | [0055](0055-doc-examples-encode_video-fix-a-stale-comment.patch) | encode_video.c | 不符合规范 | 注释还写着“查找 mpeg1video 编码器”，实际按命令行给的名字查找 | L13 |
+| [0056](0056-doc-examples-encode_audio-do-not-use-an-uninitialize.patch) | encode_audio.c | 错误 | 编码器给出空的声道布局列表时使用未初始化的指针，`gcc -O2` 有 `-Wmaybe-uninitialized` 警告 | L14 |
+| [0057](0057-doc-examples-encode_audio-keep-the-phase-of-the-tone.patch) | encode_audio.c | 错误 | 正弦波的相位用 float 累加，后半段精度不够，440 Hz 的音漂到 438.7 Hz | L14 |
+| [0058](0058-doc-examples-encode_audio-use-int16_t-for-signed-16-.patch) | encode_audio.c | 不符合规范 | 有符号的 16 位采样用 `uint16_t` 指针写入 | L14 |
+| [0059](0059-doc-examples-encode_audio-fix-the-comment-of-select_.patch) | encode_audio.c | 不符合规范 | `select_sample_rate()` 的注释说选最高的采样率，实际选最接近 44100 的 | L14 |
+| [0060](0060-doc-examples-encode_audio-check-for-write-errors.patch) | encode_audio.c | 错误 | 不检查 fwrite 和 fclose 的结果，写不出去时照常报告成功 | L14 |
+| [0061](0061-doc-examples-encode_audio-set-the-timestamps-of-the-.patch) | encode_audio.c | 不符合规范 | 送给编码器的帧没有设 pts，编出的包也就没有时间戳 | L14 |
 
 ## 怎么使用
 
@@ -93,7 +99,8 @@
 0038 到 0041 都改 resample_audio.c，
 0042 到 0047 都改 filter_audio.c，
 0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c，
-0016、0053 到 0055 都改 encode_video.c），所以要按编号顺序应用：
+0016、0053 到 0055 都改 encode_video.c，
+0010、0016、0056 到 0061 都改 encode_audio.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -117,7 +124,8 @@ make -j"$(nproc)" examples
    demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
    filter_audio（0042 到 0047）一组、
-   decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组。
+   decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组，
+   encode_audio（0056 到 0061）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -919,6 +927,55 @@ Could not set the preset: Option not found
 ### 0055 encode_video 的过时注释
 
 `/* find the mpeg1video encoder */` 下面的代码是 `avcodec_find_encoder_by_name(codec_name)`，编码器由命令行第二个参数决定。只改注释。
+
+### 0056 encode_audio 可能使用未初始化的指针
+
+```console
+$ gcc -O2 -Wall -I. -c doc/examples/encode_audio.c -o /dev/null
+doc/examples/encode_audio.c:113:12: warning: 'best_ch_layout' may be used uninitialized [-Wmaybe-uninitialized]
+```
+
+`select_channel_layout()` 只在遍历列表的循环里给 `best_ch_layout` 赋值。编码器返回空列表时循环一次也不执行，
+未初始化的指针被交给 `av_channel_layout_copy()`。修复后空列表和“没有列表”一样回退到立体声，警告消失，输出不变。
+
+### 0057 encode_audio 生成的音高会漂移
+
+示例生成 440 Hz 的正弦波，相位 `t` 是 `float`，每个采样加一次 `tincr`（0.0627），一共加 230,400 次。
+后半段 `t` 超过 14000，float 在这个量级的精度约为 0.001，加上去的增量不再准确。
+把输出解码后按秒数过零点（`ffmpeg -ss N -t 1 -i out.mp2 -ac 1 -f s16le -` 接一个数过零点的小程序）：
+
+| 位置 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 0.2 秒起的 1 秒 | 440.30 Hz | 440.00 Hz |
+| 2 秒起的 1 秒 | 438.67 Hz | 440.00 Hz |
+| 4 秒起的 1 秒 | 439.03 Hz | 439.82 Hz |
+
+修复是把 `t` 和 `tincr` 改成 `double`。（修复后最后一行的 439.82 是测量窗口落在文件末尾造成的误差。）
+和 filter_audio 的 0043 是同一类问题：示例生成的测试信号本身不准。
+
+### 0058 encode_audio 用 uint16_t 存有符号采样
+
+帧的格式是 `AV_SAMPLE_FMT_S16`，生成的值一半是负数，却通过 `uint16_t *` 写入。靠隐式转换结果碰巧正确。
+改成 `int16_t` 后输出逐字节相同。
+
+### 0059 encode_audio 的过时注释
+
+`select_sample_rate()` 上面的注释是 `just pick the highest supported samplerate`，代码选的是最接近 44100 Hz 的采样率。只改注释。
+
+### 0060 encode_audio 不检查写文件是否成功
+
+```console
+$ doc/examples/encode_audio /dev/full; echo $?
+0
+```
+
+修复后输出 `Error writing the encoded data`，退出码 1。和 0053 是同一类问题。
+
+### 0061 encode_audio 没有给帧设时间戳
+
+帧的 `pts` 一直是 `AV_NOPTS_VALUE`，编码器返回的包也没有时间戳。示例把包直接写成裸流，看不出问题；
+照着这个示例写的程序如果把包交给复用器，就会写出没有时间戳的流。
+修复后 `frame->pts` 设为已经送进去的采样数（音频编码器的 `time_base` 默认是 `1 / sample_rate`）。输出文件不变。
 
 ## 已记录、暂未制作 patch 的观察项
 

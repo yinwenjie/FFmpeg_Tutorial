@@ -1,0 +1,50 @@
+From 39b312518826fa249cfd0718e425bfaec844a9be Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:59:31 +0000
+Subject: [PATCH] doc/examples/encode_audio: check for write errors
+
+The return values of fwrite() and fclose() were ignored, so the example
+reported success even when nothing could be written:
+
+    $ ./encode_audio /dev/full; echo $?
+    0
+
+Check them and exit with a failure status when writing fails.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_audio.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index 1448fd1..e9ede0d 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -136,7 +136,10 @@ static void encode(AVCodecContext *ctx, AVFrame *frame, AVPacket *pkt,
+             exit(1);
+         }
+ 
+-        fwrite(pkt->data, 1, pkt->size, output);
++        if (fwrite(pkt->data, 1, pkt->size, output) != pkt->size) {
++            fprintf(stderr, "Error writing the encoded data\n");
++            exit(1);
++        }
+         av_packet_unref(pkt);
+     }
+ }
+@@ -252,7 +255,10 @@ int main(int argc, char **argv)
+     /* flush the encoder */
+     encode(c, NULL, pkt, f);
+ 
+-    fclose(f);
++    if (fclose(f)) {
++        fprintf(stderr, "Error writing %s\n", filename);
++        exit(1);
++    }
+ 
+     av_frame_free(&frame);
+     av_packet_free(&pkt);
+-- 
+2.43.0
+
