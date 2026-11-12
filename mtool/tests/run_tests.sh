@@ -3,7 +3,7 @@
 #
 # 用法（在仓库根目录，先编译 mtool）：
 #   mtool/tests/run_tests.sh                 全部子命令
-#   mtool/tests/run_tests.sh info cut        只测这几个（common info cut thumb）
+#   mtool/tests/run_tests.sh info cut        只测这几个（common info cut thumb audio）
 #   BUILD=mtool/build-asan mtool/tests/run_tests.sh      测 ASan 构建（验收标准：无泄漏、无越界）
 #
 # 测什么、怎么判断（每一项的标准写死在这里）：
@@ -372,14 +372,149 @@ test_thumb() {
     yes "thumb 用法错误：没有留下输出" test ! -e "$W/u"
 }
 
+# ================================================================== audio
+# 一个文件解码成 s16le PCM 的 md5（额外的 ffmpeg 参数放在后面）
+pcm_md5() { local f=$1; shift; ffmpeg -v error -i "$f" -vn "$@" -f s16le - 2>/dev/null | md5sum | cut -d' ' -f1; }
+astream() { ffprobe -v error -select_streams a:0 -show_entries "stream=$2" -of csv=p=0 "$1" | head -n 1; }
+# 解码出来的时长（秒，3 位小数）：PCM 字节数 / (采样率 × 声道 × 2)
+pcm_seconds() { ffmpeg -v error -i "$1" -vn -f s16le - 2>/dev/null | wc -c | awk -v r="$(astream "$1" sample_rate)" -v c="$(astream "$1" channels)" '{printf "%.3f", $1 / (r * c * 2)}'; }
+close_to() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN {d = a - b; if (d < 0) d = -d; exit (d <= t) ? 0 : 1}'; }
+
+test_audio() {
+    echo "-- audio"
+    local f nv na d o src dur
+    # 所有测试文件：转成 WAV，PCM 和 ffmpeg 命令行解码的结果逐字节相同
+    for f in "${GOOD[@]}"; do
+        na=$(awk -F'\t' -v f="$f" '$1==f {print $4}' $T/testfiles.tsv); o=$W/au_$f.wav
+        run "audio $f" audio -y "$S/$f" "$o"
+        if [ "$na" -gt 0 ]; then
+            eq "audio $f → wav：退出码" 0 $RC
+            eq "audio $f → wav：PCM 和 ffmpeg 命令行解码的结果逐字节相同" "$(pcm_md5 "$S/$f")" "$(pcm_md5 "$o")"
+            eq "audio $f → wav：编码、采样率、声道和输入相同" "pcm_s16le,$(astream "$S/$f" sample_rate),$(astream "$S/$f" channels)" \
+                "$(astream "$o" codec_name),$(astream "$o" sample_rate),$(astream "$o" channels)"
+        else
+            eq "audio $f（没有音频）：退出码 1" 1 $RC
+            yes "audio $f（没有音频）：说明没有音频流" grep -q '没有音频流' "$ERR"
+            yes "audio $f（没有音频）：不留下输出" test ! -e "$o"
+        fi
+    done
+    # 转成有损编码和无损编码：时长和输入相差不到 0.1 秒（验收标准），FLAC 解码回来和输入的 PCM 逐字节相同
+    for f in h264_aac.mp4 h264_aac.mkv h264_aac.ts h264_aac.flv mpeg4_mp2.avi audio_only.m4a mono_8k.wav; do
+        src=$(pcm_seconds "$S/$f")
+        for o in m4a flac mp2 aac; do
+            run "audio $f → $o" audio -y "$S/$f" "$W/au_$f.$o"
+            eq "audio $f → $o：退出码" 0 $RC
+            yes "audio $f → $o：输出能完整解码" decodes_clean "$W/au_$f.$o"
+            [ $o != aac ] && yes "audio $f → $o：时长和输入的音频只差不到 0.1 秒（输入 $src 秒）" close_to "$(pcm_seconds "$W/au_$f.$o")" "$src" 0.1
+        done
+        eq "audio $f → flac：无损，解码回来和输入的 PCM 逐字节相同" "$(pcm_md5 "$S/$f")" "$(pcm_md5 "$W/au_$f.flac")"
+        eq "audio $f → m4a：编码是 aac，采样率和声道不变" "aac,$(astream "$S/$f" sample_rate),$(astream "$S/$f" channels)" \
+            "$(astream "$W/au_$f.m4a" codec_name),$(astream "$W/au_$f.m4a" sample_rate),$(astream "$W/au_$f.m4a" channels)"
+    done
+    for f in truncated.ts corrupt_mid.mp4; do
+        run "audio $f" audio -y "$S/$f" "$W/aud_$f.m4a"
+        eq "audio $f（损坏但能打开）：退出码 0，不崩溃" 0 $RC
+        yes "audio $f（损坏）：输出能完整解码" decodes_clean "$W/aud_$f.m4a"
+    done
+    for f in "${BAD[@]}"; do
+        run "audio $f" audio -y "$S/$f" "$W/aub_$f.wav"
+        eq "audio $f（打不开）：退出码 1" 1 $RC
+        yes "audio $f（打不开）：stderr 有“mtool：错误：”" grep -q '^mtool：错误：' "$ERR"
+        yes "audio $f（打不开）：不留下输出" test ! -e "$W/aub_$f.wav"
+    done
+
+    # 采样率和声道：和 ffmpeg 命令行 -ar -ac 的结果逐字节相同（同样的 aresample）
+    for o in "16000 1" "8000 1" "48000 2" "22050 2"; do
+        set -- $o
+        run audio audio -y -r $1 -c $2 "$S/h264_aac.mp4" "$W/rc.wav"
+        eq "audio -r $1 -c $2：采样率和声道" "$1,$2" "$(astream "$W/rc.wav" sample_rate),$(astream "$W/rc.wav" channels)"
+        eq "audio -r $1 -c $2：PCM 和 ffmpeg -ar $1 -ac $2 逐字节相同" "$(pcm_md5 "$S/h264_aac.mp4" -ar $1 -ac $2)" "$(pcm_md5 "$W/rc.wav")"
+    done
+    run audio audio -y -c 2 -r 44100 "$S/mono_8k.wav" "$W/up.wav"
+    eq "audio 单声道 8 kHz → 立体声 44.1 kHz：PCM 和 ffmpeg 逐字节相同" "$(pcm_md5 "$S/mono_8k.wav" -ar 44100 -ac 2)" "$(pcm_md5 "$W/up.wav")"
+    run audio audio -y -r 11025 "$S/mono_8k.wav" "$W/au_up2.m4a"
+    eq "audio wav 8 kHz → m4a 11.025 kHz" "11025,1" "$(astream "$W/au_up2.m4a" sample_rate),$(astream "$W/au_up2.m4a" channels)"
+    run audio audio -y -c 6 "$S/h264_aac.mp4" "$W/c6.m4a";      eq "audio -c 6 → m4a：6 声道" 6 "$(astream "$W/c6.m4a" channels)"
+    run audio audio -y -r 22050 "$S/h264_aac.mp4" "$W/r22.mp2";  eq "audio mp2 -r 22050：采样率" 22050 "$(astream "$W/r22.mp2" sample_rate)"
+    run audio audio -y --codec pcm_s24le "$S/h264_aac.mp4" "$W/s24.wav"
+    eq "audio --codec pcm_s24le：24 位" "pcm_s24le,24" "$(astream "$W/s24.wav" codec_name),$(astream "$W/s24.wav" bits_per_sample)"
+    run audio audio -y --codec pcm_f32le -c 1 "$S/h264_aac.mp4" "$W/f32.wav"
+    eq "audio --codec pcm_f32le：浮点，单声道" "pcm_f32le,1" "$(astream "$W/f32.wav" codec_name),$(astream "$W/f32.wav" channels)"
+    run audio audio -y -f flac "$S/h264_aac.mp4" "$W/force.dat";  eq "audio -f flac 输出 .dat：退出码 0，容器是 flac" "0 flac" "$RC $(ffprobe -v error -show_entries format=format_name -of csv=p=0 "$W/force.dat")"
+
+    # 码率和音质
+    for o in 64 96 128; do
+        run audio audio -y -b ${o}k "$S/h264_aac.mp4" "$W/br$o.m4a"
+        d=$(ffprobe -v error -show_entries stream=bit_rate -of csv=p=0 "$W/br$o.m4a")
+        awk -v b=$d -v t=$((o * 1000)) 'BEGIN {exit (b >= t * 0.8 && b <= t * 1.05) ? 0 : 1}' && ok || bad "audio -b ${o}k：实际码率 $d 应该在请求的 80% 到 105% 之间"
+    done
+    ffmpeg -v error -y -i "$S/h264_aac.mp4" -vn -f s16le "$W/src.raw"; ffmpeg -v error -y -i "$W/br96.m4a" -f s16le "$W/br96.raw"
+    awk -v s="$($H snr "$W/src.raw" "$W/br96.raw")" 'BEGIN {exit (s >= 25) ? 0 : 1}' && ok || bad "audio -b 96k：解码回来和输入的信噪比应该不小于 25 dB"
+    eq "audio m4a 解码回来的采样数和输入相同（AAC 的预热帧由复用器记在编辑列表里）" "$(wc -c < "$W/src.raw")" "$(wc -c < "$W/br96.raw")"
+
+    # 截取：解码以后按采样裁，和完整解码的结果比
+    for f in h264_aac.mp4 h264_aac.mkv h264_aac.flv h264_aac.ts mpeg4_mp2.avi audio_only.m4a mono_8k.wav; do
+        o=$W/full_$f.wav; "$MT" audio -y "$S/$f" "$o" >/dev/null 2>&1
+        ffmpeg -v error -y -i "$o" -f s16le "$W/full.raw"
+        local rate ch
+        rate=$(astream "$o" sample_rate); ch=$(astream "$o" channels)
+        for a in "1 -d 2" "2.5 -e 2.9"; do
+            set -- $a
+            run "audio $f -s $a" audio -y -s $a "$S/$f" "$W/cut.wav"
+            eq "audio $f -s $a：退出码" 0 $RC
+            ffmpeg -v error -y -i "$W/cut.wav" -f s16le "$W/cut.raw"
+            yes "audio $f -s $a：PCM 是完整解码结果里从 $1 秒起的一段（起点差不超过 1 个采样）" $H pcmslice "$W/full.raw" "$W/cut.raw" $1 $rate $ch
+            want=$([ "$2" = -d ] && echo "$3" || awk -v e="$3" -v s="$1" 'BEGIN {print e - s}')
+            eq "audio $f -s $a：采样数" "$(awk -v d="$want" -v r=$rate 'BEGIN {printf "%d", d * r + 0.5}')" "$(( $(wc -c < "$W/cut.raw") / (ch * 2) ))"
+        done
+    done
+    run audio audio -y -s 4.9999 "$S/h264_aac.mp4" "$W/tail.wav"
+    eq "audio -s 4.9999：只剩最后 4 个采样" 4 "$(( $(ffmpeg -v error -i "$W/tail.wav" -f s16le - | wc -c) / 4 ))"
+    run audio audio -y -d 0.5 "$S/h264_aac.mp4" "$W/d05.m4a"
+    yes "audio -d 0.5 → m4a：时长 0.5 秒（差不到 0.1 秒）" close_to "$(pcm_seconds "$W/d05.m4a")" 0.5 0.1
+
+    # 该拒绝的
+    run audio audio -y -r 7000 "$S/h264_aac.mp4" "$W/u.m4a";      eq "audio AAC 不支持的采样率 7000：退出码 1" 1 $RC
+    yes "audio 不支持的采样率：列出编码器支持的" grep -q '44100' "$ERR"
+    yes "audio 不支持的采样率：不留下输出" test ! -e "$W/u.m4a"
+    run audio audio -y "$S/h264_aac.mp4" "$W/u.xyz";              eq "audio 不认识的扩展名：退出码 1" 1 $RC
+    run audio audio -y --codec bogus "$S/h264_aac.mp4" "$W/u.wav"; eq "audio 没有这个编码器：退出码 1" 1 $RC
+    run audio audio -y --codec aac "$S/h264_aac.mp4" "$W/u.wav";  eq "audio WAV 里放 AAC：退出码 1" 1 $RC
+    yes "audio WAV 里放 AAC：不留下输出" test ! -e "$W/u.wav"
+    run audio audio -y --codec libx264 "$S/h264_aac.mp4" "$W/u.mp4"; eq "audio 视频编码器当音频编码：退出码 1" 1 $RC
+    run audio audio -y --track 3 "$S/h264_aac.mp4" "$W/u.wav";    eq "audio 没有第 3 路音频：退出码 1" 1 $RC
+    run audio audio -y -s 99 "$S/h264_aac.mp4" "$W/u.wav";        eq "audio 起点超过文件长度：退出码 1" 1 $RC
+    yes "audio 起点超过文件长度：不留下输出" test ! -e "$W/u.wav"
+    run audio audio -y "$S/h264_aac.mp4" /nonexistent_dir/u.wav;  eq "audio 输出目录不存在：退出码 1" 1 $RC
+    run audio audio -y "$S/nonexistent.mp4" "$W/u.wav";           eq "audio 文件不存在：退出码 1" 1 $RC
+    run audio audio "$S/h264_aac.mp4" "$W/rc.wav";                eq "audio 输出已存在不加 -y：退出码 1" 1 $RC
+    yes "audio 输出已存在：说明加 -y" grep -q '加 -y' "$ERR"
+    cp "$S/mono_8k.wav" "$W/same.wav"
+    run audio audio -y "$W/same.wav" "$W/same.wav";               eq "audio 输入输出同一个文件：退出码 1" 1 $RC
+    yes "audio 输入输出同一个文件：输入没有被写坏" cmp -s "$S/mono_8k.wav" "$W/same.wav"
+    run audio audio -r abc "$S/h264_aac.mp4" "$W/u.wav";          eq "audio -r abc：退出码 2" 2 $RC
+    run audio audio -r 100 "$S/h264_aac.mp4" "$W/u.wav";          eq "audio -r 100（太小）：退出码 2" 2 $RC
+    run audio audio -c 0 "$S/h264_aac.mp4" "$W/u.wav";            eq "audio -c 0：退出码 2" 2 $RC
+    run audio audio -c 9 "$S/h264_aac.mp4" "$W/u.wav";            eq "audio -c 9：退出码 2" 2 $RC
+    run audio audio -b xyz "$S/h264_aac.mp4" "$W/u.m4a";          eq "audio -b xyz：退出码 2" 2 $RC
+    run audio audio -b 10 "$S/h264_aac.mp4" "$W/u.m4a";           eq "audio -b 10（太小）：退出码 2" 2 $RC
+    run audio audio -s abc "$S/h264_aac.mp4" "$W/u.wav";          eq "audio -s abc：退出码 2" 2 $RC
+    run audio audio -s 3 -e 2 "$S/h264_aac.mp4" "$W/u.wav";       eq "audio 终点在起点之前：退出码 2" 2 $RC
+    run audio audio -e 2 -d 1 "$S/h264_aac.mp4" "$W/u.wav";       eq "audio -e 和 -d 同时给：退出码 2" 2 $RC
+    run audio audio --track x "$S/h264_aac.mp4" "$W/u.wav";       eq "audio --track x：退出码 2" 2 $RC
+    run audio audio -y "$S/h264_aac.mp4";                         eq "audio 缺输出：退出码 2" 2 $RC
+    run audio audio -y --bogus "$S/h264_aac.mp4" "$W/u.wav";      eq "audio 不认识的选项：退出码 2" 2 $RC
+}
+
 SECTIONS=("$@")
-[ ${#SECTIONS[@]} -eq 0 ] && SECTIONS=(common info cut thumb)
+[ ${#SECTIONS[@]} -eq 0 ] && SECTIONS=(common info cut thumb audio)
 for s in "${SECTIONS[@]}"; do
     case $s in
         common) test_common ;;
         info) test_info ;;
         cut)  test_cut ;;
         thumb) test_thumb ;;
+        audio) test_audio ;;
         *) echo "不认识的测试：$s" >&2; exit 2 ;;
     esac
 done

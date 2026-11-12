@@ -3,7 +3,7 @@
  *
  *   mtool [全局选项] <子命令> [子命令的选项] [参数]
  *
- * 子命令：info 看信息，cut 不转码截取（后面的提交会加上 thumb、audio、transcode、push）。
+ * 子命令：info 看信息，cut 不转码截取，thumb 缩略图和拼图，audio 提取音频（后面的提交会加上 transcode、push）。
  * 每个子命令的详细用法：mtool <子命令> --help
  */
 #include <stdlib.h>
@@ -23,6 +23,7 @@ static const Command commands[] = {
     { "info",      cmd_info,      "显示容器、流、GOP 和帧类型统计，可以输出 JSON" },
     { "cut",       cmd_cut,       "不转码截取一段，可以同时换容器" },
     { "thumb",     cmd_thumb,     "按时间间隔或关键帧生成缩略图，或者拼成一张图" },
+    { "audio",     cmd_audio,     "提取音频，转成指定的采样率、声道数和编码（WAV、AAC、FLAC、MP2）" },
 };
 
 static void usage(FILE *f)
