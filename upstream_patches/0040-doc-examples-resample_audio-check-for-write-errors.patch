@@ -1,0 +1,45 @@
+From 365cee4a56874f48c1abf225981876eb98feae5d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:23:09 +0000
+Subject: [PATCH] doc/examples/resample_audio: check for write errors
+
+The return value of fwrite() was ignored, so the example reported
+success and returned 0 even when nothing could be written, for example
+on a full disk.
+
+Check it, and flush the output before reporting success.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/resample_audio.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/resample_audio.c b/doc/examples/resample_audio.c
+index e60a0a3..24ed166 100644
+--- a/doc/examples/resample_audio.c
++++ b/doc/examples/resample_audio.c
+@@ -196,9 +196,19 @@ int main(int argc, char **argv)
+             goto end;
+         }
+         printf("t:%f in:%d out:%d\n", t, src_nb_samples, ret);
+-        fwrite(dst_data[0], 1, dst_bufsize, dst_file);
++        if (fwrite(dst_data[0], 1, dst_bufsize, dst_file) != dst_bufsize) {
++            fprintf(stderr, "Error writing to %s\n", dst_filename);
++            ret = AVERROR(EIO);
++            goto end;
++        }
+     } while (t < 10);
+ 
++    if (fflush(dst_file)) {
++        fprintf(stderr, "Error writing to %s\n", dst_filename);
++        ret = AVERROR(EIO);
++        goto end;
++    }
++
+     if ((ret = get_format_from_sample_fmt(&fmt, dst_sample_fmt)) < 0)
+         goto end;
+     av_channel_layout_describe(&dst_ch_layout, buf, sizeof(buf));
+-- 
+2.43.0
+

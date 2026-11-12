@@ -62,6 +62,10 @@
 | [0035](0035-doc-examples-scale_video-fix-the-end-of-the-usage-me.patch) | scale_video.c | 错误 | 用法说明最后一句的句号印到了下一行开头 | L09 |
 | [0036](0036-doc-examples-scale_video-check-for-scaling-and-write.patch) | scale_video.c | 错误 | 不检查 `sws_scale()` 和 `fwrite()` 的返回值，写不出去时照常报告成功 | L09 |
 | [0037](0037-doc-examples-scale_video-use-sws_scale_frame.patch) | scale_video.c | 不符合规范 | 用的是 swscale.h 标为 legacy 的 `sws_getContext()` 加 `sws_scale()`，以及已不推荐的 `SWS_BILINEAR` 标志 | L09 |
+| [0038](0038-doc-examples-resample_audio-fix-the-suggested-ffplay.patch) | resample_audio.c | 已废弃 | 结束时提示的 ffplay 命令用了已经删除的 `-channel_layout`、`-channels` 选项，照着执行会报错 | L10 |
+| [0039](0039-doc-examples-resample_audio-do-not-report-success-wh.patch) | resample_audio.c | 错误 | 输出缓冲区扩容失败时跳出循环，随后照常报告成功，退出码是 0 | L10 |
+| [0040](0040-doc-examples-resample_audio-check-for-write-errors.patch) | resample_audio.c | 错误 | 不检查 `fwrite()` 的返回值，写不出去时照常报告成功 | L10 |
+| [0041](0041-doc-examples-resample_audio-flush-the-resampler-at-t.patch) | resample_audio.c | 错误 | 结束时不冲刷重采样器，输出少了最后 17 个采样 | L10 |
 
 ## 怎么使用
 
@@ -71,7 +75,8 @@
 0006、0016、0019 到 0024 都改 decode_audio.c，
 0008、0025 到 0030 都改 demux_decode.c，
 0031 到 0033 都改 extract_mvs.c，
-0034 到 0037 都改 scale_video.c），所以要按编号顺序应用：
+0034 到 0037 都改 scale_video.c，
+0038 到 0041 都改 resample_audio.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -93,7 +98,7 @@ make -j"$(nproc)" examples
 4. 可以按主题拆成几组提交，例如构建系统（0002 到 0005）一组、transcode（0001、0007、0011）一组、
    remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
    demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
-   scale_video（0034 到 0037）一组。
+   scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -695,6 +700,59 @@ $ for s in 100x75 320x240 640x480; do old/scale_video a.rgb $s; new/scale_video 
 
 输出尺寸为 1x1 这种极端情况下两种接口的结果不同（新接口走的是另一条初始化路径），常规尺寸逐字节相同。
 这个 patch 改动的行数多，上游是否接受要看维护者的意见，提交时建议和 0034 到 0036 分开。
+
+### 0038 resample_audio 提示的 ffplay 命令不能用
+
+```console
+$ doc/examples/resample_audio /tmp/out.pcm > /dev/null
+Resampling succeeded. Play the output file with the command:
+ffplay -f s16le -channel_layout 3.0 -channels 3 -ar 44100 /tmp/out.pcm
+$ ffplay -f s16le -channel_layout 3.0 -channels 3 -ar 44100 /tmp/out.pcm
+Failed to set value '3.0' for option 'channel_layout': Option not found
+```
+
+`-channel_layout` 和 `-channels` 是旧的声道布局接口时期的选项，已经删除。修复后提示的是 `-ch_layout 3.0 -ar 44100`，
+声道数由布局决定，不用再写。用 `SDL_AUDIODRIVER=dummy ffplay -nodisp -autoexit` 验证新命令可以正常播放到结束。
+
+### 0039 resample_audio 扩容失败后报告成功
+
+这是读代码发现的，正常运行触发不了。循环里输出缓冲区不够大时会重新分配：
+
+```c
+ret = av_samples_alloc(dst_data, &dst_linesize, dst_nb_channels,
+                       dst_nb_samples, dst_sample_fmt, 1);
+if (ret < 0)
+    break;
+```
+
+`break` 之后执行的是循环后面的代码：`ret` 被 `get_format_from_sample_fmt()` 的返回值覆盖，接着打印 `Resampling succeeded`，退出码是 0，而输出文件只写了一部分。
+修复后和其他出错路径一样打印错误信息并 `goto end`。
+
+### 0040 resample_audio 不检查写文件是否成功
+
+```console
+$ doc/examples/resample_audio /dev/full > /dev/null; echo "exit=$?"
+Resampling succeeded. Play the output file with the command:
+ffplay -f s16le -channel_layout 3.0 -channels 3 -ar 44100 /dev/full
+exit=0
+```
+
+修复后检查 `fwrite()` 的返回值，报告成功之前再 `fflush()` 一次，上面的命令打印 `Error writing to /dev/full`，退出码是 1。
+
+### 0041 resample_audio 结束时不冲刷重采样器
+
+```console
+$ doc/examples/resample_audio /tmp/out.pcm | awk '{split($2,a,":"); split($3,b,":"); i+=a[2]; o+=b[2]} END {print i, o}'
+480256 441219
+```
+
+输入 480,256 个采样（48000 Hz），按比例应该输出 480256 × 44100 / 48000 = 441,235.2 个，实际只有 441,219 个。
+重采样器内部留着一些采样等下一次调用时再用，输入结束后要再调用 `swr_convert()`（输入传 `NULL`）把它们取出来，示例漏了这一步。
+
+修复后在主循环之后冲刷，多输出 17 个采样，总数 441,236；前 441,219 个采样与修复前逐字节相同。
+
+说明：fork 分支上这个修复是两个提交（`b908217` 和紧跟的 `aac704f`，后者修正了前者在冲刷结束时误报失败的问题），
+这里的 0041 是两者合并后的结果，提交到上游时以 patch 文件为准。
 
 ## 已记录、暂未制作 patch 的观察项
 

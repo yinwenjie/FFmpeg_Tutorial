@@ -1,0 +1,37 @@
+From 77a5aefadd8e57a7c2d80659856f1842db71541d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:23:09 +0000
+Subject: [PATCH] doc/examples/resample_audio: fix the suggested ffplay command
+
+The command printed at the end uses the -channel_layout and -channels
+options, which no longer exist, so ffplay rejects it:
+
+  Failed to set value '3.0' for option 'channel_layout': Option not found
+
+Print -ch_layout instead, which also makes the channel count
+redundant.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/resample_audio.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/resample_audio.c b/doc/examples/resample_audio.c
+index db9b4e5..4b33af7 100644
+--- a/doc/examples/resample_audio.c
++++ b/doc/examples/resample_audio.c
+@@ -201,8 +201,8 @@ int main(int argc, char **argv)
+         goto end;
+     av_channel_layout_describe(&dst_ch_layout, buf, sizeof(buf));
+     fprintf(stderr, "Resampling succeeded. Play the output file with the command:\n"
+-            "ffplay -f %s -channel_layout %s -channels %d -ar %d %s\n",
+-            fmt, buf, dst_nb_channels, dst_rate, dst_filename);
++            "ffplay -f %s -ch_layout %s -ar %d %s\n",
++            fmt, buf, dst_rate, dst_filename);
+ 
+ end:
+     fclose(dst_file);
+-- 
+2.43.0
+
