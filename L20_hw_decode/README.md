@@ -199,7 +199,7 @@ $ echo $?
 0
 ```
 
-`-hwaccel vaapi` 是“我要用这个”：用不了就失败，退出码 187（`AVERROR_EXTERNAL` 的低 8 位，L22 的错误码表里讲过）。
+`-hwaccel vaapi` 是“我要用这个”：用不了就失败，退出码 187（`AVERROR_EXTERNAL` 的低 8 位：和 L17 里 `AVERROR_EXIT` 的 187 是同一个现象，负的错误码做退出码，只剩低 8 位；L22 的错误码表会把这件事讲全）。
 `-hwaccel auto` 是“能用就用”：用不了只打印一行，继续用软件解码，退出码 0。`hw_decode_av` 的 `device=` 照着这两种做：写设备类型名是前者，`auto` 是后者，
 写了类型名又想退回软件，加 `fallback=1`。
 
@@ -288,7 +288,7 @@ frame=  126 … dup=1 drop=0 …
 ```
 
 命令行默认按帧率“补帧、丢帧”：FLV 的时间戳只有毫秒精度，25 fps 的帧间隔 40 毫秒，凑巧有一个地方差了 1 毫秒，被它当成漏了一帧，补了一帧，一共 126 帧。
-这是命令行的帧率同步（L16 讲过），不是解码器的事。拿命令行当解码器的参照时，要关掉它：`-fps_mode passthrough`。
+这是命令行的帧率同步（L7 里同样的现象），不是解码器的事。拿命令行当解码器的参照时，要关掉它：`-fps_mode passthrough`。
 
 **出错和退回：全部是退出码 1，不泄漏。**
 
@@ -453,7 +453,7 @@ $ STANDIN=1 ./verify_hw.sh
 | 输出的画面是绿的、花的，或者大小不对 | 把硬件格式当成了像素：对 `format=vaapi` 的帧直接读 `data[0]`。先 `av_hwframe_transfer_data()`，用搬回来的那一帧的 `format` 去算大小 |
 | 统计里写着设备 vaapi，CPU 却很忙 | 每一帧其实是软件解的（硬件帧 0）：看 `get_format` 有没有退回软件格式 |
 | 解码了一会儿卡住，或者报帧池用尽的错（CUDA、D3D11 的日志是 “Static surface pool size exceeded.”，各后端措辞不同） | 硬件帧池耗尽：程序把解出来的帧（`av_frame_ref()`）攒着没释放，超过了池子的大小。要攒帧的程序给解码器多留几个（`extra=` 即 `extra_hw_frames`），或者尽快搬回内存并 `av_frame_unref()` |
-| `-hwaccel vaapi` 失败退出码 187，脚本里不好判断 | 这是 `AVERROR_EXTERNAL` 的低 8 位（L22）。自己的程序用 1 表示失败，把原因写在 stderr |
+| `-hwaccel vaapi` 失败退出码 187，脚本里不好判断 | 这是 `AVERROR_EXTERNAL` 的低 8 位（L17 说过这种退出码，L22 会讲错误码表）。自己的程序用 1 表示失败，把原因写在 stderr |
 
 ## 练习
 
