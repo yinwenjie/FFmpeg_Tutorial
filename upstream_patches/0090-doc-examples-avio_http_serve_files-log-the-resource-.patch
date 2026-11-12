@@ -1,0 +1,32 @@
+From c38aceac4841bcd115c5138c73d18a0dc4c9a23a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:52:52 +0000
+Subject: [PATCH 90/92] doc/examples/avio_http_serve_files: log the resource,
+ not its address
+
+The trace message printed the resource with %p, which shows the address of
+the string instead of the requested path. Print the string, and a
+placeholder when the client did not send one.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/avio_http_serve_files.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/avio_http_serve_files.c b/doc/examples/avio_http_serve_files.c
+index 29c03cade2..acd6c1ac94 100644
+--- a/doc/examples/avio_http_serve_files.c
++++ b/doc/examples/avio_http_serve_files.c
+@@ -49,7 +49,7 @@ static void process_client(AVIOContext *client, const char *in_uri)
+     }
+     if (ret < 0)
+         goto end;
+-    av_log(client, AV_LOG_TRACE, "resource=%p\n", resource);
++    av_log(client, AV_LOG_TRACE, "resource=%s\n", resource ? resource : "(none)");
+     if (resource && resource[0] == '/' && !strcmp((resource + 1), in_uri)) {
+         reply_code = 200;
+     } else {
+-- 
+2.43.0
+

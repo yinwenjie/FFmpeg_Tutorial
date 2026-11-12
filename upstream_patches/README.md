@@ -15,10 +15,10 @@
 | 项目 | 值 |
 | --- | --- |
 | 制作和测试所用的提交 | `a337e8ddaa`（课程固定使用的版本，2026-11-10） |
-| 复核时的上游 master | `539da4e3d7`（2026-11-12），`doc/examples`、`libavformat/aviobuf.c` 与 `a337e8ddaa` 完全相同，`configure` 只有一行（AMF 版本号）不同，不影响 patch |
+| 复核时的上游 master | `21ae927dc6`（2026-11-12）。`doc/examples`、`libavformat/aviobuf.c`、`file.c`、`tcp.c`、`avio.c` 与 `a337e8ddaa` 完全相同；`configure` 只有一行（AMF 版本号）不同；`libavformat/http.c` 多了三处改动（拒绝主机名和 CONNECT 目标里的控制字符、只对同一个主机复用连接），不在 patch 改的地方附近 |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `539da4e3d7` 上用 `git am` 按顺序应用无冲突（0001 到 0084）。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `21ae927dc6` 上用 `git am` 按顺序应用无冲突（0001 到 0093）。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -109,6 +109,15 @@
 | [0082](0082-doc-examples-avio_read_callback-avoid-comparing-int-.patch) | avio_read_callback.c | 不符合规范 | `FFMIN` 拿 `int` 和 `size_t` 比较，`-Wall -Wextra` 下有 `-Wsign-compare` 警告 | L18 |
 | [0083](0083-doc-examples-avio_read_callback-add-a-seek-callback.patch) | avio_read_callback.c | 不满足现有需求 | 只提供读回调、没有 seek 回调：`moov` 在文件尾的 MP4 读不出包，像素格式未知，却不报错；TS、MP2 的时长未知 | L18 |
 | [0084](0084-avformat-aviobuf-pad-the-dynamic-buffer-after-the-la.patch) | **libavformat/aviobuf.c**（不是示例） | 错误 | `avio_close_dyn_buf()` 把补的 64 字节零写在当前位置，不一定是数据末尾：flv、aiff、caf、asf 写出来的结果被盖掉 64 字节，长度也少 64 字节 | L18 |
+| [0085](0085-doc-examples-avio_list_dir-do-not-truncate-large-use.patch) | avio_list_dir.c | 错误 | 放“用户号(组号)”的数组只有 20 字节，十位以上的 id 被截断：`4294967294(42949672` | L19 |
+| [0086](0086-avformat-file-accept-the-file-prefix-when-listing-a-.patch) | **libavformat/file.c**（不是示例） | 错误 | `avio_open_dir()` 不认 `file:` 前缀，而 `avio_open2()` 和 ffmpeg 都认 | L19 |
+| [0087](0087-avformat-http-do-not-end-a-chunked-body-on-the-multi.patch) | **libavformat/http.c**（不是示例） | 错误 | 关闭 `listen=2` 的监听上下文时往监听的 socket 写分块传输的结束标记，永远写不出去，`avio_close()` 卡住 | L19 |
+| [0088](0088-avformat-tcp-avformat-http-close-accepted-clients-th.patch) | **libavformat/tcp.c、http.c**（不是示例） | 错误 | 没有握手过的、`avio_accept()` 返回的客户端，`avio_close()` 不关 socket：泄漏文件描述符，对方的连接也不断开 | L19 |
+| [0089](0089-doc-examples-avio_http_serve_files-use-char-for-the-.patch) | avio_http_serve_files.c | 不符合规范 | `resource` 声明成 `uint8_t *`，传给 `strlen()`、`strcmp()` 有两个 `-Wpointer-sign` 警告 | L19 |
+| [0090](0090-doc-examples-avio_http_serve_files-log-the-resource-.patch) | avio_http_serve_files.c | 错误 | 跟踪日志用 `%p` 打印 `resource`，打出来的是地址，不是请求的路径 | L19 |
+| [0091](0091-doc-examples-avio_http_serve_files-open-the-input-be.patch) | avio_http_serve_files.c | 错误 | 先回复“200 OK”、后打开文件：要发送的文件不存在时，客户端收到一个成功的、空的回复 | L19 |
+| [0092](0092-doc-examples-avio_http_serve_files-do-not-leave-zomb.patch) | avio_http_serve_files.c | 不符合规范 | 每个客户端 fork 一个子进程却从不回收，子进程退出后留下僵尸进程（代码里的注释自己承认了） | L19 |
+| [0093](0093-avformat-file-do-not-close-file-descriptor-0-when-cl.patch) | **libavformat/file.c**（不是示例） | 错误 | `avio_close_dir()` 会 `close(0)`：file 协议的关闭函数去关一个从没打开过的 0 号描述符，标准输入被关掉，多线程程序里别人的连接也可能被关掉 | L19 |
 
 ## 怎么使用
 
@@ -150,7 +159,9 @@ make -j"$(nproc)" examples
    filter_audio（0042 到 0047）一组、
    decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组，
    encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组，transcode_aac（0078 到 0081）一组，
-   avio_read_callback（0082、0083）一组。**0084 改的是 libavformat，不是示例**，要单独提交，邮件主题和评审的人都不一样（`avformat/aviobuf: ...`），不要和示例的 patch 放在一组。
+   avio_read_callback（0082、0083）一组，avio_list_dir（0085）一组，avio_http_serve_files（0089 到 0092）一组。
+   **0084、0086、0087、0088、0093 改的是 libavformat，不是示例**，要单独提交，邮件主题和评审的人都不一样（`avformat/aviobuf: ...`、`avformat/file: ...`、`avformat/http: ...`、`avformat/tcp, avformat/http: ...`），不要和示例的 patch 放在一组。
+   0086 和 0093 都改 `libavformat/file.c` 的目录函数，可以一起提交。0087 和 0088 都改 `http.c` 里 `http_close()` 的同一处，0088 在 0087 的基础上改，要按顺序提交。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -1335,13 +1346,153 @@ N/A N/A
 课程用的是没有打这个补丁的 libavformat，`avio_mem_out` 的 `dynend=1` 在关闭之前先把位置移到末尾（`avio_get_dyn_buf()` 得到长度，再 `avio_seek(pb, size, SEEK_SET)`），可以绕开。
 没有为它写 FATE 测试：`libavformat/tests` 里没有动态缓冲区的测试，提交时评审可能会要求加一个。
 
+### 0085 avio_list_dir 截断大的用户号和组号
+
+放“用户号(组号)”的数组是 `uid_and_gid[20]`，`snprintf()` 也只写 20 字节，而两个 `int64_t` 加括号最多要 43 个字符：
+
+```console
+$ touch /tmp/d/f && chown 4294967294:4294967293 /tmp/d/f     # 用户命名空间、网络文件系统里常见的大 id
+$ doc/examples/avio_list_dir /tmp/d 2>&1 | grep -v ^TYPE
+<FILE>               0                              f 4294967294(42949672 644 ...
+```
+
+修复后是 `4294967294(4294967293)`。
+
+### 0086 avio_open_dir 不认 "file:" 前缀
+
+**libavformat 的问题**。`file_open()` 等函数都先去掉 `file:` 前缀，`file_open_dir()` 没有去，`file_read_dir()` 拿带前缀的名字去 `lstat()`：
+
+```console
+$ doc/examples/avio_list_dir /tmp/d
+TYPE ...                                  # 能列
+$ doc/examples/avio_list_dir file:/tmp/d
+Cannot open directory: No such file or directory.
+```
+
+`ffmpeg -i file:/tmp/x.mp4` 和 `avio_open2("file:...")` 都可以，只有目录接口不行。修复后两个函数都先 `av_strstart(filename, "file:", &filename)`。
+这个问题影响所有拿 URL 当输入的程序：URL 前面是否带 `file:`，应该不影响结果。
+
+### 0087 关闭多客户端 HTTP 服务器的监听上下文会卡住
+
+**libavformat 的问题**，用官方示例 avio_http_serve_files 看得到。示例对每个客户端 `fork()` 一个子进程，子进程处理完以后关掉自己手里的那份 `server`（`avio_close(server)`），然后 `exit(0)`。
+实测请求三次以后，三个子进程都还在，停在 `poll()` 上：
+
+```console
+$ doc/examples/avio_http_serve_files $S/small_360p25.mp4 http://127.0.0.1:8080 2>/dev/null &
+$ for i in 1 2 3; do curl -s -o /dev/null http://127.0.0.1:8080/$S/small_360p25.mp4; done
+$ ps -o pid,stat,wchan:14,cmd --ppid $(pgrep -o -x avio_http_serve)
+  PID STAT WCHAN          CMD
+17450 S    poll_schedule_ doc/examples/avio_http_serve_files samples/small_360p25.mp4 http://127.0.0.1:8080
+17452 S    poll_schedule_ doc/examples/avio_http_serve_files samples/small_360p25.mp4 http://127.0.0.1:8080
+17454 S    poll_schedule_ doc/examples/avio_http_serve_files samples/small_360p25.mp4 http://127.0.0.1:8080
+```
+
+原因：`http_close()` 对所有 HTTP 上下文都调 `http_shutdown()`，它写分块传输的结束标记 `0\r\n\r\n`；监听上下文（`listen=2`）的 `s->hd` 是监听用的 socket，永远不可写，写一直等到天荒地老。
+没有 `avio_accept()` 得到的客户端受影响（它们的 `listen` 是 0）。修复后监听上下文不写结束标记。
+`avio_close(server)` 在 main 的出错路径（`avio_accept()` 失败以后）上也是同一个卡住。
+
+### 0088 没有握手过的客户端，avio_close 不关 socket
+
+**libavformat 的问题**。`ffurl_closep()` 只对标成“已连接”的上下文调协议的 `url_close()`，而“已连接”是 `ffurl_handshake()` 完成以后才标的。
+`avio_accept()` 得到的客户端有一个已经打开的 socket，却没有标。示例里父进程 `fork()` 以后 `avio_close(client)`，等于什么也没做，socket 一直留在父进程里：
+
+```console
+$ ls -l /proc/$(pgrep -o -x avio_http_serve)/fd | grep -c socket        # 请求三次以后
+4                                                                        # 监听的 1 个，加三个泄漏的
+$ printf 'GET /samples/small_360p25.mp4 HTTP/1.1\r\nHost: x\r\n\r\n' | timeout 4 nc 127.0.0.1 8080 | wc -c
+567138                                                                   # 内容都收到了，但 nc 一直等到 timeout 的 4 秒才退出
+```
+
+子进程发完、关了自己的那份以后，连接并没有关：父进程手里还有一份。HTTP 客户端靠分块传输的结束标记知道回复完了，所以 curl 没事；
+读到“连接关闭”才算结束的客户端（`nc`、别的脚本）就一直等。长时间运行的服务器每接一个客户端泄漏一个描述符，最后 `EMFILE`。
+
+修复：`tcp_accept()` 成功后把上下文标成已连接（tcp 的握手本来就什么也不做），`http_accept()` 同样标。
+http 的 `http_close()` 里还要多一个判断：没有完成握手的客户端还没有收到回复，不能给它写分块传输的结束标记，
+否则父进程的这个 `avio_close(client)` 会把结束标记写进子进程正在用的那个连接里。
+打了补丁以后同样的 `nc` 命令是 0.0 秒退出，服务器进程里只剩监听的 1 个 socket。握手失败的连接（发垃圾、连上就断开、HEAD）也一样会关掉。
+
+### 0089 avio_http_serve_files 的 -Wpointer-sign
+
+```console
+$ gcc -Wall -Wextra -c doc/examples/avio_http_serve_files.c -o /dev/null $(pkg-config --cflags libavformat libavutil)
+warning: pointer targets in passing argument 1 of 'strlen' differ in signedness [-Wpointer-sign]
+warning: pointer targets in passing argument 1 of 'strcmp' differ in signedness [-Wpointer-sign]
+```
+
+`av_opt_get()` 要 `uint8_t **`，所以 `resource` 是 `uint8_t *`；但后面当字符串用。改成 `char *`，调用时转换地址。
+和 0042（filter_audio.c）是同一类问题。
+
+### 0090 avio_http_serve_files 的日志打印了指针
+
+`av_log(client, AV_LOG_TRACE, "resource=%p\n", resource);`：想记的是请求的路径，打出来的是地址。改成 `%s`，没有资源时打印 `(none)`。
+
+### 0091 要发送的文件不存在时回复“200 OK”
+
+示例看到请求的路径是要发送的文件，就回 200，握手完成以后才打开文件：
+
+```console
+$ doc/examples/avio_http_serve_files nofile.mp4 http://127.0.0.1:8080 &
+$ curl -s -i http://127.0.0.1:8080/nofile.mp4 | head -4
+HTTP/1.1 200 OK
+Content-Type: application/octet-stream
+Transfer-Encoding: chunked
+                                    # 正文是 0 字节
+```
+
+服务器的日志里有 `Failed to open input: nofile.mp4: No such file or directory.`，客户端却以为拿到了一个空文件。
+修复后先打开文件，再决定状态码：打不开、错误是 `ENOENT` 回 404，别的原因回 500，能打开才回 200。
+顺便把打开失败时 `av_log(input, ...)`（`input` 是 `NULL`）改成了 `av_log(NULL, ...)`。
+
+### 0092 avio_http_serve_files 留下僵尸进程
+
+代码里写着 `XXX: Since we don't reap our children and don't ignore signals this produces zombie processes.`，作者知道，没有处理。
+要看到僵尸，需要 0087（不然子进程根本退不出来）：
+
+```console
+$ ps -o pid,stat,cmd --ppid $(pgrep -o -x avio_http_serve)    # 请求三次以后
+  PID STAT CMD
+17336 Z    [avio_http_serve] <defunct>
+17338 Z    [avio_http_serve] <defunct>
+17340 Z    [avio_http_serve] <defunct>
+```
+
+每个僵尸占一个进程表项，只要父进程不退出就一直在。`signal(SIGCHLD, SIG_IGN)` 让系统自己回收。修复后同样的请求没有任何子进程残留。
+
+### 0093 avio_close_dir 关掉了 0 号文件描述符
+
+**libavformat 的问题**，L19 做 HTTP 目录服务器时碰到的：服务器在回复一次目录列表之后，下一个客户端要么收到“空回复”，要么收到别人的回复。
+用 `strace` 看到根源：
+
+```console
+$ strace -e trace=close doc/examples/avio_list_dir /tmp/d 2>&1 >/dev/null | tail -3
+close(3)                                = 0
+close(0)                                = 0
++++ exited with 0 +++
+```
+
+`avio_open_dir()` 把上下文标成已连接，所以 `avio_close_dir()` 最后的 `ffurl_close()` 会调协议的 `url_close()`。file 协议的 `url_close` 是 `file_close()`，
+它 `close(c->fd)`，而 `file_open_dir()` 从来没设过 `c->fd`，是 0。
+
+后果：单线程的小程序丢了标准输入，没人在意；多线程的服务器里，0 号成了“最小的空号”，下一个 `accept()` 得到的 socket 就是 0 号，
+再下一次列目录，把那个连接关了：
+
+```console
+$ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/      # 第一次列目录，200
+$ curl -s http://127.0.0.1:8080/sub                                      # 第二次：Empty reply from server
+```
+
+修复：`file_open_dir()` 把 `c->fd` 设成 -1，`file_close()` 看到 `c->fd < 0` 什么也不做。ftp、sftp 有自己的 `url_close`，不受影响；smb 没有环境，没有验证。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
 
 | 涉及文件 | 观察 | 计划处理的课次 |
 | --- | --- | --- |
-| avio_http_serve_files.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告（filter_audio.c 的同类问题已在 0042 改掉） | L19 |
+| avio_http_serve_files.c | 客户端中途断开时，`avio_write()`、`avio_flush()` 没有返回值，示例看不到错误，照样把整个文件读完（要检查 `AVIOContext.error`）。改的地方不大，但示例的循环要重写 | L19 已看过，没做 patch |
+| libavformat/http.c | 内置的 HTTP 服务器：只认 GET（HEAD 得到 400），回复 200 时没有 Content-Length，不支持 Range（206），所以 `moov` 在文件尾的 MP4 通过它服务，客户端读不全。是功能的增加，不是修错误 | L19 已看过，没做 patch |
+| libavformat/http.c | `http_write_reply()` 的 200 回复用固定的 `Content-Type: application/octet-stream`（要设 `content_type` 选项才能改），源码里 `listen=2` 的宏名写成了 `HTTP_MUTLI` | L19 已看过，没做 patch |
+| libavformat/avio.c | `avio_open_dir2()` 把上下文标成已连接，`avio_close_dir()` 在协议的 `url_close_dir()` 之后又调一次 `url_close()`。ftp 的 `ftp_close_dir()` 已经关了连接，sftp 的 `libssh_close_dir()` 里直接调了 `libssh_close()`，之后的 `url_close()` 等于重复关闭，全靠各自对重复关闭的保护；file 协议没有这样的保护，所以出了 0093 的问题。这个约定没有文档，0093 只改了 file 协议；smb、sftp、ftp 没有环境，没有验证 | L19 已看过，没做 patch |
 
 transcode_aac.c 在 L17 研究过，除了 0078 到 0081，下面几处也看到了，但各自要改的地方比较大或者属于风格问题，暂时没有制作 patch：
 

@@ -1,0 +1,56 @@
+From 38a1e2f2e6ba40ac437476460f392b21d21d0a24 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 18:04:56 +0000
+Subject: [PATCH] avformat/file: do not close file descriptor 0 when closing a
+ directory
+
+avio_open_dir() marks the context as connected, so avio_close_dir()
+finishes with ffurl_close(), which calls the protocol's url_close().
+For the file protocol that is file_close(), and file_open_dir() never
+sets c->fd, so file_close() closed the zeroed descriptor: standard
+input, or whatever else happened to have been given number 0.
+
+A program that lists a directory therefore lost its standard input, and
+in a program that opens sockets or files from several threads the next
+connection can get descriptor 0 and be closed by the next call to
+avio_close_dir(). The avio_list_dir example is affected too:
+strace shows close(0) after the directory is closed.
+
+Set c->fd to -1 in file_open_dir() and make file_close() do nothing
+for a context that has no descriptor.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ libavformat/file.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/libavformat/file.c b/libavformat/file.c
+index 27d8aefa41..8d0bd0d973 100644
+--- a/libavformat/file.c
++++ b/libavformat/file.c
+@@ -238,7 +238,12 @@ static int fd_check(URLContext *h, int mask)
+ static int file_close(URLContext *h)
+ {
+     FileContext *c = h->priv_data;
+-    int ret = close(c->fd);
++    int ret;
++
++    /* A directory opened with file_open_dir() has no file descriptor. */
++    if (c->fd < 0)
++        return 0;
++    ret = close(c->fd);
+     return (ret == -1) ? AVERROR(errno) : 0;
+ }
+ 
+@@ -357,6 +362,7 @@ static int file_open_dir(URLContext *h)
+ 
+     av_strstart(filename, "file:", &filename);
+ 
++    c->fd = -1;
+     c->dir = opendir(filename);
+     if (!c->dir)
+         return AVERROR(errno);
+-- 
+2.43.0
+

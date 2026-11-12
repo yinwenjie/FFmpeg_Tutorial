@@ -1,0 +1,63 @@
+From b382d9b6a3719b67e4615472779a2adbde35af61 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:51:01 +0000
+Subject: [PATCH 86/92] avformat/file: accept the "file:" prefix when listing a
+ directory
+
+file_open() and the other file protocol callbacks strip an optional
+"file:" prefix before they use the name, but file_open_dir() passed
+h->filename to opendir() as it was, and file_read_dir() passed it to
+lstat() through av_append_path_component(). avio_open_dir() on
+"file:/some/dir" therefore failed with ENOENT, although avio_open2()
+and ffmpeg accept the same URL.
+
+Strip the prefix in both functions.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ libavformat/file.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/libavformat/file.c b/libavformat/file.c
+index 31a7f6ac9a..27d8aefa41 100644
+--- a/libavformat/file.c
++++ b/libavformat/file.c
+@@ -353,8 +353,11 @@ static int file_open_dir(URLContext *h)
+ {
+ #if HAVE_LSTAT
+     FileContext *c = h->priv_data;
++    const char *filename = h->filename;
++
++    av_strstart(filename, "file:", &filename);
+ 
+-    c->dir = opendir(h->filename);
++    c->dir = opendir(filename);
+     if (!c->dir)
+         return AVERROR(errno);
+ 
+@@ -368,9 +371,12 @@ static int file_read_dir(URLContext *h, AVIODirEntry **next)
+ {
+ #if HAVE_LSTAT
+     FileContext *c = h->priv_data;
++    const char *filename = h->filename;
+     struct dirent *dir;
+     char *fullpath = NULL;
+ 
++    av_strstart(filename, "file:", &filename);
++
+     *next = ff_alloc_dir_entry();
+     if (!*next)
+         return AVERROR(ENOMEM);
+@@ -383,7 +389,7 @@ static int file_read_dir(URLContext *h, AVIODirEntry **next)
+         }
+     } while (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, ".."));
+ 
+-    fullpath = av_append_path_component(h->filename, dir->d_name);
++    fullpath = av_append_path_component(filename, dir->d_name);
+     if (fullpath) {
+         struct stat st;
+         if (!lstat(fullpath, &st)) {
+-- 
+2.43.0
+
