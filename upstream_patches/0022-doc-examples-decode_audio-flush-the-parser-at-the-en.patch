@@ -1,0 +1,58 @@
+From 597eb14696322cef56de88444582832edb547114 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:55:10 +0000
+Subject: [PATCH] doc/examples/decode_audio: flush the parser at the end of the
+ input
+
+av_parser_parse2() has to be called with a buffer size of 0 at the
+end of the input so that the parser outputs the data it still holds.
+decode_video.c does so, decode_audio.c never did.
+
+For a complete MP2 file this makes no difference, as the MPEG audio
+parser returns a frame as soon as all of its bytes have arrived. It
+does when the file is cut in the middle of a frame: the incomplete
+last frame was dropped, while ffmpeg decodes it. With the first 3000
+bytes of a 128 kb/s stereo file the example wrote 32256 bytes, and
+
+    ffmpeg -i short.mp2 -f s16le out.pcm
+
+writes 36864 bytes.
+
+Parsers that need to see the start of the next frame hold back more.
+With the codec ID changed to AV_CODEC_ID_FLAC, the last 14 frames of
+a 5 second file were missing from the output.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_audio.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/doc/examples/decode_audio.c b/doc/examples/decode_audio.c
+index cb35e55..5f1b7cb 100644
+--- a/doc/examples/decode_audio.c
++++ b/doc/examples/decode_audio.c
+@@ -220,6 +220,20 @@ int main(int argc, char **argv)
+         exit(1);
+     }
+ 
++    /* flush the parser: a size of 0 signals the end of the input, so that
++     * the parser returns the data it still holds */
++    do {
++        ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
++                               NULL, 0, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
++        if (ret < 0) {
++            fprintf(stderr, "Error while parsing\n");
++            exit(1);
++        }
++
++        if (pkt->size)
++            decode(c, pkt, decoded_frame, outfile);
++    } while (pkt->size);
++
+     /* flush the decoder */
+     pkt->data = NULL;
+     pkt->size = 0;
+-- 
+2.43.0
+

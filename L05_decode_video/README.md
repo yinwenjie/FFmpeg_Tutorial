@@ -408,6 +408,23 @@ $ $B/decode_trace h264 out/small_360p25.h264 4 8
 线程数用 `AVCodecContext.thread_count` 设置，必须在 `avcodec_open2()` 之前。默认是 1；
 设成 0 由 FFmpeg 按 CPU 核数决定。ffmpeg 命令行工具默认是自动，所以它解码比这里的单线程快。
 
+多线程换来的是速度。用 1080p 的素材量一下（300 帧）：
+
+```console
+$ ffmpeg -v error -y -i samples/demo_1080p30.mp4 -an -c:v copy out/demo_1080p30.h264
+$ time $B/decode_trace h264 out/demo_1080p30.h264 1 1 | tail -1
+冲刷之前取到 298 帧，冲刷时又取到 2 帧，共 300 帧
+
+real	0m1.237s
+$ time $B/decode_trace h264 out/demo_1080p30.h264 4 1 | tail -1
+冲刷之前取到 295 帧，冲刷时又取到 5 帧，共 300 帧
+
+real	0m0.438s
+```
+
+在 4 核的测试机上，4 个线程比 1 个线程快了将近 3 倍（`time` 输出的 user、sys 两行省略了，具体时间每台机器不同）。
+自己写的程序如果不设 `thread_count`，解码就是单线程的。
+
 这张表说明了一件事：**延迟多少帧没有固定的数，不要在程序里写死**。
 只要按固定写法来（每送一个包就把帧取到 `EAGAIN`，最后冲刷到 `AVERROR_EOF`），不管延迟多少，一帧都不会丢。
 

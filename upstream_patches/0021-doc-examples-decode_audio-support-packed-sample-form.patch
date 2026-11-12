@@ -1,0 +1,76 @@
+From e91e76baec4f314f13a636423188bdd55793dee7 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:54:52 +0000
+Subject: [PATCH] doc/examples/decode_audio: support packed sample formats
+
+decode() read frame->data[ch] for every channel. That is only valid
+for planar sample formats, and only for up to AV_NUM_DATA_POINTERS
+channels.
+
+The MP2 decoder used here returns s16p, so the example works as it
+is. It is however the starting point for programs that decode other
+codecs, and get_format_from_sample_fmt() suggests that any sample
+format is handled. With a decoder that returns a packed format there
+is only one plane and data[1] is NULL: after changing nothing but the
+codec ID to AV_CODEC_ID_FLAC, the example crashes on any stereo file.
+
+Write packed frames as they are and interleave planar frames through
+extended_data. Use the sample format and the channel layout of the
+frame instead of those of the codec context while at it, as they
+describe the data that is being written.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_audio.c | 23 +++++++++++++++++------
+ 1 file changed, 17 insertions(+), 6 deletions(-)
+
+diff --git a/doc/examples/decode_audio.c b/doc/examples/decode_audio.c
+index 7c4d55c..cb35e55 100644
+--- a/doc/examples/decode_audio.c
++++ b/doc/examples/decode_audio.c
+@@ -92,15 +92,26 @@ static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
+             fprintf(stderr, "Error during decoding\n");
+             exit(1);
+         }
+-        data_size = av_get_bytes_per_sample(dec_ctx->sample_fmt);
++        data_size = av_get_bytes_per_sample(frame->format);
+         if (data_size < 0) {
+             /* This should not occur, checking just for paranoia */
+             fprintf(stderr, "Failed to calculate data size\n");
+             exit(1);
+         }
+-        for (i = 0; i < frame->nb_samples; i++)
+-            for (ch = 0; ch < dec_ctx->ch_layout.nb_channels; ch++)
+-                fwrite(frame->data[ch] + data_size*i, 1, data_size, outfile);
++        if (av_sample_fmt_is_planar(frame->format)) {
++            /* every channel has a plane of its own: interleave the samples.
++             * data[] has room for AV_NUM_DATA_POINTERS planes only,
++             * extended_data reaches the planes of all the channels */
++            for (i = 0; i < frame->nb_samples; i++)
++                for (ch = 0; ch < frame->ch_layout.nb_channels; ch++)
++                    fwrite(frame->extended_data[ch] + data_size*i, 1,
++                           data_size, outfile);
++        } else {
++            /* the samples of all the channels are already interleaved
++             * in a single plane */
++            fwrite(frame->extended_data[0], data_size * frame->ch_layout.nb_channels,
++                   frame->nb_samples, outfile);
++        }
+     }
+ }
+ 
+@@ -226,8 +237,8 @@ int main(int argc, char **argv)
+     }
+ 
+     /* print output pcm infomations, because there have no metadata of pcm */
+-    /* decode() interleaves the samples of all channels, so the output file
+-     * is in the packed variant of the planar format the decoder produced */
++    /* decode() writes interleaved samples, so the output file is in the
++     * packed variant of the format the decoder produced */
+     sfmt = av_get_packed_sample_fmt(c->sample_fmt);
+ 
+     if ((ret = get_format_from_sample_fmt(&fmt, sfmt)) < 0)
+-- 
+2.43.0
+

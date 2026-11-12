@@ -1,0 +1,66 @@
+From fddb95ed496e0e3a97d732d8e6ac99d1d196a7a3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:53:17 +0000
+Subject: [PATCH] doc/examples/decode_audio: do not ignore I/O errors
+
+Neither read errors nor write errors were detected. When the output
+could not be written, for example because the disk is full, the
+example still told the user to play the output file and exited with
+status 0:
+
+    $ doc/examples/decode_audio in.mp2 /dev/full
+    Play the output audio file with the command:
+    ffplay -f s16le -ch_layout stereo -sample_rate 44100 /dev/full
+
+A read error ended the read loop like the end of the file does, so
+the truncated output was reported as a success as well.
+
+Check the error indicators of both streams and the return value of
+fclose() for the output, which writes what is still buffered. The
+output file is now closed before the hint is printed, so that the hint
+only appears when the file has been written completely.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_audio.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/decode_audio.c b/doc/examples/decode_audio.c
+index 135a4a4..7c4d55c 100644
+--- a/doc/examples/decode_audio.c
++++ b/doc/examples/decode_audio.c
+@@ -204,11 +204,22 @@ int main(int argc, char **argv)
+         }
+     }
+ 
++    if (ferror(f)) {
++        fprintf(stderr, "Error while reading %s\n", filename);
++        exit(1);
++    }
++
+     /* flush the decoder */
+     pkt->data = NULL;
+     pkt->size = 0;
+     decode(c, pkt, decoded_frame, outfile);
+ 
++    /* fclose() writes what is still buffered, so it can fail as well */
++    if (ferror(outfile) || fclose(outfile) == EOF) {
++        fprintf(stderr, "Error while writing %s\n", outfilename);
++        exit(1);
++    }
++
+     if (!c->frame_num) {
+         fprintf(stderr, "No audio frame could be decoded from %s\n", filename);
+         exit(1);
+@@ -231,7 +242,6 @@ int main(int argc, char **argv)
+            fmt, ch_layout, c->sample_rate,
+            outfilename);
+ end:
+-    fclose(outfile);
+     fclose(f);
+ 
+     avcodec_free_context(&c);
+-- 
+2.43.0
+

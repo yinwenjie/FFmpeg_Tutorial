@@ -1,0 +1,56 @@
+From 60cd669b2105a1731a068abc988539aad8bff80d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 22:55:30 +0000
+Subject: [PATCH] doc/examples/decode_audio: describe the input in the usage
+
+The usage message only asked for an "<input file>". The example
+passes the file to the MPEG audio parser as is and decodes with the
+MP2 decoder, so the input has to be a raw MP2 stream. With anything
+else, including MP2 audio in a container, all the user got was
+
+    [mp2 @ 0x55fe5aa23640] Header missing
+    Error submitting the packet to the decoder
+
+Say what the input has to be in the usage message and in the
+description of the file, and show a command that creates a suitable
+input file.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_audio.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/decode_audio.c b/doc/examples/decode_audio.c
+index 5f1b7cb..2831c2f 100644
+--- a/doc/examples/decode_audio.c
++++ b/doc/examples/decode_audio.c
+@@ -24,8 +24,8 @@
+  * @file libavcodec audio decoding API usage example
+  * @example decode_audio.c
+  *
+- * Decode data from an MP2 input file and generate a raw audio file to
+- * be played with ffplay.
++ * Read a raw MP2 (MPEG audio layer 2) stream from a file, decode it, and
++ * write the samples to a raw audio file to be played with ffplay.
+  */
+ 
+ #include <stdio.h>
+@@ -133,7 +133,13 @@ int main(int argc, char **argv)
+     const char *fmt;
+ 
+     if (argc <= 2) {
+-        fprintf(stderr, "Usage: %s <input file> <output file>\n", argv[0]);
++        fprintf(stderr, "Usage: %s <input file> <output file>\n"
++                "The input file must contain a raw MP2 (MPEG audio layer 2) stream, not\n"
++                "a container such as MPEG-TS, Matroska or MP4. It can be created with\n"
++                "a command like\n"
++                "  ffmpeg -i INPUT -c:a mp2 OUTPUT.mp2\n"
++                "The decoded samples are written to the output file as raw PCM.\n",
++                argv[0]);
+         exit(1);
+     }
+     filename    = argv[1];
+-- 
+2.43.0
+
