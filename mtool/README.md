@@ -8,8 +8,8 @@
 | --- | --- | --- | --- |
 | `mtool info` | 容器、流、GOP、帧类型统计，可输出 JSON | L3、L8 | 已完成 |
 | `mtool cut` | 不转码截取一段，可同时换容器 | L4、L15 | 已完成 |
-| `mtool thumb` | 缩略图、拼图 | L7、L9、L13 | 后面的提交 |
-| `mtool audio` | 提取音频，转 WAV 或 AAC | L6、L10、L17 | 后面的提交 |
+| `mtool thumb` | 缩略图、拼图 | L7、L9、L12、L13 | 已完成 |
+| `mtool audio` | 提取音频，转 WAV、AAC、FLAC、MP2 | L6、L10、L14、L17 | 已完成 |
 | `mtool transcode` | 转码，带进度，可选硬件加速 | L12、L16、L20 | 后面的提交 |
 | `mtool push` | 按实际速度推流 | L19 | 后面的提交 |
 
@@ -53,6 +53,9 @@ mtool/
   src/fflog.h       L22 的日志回调，原样拷进来
   src/cmd_info.c    info
   src/cmd_cut.c     cut
+  src/media.c       解码器和滤镜图的公共部分（打开解码器、建 buffer→…→buffersink 的图、旋转滤镜），thumb 等用
+  src/cmd_thumb.c   thumb
+  src/cmd_audio.c   audio
   scripts/gen_testfiles.sh   生成 18 个测试文件
   tests/testfiles.tsv        每个测试文件是好是坏、有几路流
   tests/run_tests.sh         自动化测试
@@ -123,11 +126,11 @@ mtool/scripts/gen_testfiles.sh
 
 ```bash
 mtool/tests/run_tests.sh                                  # 全部
-mtool/tests/run_tests.sh info cut                         # 只测这几个
+mtool/tests/run_tests.sh thumb audio                      # 只测这几个
 BUILD=mtool/build-asan mtool/tests/run_tests.sh           # 测 ASan 构建
 ```
 
-每一次运行都检查有没有 sanitizer 报告，每一项“算通过”的标准写死在脚本里。数字都是和 ffprobe、ffmpeg 命令行对出来的，不是“看着差不多”。当前（`info`、`cut`）共 323 项，普通构建和 ASan 加 UBSan 构建都全部通过，各约 10 秒。
+每一次运行都检查有没有 sanitizer 报告，每一项“算通过”的标准写死在脚本里。数字都是和 ffprobe、ffmpeg 命令行对出来的，不是“看着差不多”。当前（`common`、`info`、`cut`、`thumb`、`audio`）共 824 项，普通构建和 ASan 加 UBSan 构建都全部通过，分别约 20 秒和 25 秒。
 
 ## mtool info
 
@@ -226,6 +229,118 @@ $ mtool cut -y -s 2.5 -e 4 samples/mtool/h264_aac.mp4 out/b.mp4
 - TS 里的 H.264 是 Annex B 格式（复用器加的），数据和 MP4 里的不同，所以 mp4 截成 ts 要和“mp4 拷贝成 ts”的文件（`h264_aac.ts`）比；
 - WAV 的 PCM 包是按读的位置重新切的（不是输入包的边界），所以比的是 PCM 数据：输出等于输入从 1.5 秒起的一段（逐字节）；
 - 取 CRC 时只取包数据，不含 `Skip Samples` 这类附加数据（MP4 复用器会给最后一个音频包加）。
+
+## mtool thumb
+
+```bash
+mtool thumb [-i 间隔秒 | -k] [-w 宽 | -s 宽x高] [-m 最多张数] [--format jpg|png] [-q 2-31] [--no-rotate] [-y] <输入> <输出目录>
+mtool thumb --sheet 列x行 [同上] <输入> <输出图片>
+```
+
+不加 `--sheet`，输出是一个目录，里面是 `thumb_0001.jpg`、`thumb_0002.jpg`……，每张图后面打印它在视频里的时间；加 `--sheet`，所有缩略图拼成一张图（输出文件的扩展名 `.jpg` 或 `.png` 决定格式）。
+
+```
+$ mtool thumb -y -i 1 samples/mtool/h264_aac.mp4 out/thumbs
+out/thumbs/thumb_0001.jpg  0.000 秒
+out/thumbs/thumb_0002.jpg  1.000 秒
+out/thumbs/thumb_0003.jpg  2.000 秒
+out/thumbs/thumb_0004.jpg  3.000 秒
+out/thumbs/thumb_0005.jpg  4.000 秒
+共 5 张，图片 320x180
+$ mtool thumb -y -k samples/mtool/vfr.mp4 out/key
+out/key/thumb_0001.jpg  0.000 秒
+out/key/thumb_0002.jpg  1.200 秒
+out/key/thumb_0003.jpg  2.840 秒
+out/key/thumb_0004.jpg  4.000 秒
+out/key/thumb_0005.jpg  4.800 秒
+共 5 张，图片 320x180
+$ mtool thumb -y --sheet 4x3 samples/mtool/h264_aac.mp4 out/sheet.jpg
+拼图 out/sheet.jpg：4 列 x 3 行，每格取自视频的一帧，图片 1300x556
+```
+
+三种取法：**按间隔**（`-i`，不给就是每秒一张）取到了时间点之后的第一帧；**关键帧**（`-k`）每个关键帧一张，而且解码器设成只解关键帧（`skip_frame = AVDISCARD_NONKEY`），不解码其他帧，快得多（L8）；**拼图**不给 `-i`、`-k` 时把整个视频平均分给所有格子，每格取所在时间段中间的帧，所以 12 格盖住整个视频，不是挤在开头。
+
+按间隔取是**按帧的时间**，不是按帧号，所以可变帧率的视频也对：`mtool thumb -i 0.437 vfr.mp4` 取的帧，和“用 ffprobe 取出每一帧的时间，再按同样的规则算一遍”完全一致（测试里逐项对）。规则：取第一个时间不小于“下一个时间点”的帧，取了以后下一个时间点 = (floor(这一帧的时间 / 间隔) + 1) × 间隔。基准文件是 25 帧每秒，0.5 秒不是帧的时间点，所以 `-i 0.5` 取到的是 0.00、0.52、1.00、1.52……
+
+**每一张图都经过同一张滤镜图**（L12）：`[旋转,]scale=宽:-2,setsar=1[,tile=列x行:margin=4:padding=4]`。旋转、缩放、转像素格式都在图里做，出口只接受编码器支持的像素格式，格式对不上的时候图自己插入 scale（L9）。拼图的尺寸是 列×宽 + 2×4 + (列−1)×4，行同理：4x3、每格 320x180 是 1300x556，旋转的视频 `-w 200` 的 4x3 是 820x1084。视频里只有 5 个关键帧而拼图要 6 格时，最后一格补黑，图的大小不变。
+
+**旋转按视频里的显示矩阵转正**（`rotate90.mp4` 出来是 320x568，不是 320x180），做法和 ffmpeg 命令行的自动旋转一样：显示矩阵的旋转角取负、归到 0 到 360，90 度用 `transpose=clock`，270 度用 `transpose=cclock`，180 度用 `hflip,vflip`。加 `--no-rotate` 保持原样（320x180）。
+
+### 做的时候踩过的三个坑
+
+- **转正以后要把显示矩阵从帧上去掉**。滤镜只改了像素，帧上还带着“旋转 90 度”的附加数据；PNG 编码器会把它写成 EXIF 方向（`eXIf` 块），看图软件再转一次，图又歪了。测试里检查 PNG 里没有 `eXIf`。顺带一个测试方法上的坑：用 ffmpeg 读 PNG 回来比较时也要加 `-noautorotate`，否则 ffmpeg 会按 `eXIf` 再转一次，两张一样的图比出“差 128”。
+- **关键帧模式必须冲刷解码器**。帧线程和 B 帧重排会让解码器里留着最后几帧，不发 `NULL` 包把它们取出来，5 个关键帧只能取到 3 个（最初的实现就是这样，测试里 `-k` 要和 ffprobe 的关键帧时间逐个对才发现的）。
+- **`-q` 要设帧的 `quality`**。JPEG 的固定质量模式下，mjpeg 编码器用每一帧自己的 `quality`；不设的话帧上带的是解码器填的值，`-q 2` 和 `-q 31` 出来的文件一样大。设了以后，默认质量的第一张 JPEG 和 `ffmpeg -i … -frames:v 1 -vf scale=320:-2 -q:v 3` 的结果逐字节相同。
+
+另外：mjpeg 编码器只接受全范围的 YUV（0 到 255），而 H.264 视频一般是标称范围（16 到 235），所以 JPEG 模式的 `scale` 要加 `out_range=full`，否则编码器打开时报 “Non full-range YUV is non-standard”。
+
+### 测试怎么判断“对”
+
+- 每个能打开的、有视频的文件取 3 张：退出码 0，每张图能被 ffmpeg 完整解码、宽是 320；没有视频的文件（`audio_only.m4a`、`mono_8k.wav`）退出码 1，说明“没有视频流”；打不开的文件退出码 1，不留下输出。
+- 张数和时间点：基准文件每秒一张是 0 到 4 秒共 5 张；`-k` 的时间和 `ffprobe` 的关键帧时间逐个相同（基准文件 5 个，`vfr.mp4` 是 0、1.2、2.84、4.0、4.8 秒）。
+- **图片的内容**：`-k --format png` 取的 5 张图，逐像素和 `ffmpeg -vf select=key,scale=320:-2,setsar=1` 出来的相同；旋转的视频和 ffmpeg 自动旋转的结果逐像素相同；JPEG 和命令行 `-q:v` 的结果逐字节相同。
+- 尺寸：`-w`、`-s`、拼图的大小都是算出来的具体数字（上面列的）。
+- 该拒绝的：目录里已有图片或拼图文件已存在不加 `-y`、输出是个已有的文件、输出目录建不出来、各种选项不合法（退出码 2，且不留下输出）。
+
+## mtool audio
+
+```bash
+mtool audio [-r 采样率] [-c 声道数] [-b 码率] [--codec 编码器] [-s 起点] [-e 终点 | -d 时长] [--track 序号] [-f 格式] [-y] <输入> <输出>
+```
+
+把输入里的一路音频解码，转成指定的采样率、声道数和编码，写成音频文件。输出的编码由扩展名决定：`.wav` PCM 16 位，`.m4a` `.mp4` `.aac` AAC，`.flac` FLAC，`.mp2` MP2；`--codec` 可以换成别的音频编码器（`pcm_s24le`、`pcm_f32le`……），`-f` 指定容器时编码取容器默认的。这份 FFmpeg 没有 libmp3lame，所以没有 MP3。
+
+```
+$ mtool audio -y samples/mtool/h264_aac.mp4 out/a.wav
+音频提取完成：samples/mtool/h264_aac.mp4 → out/a.wav（wav）
+  输入：aac 44100 Hz stereo，第 1 路流
+  输出：pcm_s16le 44100 Hz stereo
+  时长 5.000 秒（220500 个采样），216 个包
+$ mtool audio -y -r 16000 -c 1 samples/mtool/h264_aac.mp4 out/b.wav
+  输出：pcm_s16le 16000 Hz mono
+  时长 5.000 秒（80000 个采样），217 个包
+$ mtool audio -y -b 96k samples/mtool/h264_aac.mp4 out/c.m4a
+  输出：aac 44100 Hz stereo，96 kb/s
+  时长 5.000 秒（220500 个采样），217 个包
+$ mtool audio -y -r 7000 samples/mtool/h264_aac.mp4 out/x.m4a
+mtool：错误：编码器 aac 不支持采样率 7000 Hz，它支持：96000、88200、64000、48000、44100、32000、24000、22050、16000、12000、11025、8000、7350
+```
+
+做法是 L17 的整条链路，每一步对应一课：
+
+1. **先定编码器的参数，再建滤镜图**（L10、L14）：采样率、声道布局、采样格式都要是编码器支持的。用户给了的必须满足，不满足就报错并列出支持的（上面 7000 Hz 的例子）；没给的跟输入，输入的不支持（例如 MP2 没有 8000 Hz）取最接近的并警告。采样格式在编码器支持的里面优先选和输入同样位宽的，所以 24 位的输入转 FLAC 不会被截成 16 位。
+2. **解码 → 滤镜图 → 编码 → 复用**：图是 `[atrim=…,]aformat=sample_fmts=…:sample_rates=…:channel_layouts=…`，重采样和混声道由图自己插入 aresample（L10）；出口按编码器的帧长切帧（`av_buffersink_set_frame_size`，AAC 是 1024，L14）；编码器要 extradata 放文件头的容器（M4A）要设 `AV_CODEC_FLAG_GLOBAL_HEADER`（L15）。
+3. **帧的时间戳自己数**（L17）：编码前 pts = 已经送去编码的采样数，时间基 1/采样率；AAC 的预热帧由复用器记在编辑列表里，所以 M4A 解码回来的采样数和输入相同（测试里逐字节比）。
+4. **冲刷顺序是解码器 → 滤镜图 → 编码器**（L11、L17）：先送 `NULL` 包把解码器里留着的帧取出来，再通知滤镜图输入结束，最后给编码器送 `NULL` 帧。少任何一步，最后几十毫秒的声音就丢了。
+
+### 和 ffmpeg 命令行逐字节对
+
+- 转成 WAV：12 个能处理的文件里有音频的 10 个，PCM 和 `ffmpeg -i … -vn -f s16le -` 解码出来的**逐字节相同**（包括 TS、FLV 里 AAC 没有预热信息、解码出来多 1708 个采样的情况：`h264_aac.flv` 是 5.039 秒、222208 个采样，`h264_aac.mkv` 是 5.000 秒、220500 个采样，和 ffmpeg 一样，不是 mtool 的毛病）。
+- 改采样率和声道：`-r 16000 -c 1`、`-r 8000 -c 1`、`-r 48000 -c 2`、`-r 22050 -c 2`，以及单声道 8 kHz → 立体声 44.1 kHz，都和 `ffmpeg -ar … -ac …` 逐字节相同（同样是 aresample，默认参数一样）。
+- FLAC 是无损：解码回来和输入的 PCM 逐字节相同（5 秒的 WAV 882078 字节，FLAC 71812 字节）。
+- AAC 是有损，比的是码率和信噪比：`-b 64k` 实际 56557 b/s，`-b 96k` 实际 93358 b/s，`-b 128k` 实际 120968 b/s（AAC 编码器的实际码率比请求的低一点，测试里允许请求的 80% 到 105%）；解码回来和输入的信噪比 64k 是 24.4 dB，96k 是 47.9 dB，128k 是 53.8 dB（测试里要求 96k 不小于 25 dB）。基准文件的声音是合成的音调，信噪比比真实的音乐高很多，只能说明链路没有错位或丢采样，不代表音质。
+
+### 截取
+
+`-s`、`-e`、`-d` 是**解码以后按采样裁**的（滤镜 `atrim`），不像 `mtool cut` 只能落在关键帧上：输出的 PCM 是完整解码结果里从起点开始的一段，起点差不超过 1 个采样（测试里 7 种输入各截两段，逐字节比，并且长度要和要求的采样数一样）。三个细节：
+
+- **帧的 pts 要先换成 1/采样率 的时间基再进滤镜图**。解码出来的 pts 以流的时间基为单位：AVI 里的 MP2 一个单位是一帧（1152 个采样），TS 是 1/90000，不换的话 `atrim` 的起点终点全错（最初的实现里 `-s 1` 对 MP2 的 AVI 什么都截不出来）。
+- **进图以后自己数 pts**。FLV、MKV 的时间基是 1/1000 秒，一个 AAC 帧是 23.219 毫秒，每一帧的 pts 都舍入到毫秒，换回采样差几个到二十几个，逐帧用它裁剪起点终点就差几个采样（最初的实现 `-s 1 -d 2` 少了 3 到 4 个采样）。现在只有第一帧用容器的 pts，之后自己数；和自己数的差超过 20 毫秒才认为时间戳跳变，重新取容器的。
+- **定位只在时间基够细时做**。起点之前 1 秒开始解码，让有重叠的编码（AAC 的 MDCT）在起点处解对；但定位以后第一帧的时间要取容器里的，时间基比一个采样粗（FLV、MKV）时取出来是不准的，这种流不定位，从头解码（音频解码是实时的几百倍，多花的时间可以忽略）。
+- 起点不是整采样时（`-s 4.9999` 是第 220495.59 个采样），FLV 和 TS 的第一帧时间本身是毫秒舍入的（`h264_aac.flv` 的第一个音频包是 0.057 秒），所以“第 0 个采样”的位置有不到 1 个采样的不确定，这就是测试允许的 ±1。
+
+### 出错
+
+没有音频流、`--track` 超过音频流数、起点超过文件长度、采样率或声道数编码器不支持、扩展名认不出来、WAV 里放 AAC、输出已存在不加 `-y`、输入输出是同一个文件，都是退出码 1，stderr 说明原因，不留下输出文件（出错时 `unlink` 掉这次创建的文件，和 `cut` 一样）。损坏但能打开的文件（`truncated.ts`、`corrupt_mid.mp4`）退出码 0：解码出错的包计数，最后警告一次“解码时遇到 N 个出错的包，对应的声音可能有杂音或缺一段”，输出文件本身是完整、能解码的。
+
+```
+$ mtool audio -y samples/mtool/truncated.ts out/dm.m4a
+mtool：警告：解码时遇到 1 个出错的包，对应的声音可能有杂音或缺一段
+音频提取完成：samples/mtool/truncated.ts → out/dm.m4a（ipod）
+  输入：aac 44100 Hz stereo，第 1 路流
+  输出：aac 44100 Hz stereo，128 kb/s
+  时长 1.858 秒（81920 个采样），81 个包
+```
 
 ## 练习
 

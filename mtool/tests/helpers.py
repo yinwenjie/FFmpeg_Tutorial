@@ -8,6 +8,9 @@ run_tests.sh 用的几个小帮手：读 mtool 输出的 JSON，比较两份逐�
   helpers.py fmt      x.json 键          format 里的值（duration nb_streams format_name）
   helpers.py slice    全部.txt 一段.txt   一段的每一行是不是全部.txt 里连续的一段（逐包 CRC 的比较）
   helpers.py sheet    x.png              打印图片的宽 高（只认 PNG 和 JPEG）
+  helpers.py pcmslice 全部.raw 一段.raw 起点秒 采样率 声道   一段是不是全部从起点开始的一段（s16le，允许起点差 ±1 个采样），打印实际的差
+  helpers.py snr      原.raw 比较.raw            两段 s16le 的信噪比（dB）
+  helpers.py picktimes pts.txt 间隔秒     按 thumb 的规则从帧时间清单里挑出该取的帧，每行一个时间（3 位小数）
 """
 import json
 import struct
@@ -64,6 +67,41 @@ def main():
                 sys.exit(0)
         print('not-a-slice')
         sys.exit(1)
+    elif cmd == 'picktimes':
+        # 规则（和 cmd_thumb.c 一样）：取第一个时间不小于 next 的帧（留 1e-6 的误差），next 从 0 开始，取了以后 next = (floor(t / 间隔) + 1) * 间隔
+        import math
+        interval = float(sys.argv[3])
+        times = [float(l) for l in open(sys.argv[2]) if l.strip()]
+        nxt = 0.0
+        for t in times:
+            if t >= nxt - 1e-6:
+                print('%.3f' % t)
+                nxt = (math.floor(t / interval) + 1) * interval
+    elif cmd == 'pcmslice':
+        whole = open(sys.argv[2], 'rb').read()
+        part = open(sys.argv[3], 'rb').read()
+        rate, ch = int(sys.argv[5]), int(sys.argv[6])
+        base = int(round(float(sys.argv[4]) * rate))
+        for d in (0, -1, 1):
+            off = (base + d) * ch * 2
+            if off >= 0 and len(part) > 0 and whole[off:off + len(part)] == part:
+                print(d)
+                sys.exit(0)
+        print('no')
+        sys.exit(1)
+    elif cmd == 'snr':
+        import array
+        import math
+        a = array.array('h')
+        b = array.array('h')
+        da = open(sys.argv[2], 'rb').read()
+        db = open(sys.argv[3], 'rb').read()
+        a.frombytes(da[:len(da) // 2 * 2])
+        b.frombytes(db[:len(db) // 2 * 2])
+        n = min(len(a), len(b))
+        err = sum((a[i] - b[i]) ** 2 for i in range(n))
+        sig = sum(a[i] ** 2 for i in range(n))
+        print('inf' if err == 0 else '%.1f' % (10 * math.log10(sig / err)))
     elif cmd == 'sheet':
         data = open(sys.argv[2], 'rb').read()
         if data[:8] == b'\x89PNG\r\n\x1a\n':
