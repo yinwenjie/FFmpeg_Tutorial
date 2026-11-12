@@ -165,7 +165,9 @@ $ build/hw_decode_av $S/small_360p25.mp4 - device=vaapi loglevel=verbose 2>&1 | 
 这一段说明两件事：创建设备时设备名传 `NULL`，VAAPI 会从 `renderD128` 开始，往后试 7 个渲染节点；
 有两块显卡、想用第二块时，要自己传设备名（`hw_decode_av` 的 `device_path=`，对应 `av_hwdevice_ctx_create()` 的第 3 个参数）。
 
-**原版和修复后的退出码**（patch 0096）。原版的 `main()` 在每个出错的地方 `return -1`，退出码是 255，而且什么都不释放：
+**原版和修复后的退出码**（patch 0096）。“原版”是 L02 编译出来的 `hw_decode`（提交 a337e8d，和 L17 一样，`E=~/ffmpeg_src/doc/examples`，`make examples` 会编译它），
+下面的退出码用 `$E/hw_decode …` 对比 `build/hw_decode …` 就能复现；泄漏要把原版的源码用 `-fsanitize=address` 自己编译一份才看得到。
+原版的 `main()` 在每个出错的地方 `return -1`，退出码是 255，而且什么都不释放：
 
 | 命令 | 原版退出码 | 修复后 |
 | --- | --- | --- |
