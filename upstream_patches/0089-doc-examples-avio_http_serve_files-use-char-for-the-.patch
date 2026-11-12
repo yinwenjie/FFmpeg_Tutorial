@@ -1,0 +1,37 @@
+From c4cf1414a3bf46b2c7bd4241f92d16b4ee4b639e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:52:52 +0000
+Subject: [PATCH 89/92] doc/examples/avio_http_serve_files: use char for the
+ resource string
+
+The resource was declared as uint8_t * because that is the type av_opt_get()
+returns, but then it is passed to strlen() and strcmp(), which gcc
+reports with -Wpointer-sign. Declare it as char * and cast the address
+passed to av_opt_get().
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/avio_http_serve_files.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/avio_http_serve_files.c b/doc/examples/avio_http_serve_files.c
+index 2aae3870c2..29c03cade2 100644
+--- a/doc/examples/avio_http_serve_files.c
++++ b/doc/examples/avio_http_serve_files.c
+@@ -37,9 +37,10 @@ static void process_client(AVIOContext *client, const char *in_uri)
+     AVIOContext *input = NULL;
+     uint8_t buf[1024];
+     int ret, n, reply_code;
+-    uint8_t *resource = NULL;
++    char *resource = NULL;
+     while ((ret = avio_handshake(client)) > 0) {
+-        av_opt_get(client, "resource", AV_OPT_SEARCH_CHILDREN, &resource);
++        av_opt_get(client, "resource", AV_OPT_SEARCH_CHILDREN,
++                   (uint8_t **)&resource);
+         // check for strlen(resource) is necessary, because av_opt_get()
+         // may return empty string.
+         if (resource && strlen(resource))
+-- 
+2.43.0
+

@@ -1,0 +1,47 @@
+From f2ccc7fd5ad5b56fb3bc744227538e392378e8db Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:50:37 +0000
+Subject: [PATCH 85/92] doc/examples/avio_list_dir: do not truncate large user
+ and group ids
+
+uid_and_gid was 20 bytes long and snprintf() was told to write at most
+20, but two int64_t values with the parentheses need up to 43 characters
+plus the terminator. Ids of ten digits or more, which are common in user
+namespaces and on some network file systems, were cut off, for example
+"4294967294(42949672" instead of "4294967294(4294967293)".
+
+Size the buffer for the worst case and pass sizeof() to snprintf().
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/avio_list_dir.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/avio_list_dir.c b/doc/examples/avio_list_dir.c
+index bb19debad3..7dce068100 100644
+--- a/doc/examples/avio_list_dir.c
++++ b/doc/examples/avio_list_dir.c
+@@ -66,7 +66,8 @@ static int list_op(const char *input_dir)
+     AVIODirEntry *entry = NULL;
+     AVIODirContext *ctx = NULL;
+     int cnt, ret;
+-    char filemode[4], uid_and_gid[20];
++    /* Two int64_t, each up to 20 characters with the sign, plus "(", ")" and NUL. */
++    char filemode[4], uid_and_gid[44];
+ 
+     if ((ret = avio_open_dir(&ctx, input_dir, NULL)) < 0) {
+         av_log(NULL, AV_LOG_ERROR, "Cannot open directory: %s.\n", av_err2str(ret));
+@@ -86,7 +87,8 @@ static int list_op(const char *input_dir)
+         } else {
+             snprintf(filemode, 4, "%3"PRIo64, entry->filemode);
+         }
+-        snprintf(uid_and_gid, 20, "%"PRId64"(%"PRId64")", entry->user_id, entry->group_id);
++        snprintf(uid_and_gid, sizeof(uid_and_gid), "%"PRId64"(%"PRId64")",
++                 entry->user_id, entry->group_id);
+         if (cnt == 0)
+             av_log(NULL, AV_LOG_INFO, "%-9s %12s %30s %10s %s %16s %16s %16s\n",
+                    "TYPE", "SIZE", "NAME", "UID(GID)", "UGO", "MODIFIED",
+-- 
+2.43.0
+

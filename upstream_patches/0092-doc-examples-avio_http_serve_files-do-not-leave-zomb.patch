@@ -1,0 +1,52 @@
+From 1c437ef507bf36b3237e162fdbc7643314c10b61 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:53:23 +0000
+Subject: [PATCH 92/92] doc/examples/avio_http_serve_files: do not leave zombie
+ children behind
+
+The parent forks a child for every client and never waits for it, and
+the comment in the loop said that this produces zombie processes.
+Ignore SIGCHLD once at start-up so that the system reaps the children
+when they exit.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/avio_http_serve_files.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/avio_http_serve_files.c b/doc/examples/avio_http_serve_files.c
+index 762f1e2259..8660137b54 100644
+--- a/doc/examples/avio_http_serve_files.c
++++ b/doc/examples/avio_http_serve_files.c
+@@ -30,6 +30,7 @@
+ 
+ #include <libavformat/avformat.h>
+ #include <libavutil/opt.h>
++#include <signal.h>
+ #include <unistd.h>
+ 
+ static void process_client(AVIOContext *client, const char *in_uri)
+@@ -120,6 +121,10 @@ int main(int argc, char **argv)
+ 
+     avformat_network_init();
+ 
++    // The children are never waited for. Ignoring SIGCHLD makes the system
++    // reap them when they exit, so that they do not stay behind as zombies.
++    signal(SIGCHLD, SIG_IGN);
++
+     if ((ret = av_dict_set(&options, "listen", "2", 0)) < 0) {
+         fprintf(stderr, "Failed to set listen mode for server: %s\n", av_err2str(ret));
+         return ret;
+@@ -133,8 +138,6 @@ int main(int argc, char **argv)
+         if ((ret = avio_accept(server, &client)) < 0)
+             goto end;
+         fprintf(stderr, "Accepted client, forking process.\n");
+-        // XXX: Since we don't reap our children and don't ignore signals
+-        //      this produces zombie processes.
+         pid = fork();
+         if (pid < 0) {
+             perror("Fork failed");
+-- 
+2.43.0
+

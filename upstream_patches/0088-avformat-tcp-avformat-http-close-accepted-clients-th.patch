@@ -1,0 +1,78 @@
+From db6221f0842dc9d839a9137d587c709ddce773c6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:52:20 +0000
+Subject: [PATCH 88/92] avformat/tcp, avformat/http: close accepted clients
+ that never handshook
+
+ffurl_closep() only calls the protocol's url_close() for contexts that
+are marked connected, and ffurl_handshake() is what marks them. A client
+returned by ffurl_accept() has an open socket from the start but is not
+marked, so closing it before the handshake skipped tcp_close() and the
+socket was leaked.
+
+This is what a server that forks for every client does. The parent
+accepts the connection, hands it to the child and closes its own copy
+with avio_close(), which freed the context and kept the descriptor open.
+The parent of the avio_http_serve_files example gained one descriptor
+per client, and the connection was not shut down by the child's close
+because the parent still held it open.
+
+Mark the accepted tcp context as connected, which is all the tcp
+handshake does anyway. For http do the same, and do not send the end of
+a chunked body from http_close() to a client that has not been sent a
+reply yet, since that would write into the connection the child is
+using.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ libavformat/http.c | 11 +++++++++--
+ libavformat/tcp.c  |  3 +++
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/libavformat/http.c b/libavformat/http.c
+index 5c692369ce..e44ac18ad4 100644
+--- a/libavformat/http.c
++++ b/libavformat/http.c
+@@ -893,6 +893,10 @@ static int http_accept(URLContext *s, URLContext **c)
+         goto fail;
+     cc->hd = cl;
+     cc->is_multi_client = 1;
++    /* The connection to the client is open and has to be closed even if the
++     * caller never completes the handshake, for instance in a process that
++     * only passes the client on to another one. */
++    (*c)->is_connected = 1;
+     return 0;
+ fail:
+     if (c) {
+@@ -2309,8 +2313,11 @@ static int http_close(URLContext *h)
+ #endif /* CONFIG_ZLIB */
+ 
+     /* The listening context of a multi-client server has no connection of
+-     * its own, and writing to a listening socket never completes. */
+-    if (s->hd && !s->end_chunked_post && s->listen != HTTP_MUTLI)
++     * its own, and writing to a listening socket never completes. A client
++     * that has not finished the handshake has not been sent a reply, so it
++     * must not be sent the end of a chunked body either. */
++    if (s->hd && !s->end_chunked_post && s->listen != HTTP_MUTLI &&
++        (!s->is_multi_client || s->handshake_step == FINISH))
+         /* Close the write direction by sending the end of chunked encoding. */
+         ret = http_shutdown(h, h->flags);
+ 
+diff --git a/libavformat/tcp.c b/libavformat/tcp.c
+index 09dc8a9679..fa48f7595f 100644
+--- a/libavformat/tcp.c
++++ b/libavformat/tcp.c
+@@ -263,6 +263,9 @@ static int tcp_accept(URLContext *s, URLContext **c)
+         return ret;
+     }
+     cc->fd = ret;
++    /* The socket is open and has to be closed even if the caller never
++     * performs a handshake, which tcp does not need. */
++    (*c)->is_connected = 1;
+     return 0;
+ }
+ 
+-- 
+2.43.0
+

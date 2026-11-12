@@ -1,0 +1,63 @@
+From 4d59178453dbfe5108414fa8ec39758edbcf003c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:53:12 +0000
+Subject: [PATCH 91/92] doc/examples/avio_http_serve_files: open the input
+ before replying
+
+The example sent "200 OK" as soon as the request named the served
+file and opened the file afterwards. If the open failed, the client got
+a successful reply with a chunked body that ended immediately, which
+looks like an empty file. Open the input before the reply is set and
+answer 404 if the file does not exist or 500 for any other error. The
+log call after a failed open also passed the NULL input as its context.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/avio_http_serve_files.c | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/doc/examples/avio_http_serve_files.c b/doc/examples/avio_http_serve_files.c
+index acd6c1ac94..762f1e2259 100644
+--- a/doc/examples/avio_http_serve_files.c
++++ b/doc/examples/avio_http_serve_files.c
+@@ -50,10 +50,20 @@ static void process_client(AVIOContext *client, const char *in_uri)
+     if (ret < 0)
+         goto end;
+     av_log(client, AV_LOG_TRACE, "resource=%s\n", resource ? resource : "(none)");
++    reply_code = AVERROR_HTTP_NOT_FOUND;
+     if (resource && resource[0] == '/' && !strcmp((resource + 1), in_uri)) {
+-        reply_code = 200;
+-    } else {
+-        reply_code = AVERROR_HTTP_NOT_FOUND;
++        // The reply code is sent before any data, so open the input first
++        // and report a file that cannot be opened instead of sending an
++        // empty "200 OK" reply.
++        fprintf(stderr, "Opening input file.\n");
++        if ((ret = avio_open2(&input, in_uri, AVIO_FLAG_READ, NULL, NULL)) < 0) {
++            av_log(NULL, AV_LOG_ERROR, "Failed to open input: %s: %s.\n",
++                   in_uri, av_err2str(ret));
++            reply_code = ret == AVERROR(ENOENT) ? AVERROR_HTTP_NOT_FOUND
++                                                : AVERROR_HTTP_SERVER_ERROR;
++        } else {
++            reply_code = 200;
++        }
+     }
+     if ((ret = av_opt_set_int(client, "reply_code", reply_code, AV_OPT_SEARCH_CHILDREN)) < 0) {
+         av_log(client, AV_LOG_ERROR, "Failed to set reply_code: %s.\n", av_err2str(ret));
+@@ -69,12 +79,6 @@ static void process_client(AVIOContext *client, const char *in_uri)
+     fprintf(stderr, "Handshake performed.\n");
+     if (reply_code != 200)
+         goto end;
+-    fprintf(stderr, "Opening input file.\n");
+-    if ((ret = avio_open2(&input, in_uri, AVIO_FLAG_READ, NULL, NULL)) < 0) {
+-        av_log(input, AV_LOG_ERROR, "Failed to open input: %s: %s.\n", in_uri,
+-               av_err2str(ret));
+-        goto end;
+-    }
+     for(;;) {
+         n = avio_read(input, buf, sizeof(buf));
+         if (n < 0) {
+-- 
+2.43.0
+

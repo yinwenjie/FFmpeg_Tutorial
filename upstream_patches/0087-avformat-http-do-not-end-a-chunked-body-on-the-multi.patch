@@ -1,0 +1,43 @@
+From ae58146620b0478123fb2cf8c47b2432060d9a8f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 17:52:11 +0000
+Subject: [PATCH 87/92] avformat/http: do not end a chunked body on the
+ multi-client listener
+
+With listen=2 the context returned by avio_open2() only accepts
+connections. Closing it went through http_shutdown() like any other
+HTTP context, which writes the final "0\r\n\r\n" chunk to s->hd. That
+is the listening socket, so the write waits for it to become writable
+and never returns, and avio_close() hangs forever.
+
+Programs that fork a child for every client, such as the
+avio_http_serve_files example, close their copy of the server in the
+child. Every child stayed blocked in avio_close() instead of exiting.
+
+Skip the chunked body terminator for the listening context. Clients
+returned by avio_accept() have listen set to 0 and are not affected.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ libavformat/http.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libavformat/http.c b/libavformat/http.c
+index a7854122f1..5c692369ce 100644
+--- a/libavformat/http.c
++++ b/libavformat/http.c
+@@ -2308,7 +2308,9 @@ static int http_close(URLContext *h)
+     av_freep(&s->inflate_buffer);
+ #endif /* CONFIG_ZLIB */
+ 
+-    if (s->hd && !s->end_chunked_post)
++    /* The listening context of a multi-client server has no connection of
++     * its own, and writing to a listening socket never completes. */
++    if (s->hd && !s->end_chunked_post && s->listen != HTTP_MUTLI)
+         /* Close the write direction by sending the end of chunked encoding. */
+         ret = http_shutdown(h, h->flags);
+ 
+-- 
+2.43.0
+
