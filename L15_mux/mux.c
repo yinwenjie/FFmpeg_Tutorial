@@ -34,7 +34,7 @@
  * 它用程序算出一段画面（渐变的色块）和一段声音（频率不断升高的正弦波），各自编码，
  * 再用 libavformat 写进一个媒体文件。输出格式由文件扩展名决定，两路流都用这种格式的默认编码器。
  *
- * 这个示例有几处问题，已经整理成 patch 放在仓库的 upstream_patches/ 目录（0062 到 0070），
+ * 这个示例有几处问题，已经整理成 patch 放在仓库的 upstream_patches/ 目录（0062 到 0070，L22 又补了一个 0094），
  * 下面在出问题的位置都做了标注。自己写程序时参考本目录的 mux_av.c。
  *
  * 用法：./mux 输出文件 [-flags 值] [-fflags 值]
@@ -727,6 +727,11 @@ int main(int argc, char **argv)
         if (ret < 0) {
             fprintf(stderr, "Could not open '%s': %s\n", filename,
                     av_err2str(ret));
+            /*
+             * 课程注释：patch 0094。这里直接 return，格式上下文、两个编码器上下文、帧、缩放器、重采样器
+             * 都没有释放（正常结束的路径是释放了的）。L22 的 ASan 扫描用不存在的输出目录就能复现：
+             * ./mux /nonexistent/dir/out.mp4
+             */
             return 1;
         }
     }
@@ -741,6 +746,7 @@ int main(int argc, char **argv)
     if (ret < 0) {
         fprintf(stderr, "Error occurred when opening output file: %s\n",
                 av_err2str(ret));
+        /* 课程注释：patch 0094，同上，这条出错路径也泄漏所有资源。 */
         return 1;
     }
 

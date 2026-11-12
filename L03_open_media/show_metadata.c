@@ -57,7 +57,8 @@ int main (int argc, char **argv)
      * 后两个参数分别是“强制指定格式”和“选项字典”，传 NULL 表示自动识别、不带选项。
      * 成功返回 0，失败返回负的错误码，并且 fmt_ctx 保持为 NULL。
      *
-     * 注意官方示例在这里失败时直接 return，没有打印任何信息。
+     * 注意官方示例在这里失败时直接 return，没有打印任何信息（patch 0009）。
+     * 返回的是负的错误码，进程的退出码是它的低 8 位：打不开文件是 254，读不出流信息是 183，都不是约定的 1。
      * 课程里的 media_info.c 演示了更合适的写法。
      */
     if ((ret = avformat_open_input(&fmt_ctx, argv[1], NULL, NULL)))

@@ -212,6 +212,8 @@ static int open_output_file(const char *filename,
     /*
      * 课程注释：按输出文件的扩展名猜容器格式。猜不出来就失败，使用者要换一个扩展名。
      * 这个示例的 main() 出错时统一返回 AVERROR_EXIT，不区分原因，具体原因由出错的地方自己打印到屏幕上。
+     * 课程注释：patch 0095。AVERROR_EXIT 是一个很大的负数，作为 main() 的返回值，进程的退出码是它的低 8 位，也就是 187，
+     * 不管出的是什么错；其他示例出错时返回 1。脚本和 L22 的检查脚本只看退出码是否为 0 的话没有影响，但 187 不是约定的写法。
      */
     /* Guess the desired container format based on the file extension. */
     if (!((*output_format_context)->oformat = av_guess_format(NULL, filename,
