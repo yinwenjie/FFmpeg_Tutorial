@@ -51,11 +51,13 @@ int mt_open_decoder(const AVStream *st, int keyframes_only, AVCodecContext **dec
 typedef struct MtGraph {
     AVFilterGraph   *graph;
     AVFilterContext *src, *sink;
+    AVBufferRef     *hw_device;     /* 调用者在 mt_graph_init 之前设（可以不设）：hwupload 这类滤镜要用的设备，图不拥有它 */
 } MtGraph;
 /*
  * 建滤镜图：入口按解码器的参数，中间是 desc（滤镜图描述，写法和 ffmpeg 的 -vf、-af 相同），
  * 出口只接受 enc 支持的格式（enc 为 NULL 不限制）；格式对不上时图会自动插入 scale、aresample。
- * frame_rate 只用于视频入口，未知填 {0, 1}。失败时已经打印好错误。
+ * frame_rate 只用于视频入口，未知填 {0, 1}。g->hw_device 不为空时，需要设备的滤镜（hwupload 等）会拿到它。
+ * 失败时已经打印好错误。
  */
 int  mt_graph_init(MtGraph *g, AVCodecContext *dec, AVRational frame_rate, const char *desc, const AVCodec *enc);
 void mt_graph_free(MtGraph *g);

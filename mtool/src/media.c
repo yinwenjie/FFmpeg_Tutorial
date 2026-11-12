@@ -87,9 +87,11 @@ int mt_graph_init(MtGraph *g, AVCodecContext *dec, AVRational frame_rate, const 
     const AVFilter *bsink = avfilter_get_by_name(audio ? "abuffersink" : "buffersink");
     AVFilterInOut *outputs = avfilter_inout_alloc(), *inputs = avfilter_inout_alloc();
     char args[512], layout[64];
+    AVBufferRef *hw_device = g->hw_device;      /* memset 之前先存下来 */
     int ret;
 
     memset(g, 0, sizeof(*g));
+    g->hw_device = hw_device;
     g->graph = avfilter_graph_alloc();
     if (!outputs || !inputs || !g->graph || !bsrc || !bsink) {
         ret = AVERROR(ENOMEM);
@@ -140,6 +142,19 @@ int mt_graph_init(MtGraph *g, AVCodecContext *dec, AVRational frame_rate, const 
         mt_averr(ret, "滤镜图“%s”有语法错误", desc);
         goto end;
     }
+    /* hwupload、scale_vaapi 这类滤镜要知道用哪个设备（L21）：解析完以后、配置之前交给它们 */
+    for (unsigned i = 0; g->hw_device && i < g->graph->nb_filters; i++) {
+        AVFilterContext *f = g->graph->filters[i];
+
+        if ((f->filter->flags & AVFILTER_FLAG_HWDEVICE) && !f->hw_device_ctx) {
+            f->hw_device_ctx = av_buffer_ref(g->hw_device);
+            if (!f->hw_device_ctx) {
+                ret = AVERROR(ENOMEM);
+                mt_err("内存不够");
+                goto end;
+            }
+        }
+    }
     if ((ret = avfilter_graph_config(g->graph, NULL)) < 0)
         mt_averr(ret, "配置滤镜图“%s”失败（格式对不上、或者滤镜参数不对）", desc);
 end:
@@ -154,6 +169,7 @@ void mt_graph_free(MtGraph *g)
 {
     avfilter_graph_free(&g->graph);
     g->src = g->sink = NULL;
+    g->hw_device = NULL;
 }
 
 /*
