@@ -1,0 +1,54 @@
+From cd77814a23996f9dabd91391363053ca1b9471b2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:52:39 +0000
+Subject: [PATCH] doc/examples/decode_filter_{audio,video}: check
+ avcodec_parameters_to_context()
+
+The function allocates memory for the extradata and the side data and
+can fail. Both examples ignored its return value and went on to open
+the decoder with an incompletely set up context.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_filter_audio.c | 6 +++++-
+ doc/examples/decode_filter_video.c | 6 +++++-
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/decode_filter_audio.c b/doc/examples/decode_filter_audio.c
+index 589330a..c6a8063 100644
+--- a/doc/examples/decode_filter_audio.c
++++ b/doc/examples/decode_filter_audio.c
+@@ -75,7 +75,11 @@ static int open_input_file(const char *filename)
+     dec_ctx = avcodec_alloc_context3(dec);
+     if (!dec_ctx)
+         return AVERROR(ENOMEM);
+-    avcodec_parameters_to_context(dec_ctx, fmt_ctx->streams[audio_stream_index]->codecpar);
++    ret = avcodec_parameters_to_context(dec_ctx, fmt_ctx->streams[audio_stream_index]->codecpar);
++    if (ret < 0) {
++        av_log(NULL, AV_LOG_ERROR, "Cannot copy the stream parameters to the decoder\n");
++        return ret;
++    }
+ 
+     /* Inform the decoder about the timebase for the packet timestamps.
+      * This is highly recommended, but not mandatory. */
+diff --git a/doc/examples/decode_filter_video.c b/doc/examples/decode_filter_video.c
+index a4b2252..88db795 100644
+--- a/doc/examples/decode_filter_video.c
++++ b/doc/examples/decode_filter_video.c
+@@ -78,7 +78,11 @@ static int open_input_file(const char *filename)
+     dec_ctx = avcodec_alloc_context3(dec);
+     if (!dec_ctx)
+         return AVERROR(ENOMEM);
+-    avcodec_parameters_to_context(dec_ctx, fmt_ctx->streams[video_stream_index]->codecpar);
++    ret = avcodec_parameters_to_context(dec_ctx, fmt_ctx->streams[video_stream_index]->codecpar);
++    if (ret < 0) {
++        av_log(NULL, AV_LOG_ERROR, "Cannot copy the stream parameters to the decoder\n");
++        return ret;
++    }
+ 
+     /* init the video decoder */
+     if ((ret = avcodec_open2(dec_ctx, dec, NULL)) < 0) {
+-- 
+2.43.0
+

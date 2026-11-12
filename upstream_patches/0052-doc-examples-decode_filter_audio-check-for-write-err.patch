@@ -1,0 +1,71 @@
+From 25548ea92fc1ed0c7cbce373955ad59bc727824c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:55:59 +0000
+Subject: [PATCH] doc/examples/decode_filter_audio: check for write errors
+
+print_frame() wrote the samples with fputc() and never looked at the
+result. When stdout cannot be written to (full disk, closed pipe) the
+example carried on decoding and filtering the whole file and exited
+with status 0.
+
+Check the stream's error indicator after each frame and stop with an
+error.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_filter_audio.c | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/decode_filter_audio.c b/doc/examples/decode_filter_audio.c
+index c88e6f214..ba7cb57 100644
+--- a/doc/examples/decode_filter_audio.c
++++ b/doc/examples/decode_filter_audio.c
+@@ -212,7 +212,7 @@ end:
+     return ret;
+ }
+ 
+-static void print_frame(const AVFrame *frame)
++static int print_frame(const AVFrame *frame)
+ {
+     const int n = frame->nb_samples * frame->ch_layout.nb_channels;
+     const uint16_t *p     = (uint16_t*)frame->data[0];
+@@ -224,6 +224,11 @@ static void print_frame(const AVFrame *frame)
+         p++;
+     }
+     fflush(stdout);
++    if (ferror(stdout)) {
++        av_log(NULL, AV_LOG_ERROR, "Error while writing the filtered audio\n");
++        return AVERROR(EIO);
++    }
++    return 0;
+ }
+ 
+ int main(int argc, char **argv)
+@@ -287,8 +292,10 @@ int main(int argc, char **argv)
+                             break;
+                         if (ret < 0)
+                             goto end;
+-                        print_frame(filt_frame);
++                        ret = print_frame(filt_frame);
+                         av_frame_unref(filt_frame);
++                        if (ret < 0)
++                            goto end;
+                     }
+                     av_frame_unref(frame);
+                 }
+@@ -315,8 +322,10 @@ int main(int argc, char **argv)
+                 break;
+             if (ret < 0)
+                 goto end;
+-            print_frame(filt_frame);
++            ret = print_frame(filt_frame);
+             av_frame_unref(filt_frame);
++            if (ret < 0)
++                goto end;
+         }
+     }
+ 
+-- 
+2.43.0
+

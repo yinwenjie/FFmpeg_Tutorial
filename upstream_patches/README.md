@@ -72,6 +72,11 @@
 | [0045](0045-doc-examples-filter_audio-print-the-error-when-the-g.patch) | filter_audio.c | 错误 | 滤镜图建立失败时只打印半句话，没有错误原因和换行 | L11 |
 | [0046](0046-doc-examples-filter_audio-do-not-leak-the-graph-when.patch) | filter_audio.c | 错误 | 滤镜图建立失败时不释放已经分配的图和滤镜 | L11 |
 | [0047](0047-doc-examples-filter_audio-flush-the-filtergraph-at-t.patch) | filter_audio.c | 错误 | 结束时不冲刷滤镜图，输出少了最后 16 个采样 | L11 |
+| [0048](0048-doc-examples-decode_filter_-audio-video-check-avcode.patch) | decode_filter_audio.c、decode_filter_video.c | 不符合规范 | 不检查 `avcodec_parameters_to_context()` 的返回值 | L12 |
+| [0049](0049-doc-examples-decode_filter_-audio-video-stop-when-fe.patch) | decode_filter_audio.c、decode_filter_video.c | 错误 | 把帧送进滤镜图失败后继续运行，每一帧都报同样的错，最后退出码为 0 | L12 |
+| [0050](0050-doc-examples-decode_filter_-audio-video-flush-the-de.patch) | decode_filter_audio.c、decode_filter_video.c | 错误 | 文件读完后不冲刷解码器，125 帧的 H.264 文件只处理了 123 帧 | L12 |
+| [0051](0051-doc-examples-decode_filter_audio-fix-the-ffplay-comm.patch) | decode_filter_audio.c | 已废弃 | 用法里提示的 ffplay 命令用了已经删除的 `-ac` 选项 | L12 |
+| [0052](0052-doc-examples-decode_filter_audio-check-for-write-err.patch) | decode_filter_audio.c | 错误 | 不检查写标准输出是否成功，写不出去时照常报告成功 | L12 |
 
 ## 怎么使用
 
@@ -83,7 +88,8 @@
 0031 到 0033 都改 extract_mvs.c，
 0034 到 0037 都改 scale_video.c，
 0038 到 0041 都改 resample_audio.c，
-0042 到 0047 都改 filter_audio.c），所以要按编号顺序应用：
+0042 到 0047 都改 filter_audio.c，
+0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -106,7 +112,8 @@ make -j"$(nproc)" examples
    remux（0012 到 0015）一组、decode_video（0016 到 0018）一组、decode_audio（0006、0019 到 0024）一组、
    demux_decode（0025 到 0030）一组、extract_mvs（0031 到 0033）一组、
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
-   filter_audio（0042 到 0047）一组。
+   filter_audio（0042 到 0047）一组、
+   decode_filter_audio 和 decode_filter_video（0048 到 0052）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -823,6 +830,64 @@ Unable to init filter graph:$
 
 修复后在主循环之后调用 `av_buffersrc_add_frame(src, NULL)`，再从 buffersink 读到 `AVERROR_EOF` 为止。
 输出多了最后一帧 16 个采样，总数 43,277；valgrind 通过。
+
+### 0048 decode_filter 两个示例不检查 avcodec_parameters_to_context()
+
+这个函数要为 extradata 和 side data 分配内存，可能失败。两个示例都丢掉了返回值，失败时会带着不完整的参数去打开解码器。
+同目录的其他示例（demux_decode.c、transcode.c 等）都检查了。修复后失败时打印错误并返回。
+
+### 0049 decode_filter 两个示例送帧失败后继续运行
+
+用一个采样率中途变化的 ADTS 文件（两段参数不同的 AAC 首尾相接）：
+
+```console
+$ doc/examples/decode_filter_audio change.aac > /dev/null; echo "rc=$?"
+[in @ ...] Changing audio frame properties on the fly is not supported.
+Error while feeding the audio filtergraph
+（以上两行对后面的每一帧重复一次，共 23 次）
+rc=0
+```
+
+`av_buffersrc_add_frame_flags()` 失败后用的是 `break`，只跳出了内层循环，这时 `ret` 还是 `avcodec_receive_frame()` 留下的 0，
+主循环接着处理下一个包。修复后保留错误码并跳到清理代码：错误只报一次，然后是 `Error occurred: Invalid argument`，退出码 1。
+通知滤镜图输入结束的那一处调用同样丢了错误码，一并改了。
+
+### 0050 decode_filter 两个示例不冲刷解码器
+
+```console
+$ doc/examples/decode_filter_video small_360p25.mp4 | grep -c $'\033c'
+123
+$ ffprobe -v error -count_frames -select_streams v -show_entries stream=nb_read_frames -of csv=p=0 small_360p25.mp4
+125
+```
+
+（示例每显示一帧先输出一个 `ESC c` 清屏，所以数它的个数就是帧数。）文件读完后示例直接去结束滤镜图，
+没有给解码器送空包，解码器里还留着的帧（B 帧重排、帧级多线程造成的延迟）就丢了。300 帧的 1080p 素材同样少 2 帧，MPEG-1 素材少 1 帧。
+
+修复时还发现接收帧的循环写成 `while (ret >= 0)`，而 `ret` 会被里面从 buffersink 取帧的循环改成 `AVERROR(EAGAIN)`，
+所以它每个包实际上只转一圈。平时一个包出一帧看不出问题，冲刷时一个空包要出好几帧，只改冲刷仍然会少 1 帧。
+修复后循环一直取到 `avcodec_receive_frame()` 自己返回 `AVERROR(EAGAIN)` 或 `AVERROR_EOF`。三个素材的帧数都对了（125、300、125），valgrind 通过。
+
+decode_filter_audio.c 是同样的结构，一并修改。课程的音频素材（AAC、MP2）解码器没有延迟，修复前后输出相同。
+
+### 0051 decode_filter_audio 提示的 ffplay 命令不能用
+
+```console
+$ doc/examples/decode_filter_audio small_360p25.mp4 | ffplay -f s16le -ar 8000 -ac 1 -
+Failed to set value '1' for option 'ac': Option not found
+```
+
+ffplay 已经没有 `-ac` 选项。修复后提示 `ffplay -f s16le -ar 8000 -ch_layout mono -`，实测可以播放。和 0038 是同一类问题。
+
+### 0052 decode_filter_audio 不检查写输出是否成功
+
+```console
+$ doc/examples/decode_filter_audio small_360p25.mp4 > /dev/full; echo "rc=$?"
+rc=0
+```
+
+`print_frame()` 用 `fputc()` 逐字节写，从不看结果。修复后每帧写完检查 `ferror(stdout)`，
+出错时打印 `Error while writing the filtered audio` 并以退出码 1 结束。
 
 ## 已记录、暂未制作 patch 的观察项
 

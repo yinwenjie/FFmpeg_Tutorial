@@ -1,0 +1,131 @@
+From 5104bc804c435cd6231edfccf2243aa1d9278f3c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:55:31 +0000
+Subject: [PATCH] doc/examples/decode_filter_{audio,video}: flush the decoder
+ at EOF
+
+When av_read_frame() reported the end of the file, the examples went
+straight on to closing the filtergraph. The frames the decoder was
+still holding (reordering delay, frame threading) were never output:
+for a 125 frame H.264 file with B-frames decode_filter_video displayed
+123 frames.
+
+Send the empty packet that av_read_frame() leaves behind at EOF to the
+decoder, which puts it into draining mode, and run the usual receive
+loop before signalling EOF to the filtergraph.
+
+The receive loop was written as while (ret >= 0), but ret is
+overwritten with AVERROR(EAGAIN) by the inner loop reading from the
+buffer sink, so it only ever ran once per packet. That is not enough
+when draining, where several frames are returned for one packet, so
+make it loop until avcodec_receive_frame() itself returns
+AVERROR(EAGAIN) or AVERROR_EOF.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/decode_filter_audio.c | 16 ++++++++++++----
+ doc/examples/decode_filter_video.c | 16 ++++++++++++----
+ 2 files changed, 24 insertions(+), 8 deletions(-)
+
+diff --git a/doc/examples/decode_filter_audio.c b/doc/examples/decode_filter_audio.c
+index 56952dd..be21776 100644
+--- a/doc/examples/decode_filter_audio.c
++++ b/doc/examples/decode_filter_audio.c
+@@ -228,7 +228,7 @@ static void print_frame(const AVFrame *frame)
+ 
+ int main(int argc, char **argv)
+ {
+-    int ret;
++    int ret, eof;
+     AVPacket *packet = av_packet_alloc();
+     AVFrame *frame = av_frame_alloc();
+     AVFrame *filt_frame = av_frame_alloc();
+@@ -249,17 +249,21 @@ int main(int argc, char **argv)
+ 
+     /* read all packets */
+     while (1) {
+-        if ((ret = av_read_frame(fmt_ctx, packet)) < 0)
++        ret = av_read_frame(fmt_ctx, packet);
++        if (ret < 0 && ret != AVERROR_EOF)
+             break;
++        /* at the end of the file the packet is empty; sending an empty
++         * packet makes the decoder output the frames it still holds */
++        eof = ret == AVERROR_EOF;
+ 
+-        if (packet->stream_index == audio_stream_index) {
++        if (eof || packet->stream_index == audio_stream_index) {
+             ret = avcodec_send_packet(dec_ctx, packet);
+             if (ret < 0) {
+                 av_log(NULL, AV_LOG_ERROR, "Error while sending a packet to the decoder\n");
+                 break;
+             }
+ 
+-            while (ret >= 0) {
++            while (1) {
+                 ret = avcodec_receive_frame(dec_ctx, frame);
+                 if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                     break;
+@@ -291,6 +295,10 @@ int main(int argc, char **argv)
+             }
+         }
+         av_packet_unref(packet);
++        if (eof) {
++            ret = AVERROR_EOF;
++            break;
++        }
+     }
+     if (ret == AVERROR_EOF) {
+         /* signal EOF to the filtergraph */
+diff --git a/doc/examples/decode_filter_video.c b/doc/examples/decode_filter_video.c
+index fee1aa9..0364040 100644
+--- a/doc/examples/decode_filter_video.c
++++ b/doc/examples/decode_filter_video.c
+@@ -221,7 +221,7 @@ static void display_frame(const AVFrame *frame, AVRational time_base)
+ 
+ int main(int argc, char **argv)
+ {
+-    int ret;
++    int ret, eof;
+     AVPacket *packet;
+     AVFrame *frame;
+     AVFrame *filt_frame;
+@@ -246,17 +246,21 @@ int main(int argc, char **argv)
+ 
+     /* read all packets */
+     while (1) {
+-        if ((ret = av_read_frame(fmt_ctx, packet)) < 0)
++        ret = av_read_frame(fmt_ctx, packet);
++        if (ret < 0 && ret != AVERROR_EOF)
+             break;
++        /* at the end of the file the packet is empty; sending an empty
++         * packet makes the decoder output the frames it still holds */
++        eof = ret == AVERROR_EOF;
+ 
+-        if (packet->stream_index == video_stream_index) {
++        if (eof || packet->stream_index == video_stream_index) {
+             ret = avcodec_send_packet(dec_ctx, packet);
+             if (ret < 0) {
+                 av_log(NULL, AV_LOG_ERROR, "Error while sending a packet to the decoder\n");
+                 break;
+             }
+ 
+-            while (ret >= 0) {
++            while (1) {
+                 ret = avcodec_receive_frame(dec_ctx, frame);
+                 if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                     break;
+@@ -288,6 +292,10 @@ int main(int argc, char **argv)
+             }
+         }
+         av_packet_unref(packet);
++        if (eof) {
++            ret = AVERROR_EOF;
++            break;
++        }
+     }
+     if (ret == AVERROR_EOF) {
+         /* signal EOF to the filtergraph */
+-- 
+2.43.0
+
