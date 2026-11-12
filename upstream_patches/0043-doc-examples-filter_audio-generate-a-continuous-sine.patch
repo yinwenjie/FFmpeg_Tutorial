@@ -1,0 +1,36 @@
+From 76ee585b8ac212c2ff10bad836063e553cf289db Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:38:16 +0000
+Subject: [PATCH] doc/examples/filter_audio: generate a continuous sine wave
+
+The phase of the generated tone was computed from frame_num + j. As one
+period is exactly FRAME_SIZE samples long, the sample following the
+last one of frame n (phase n + FRAME_SIZE - 1) has phase n, but the
+next frame starts at phase n + 1, so one sample of the wave was skipped
+at every frame boundary.
+
+Every frame holds a whole number of periods, so the phase only depends
+on the position within the frame.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/filter_audio.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/examples/filter_audio.c b/doc/examples/filter_audio.c
+index 824fd83..760c605 100644
+--- a/doc/examples/filter_audio.c
++++ b/doc/examples/filter_audio.c
+@@ -258,7 +258,7 @@ static int get_input(AVFrame *frame, int frame_num)
+         float *data = (float*)frame->extended_data[i];
+ 
+         for (j = 0; j < frame->nb_samples; j++)
+-            data[j] = sin(2 * M_PI * (frame_num + j) * (i + 1) / FRAME_SIZE);
++            data[j] = sin(2 * M_PI * j * (i + 1) / FRAME_SIZE);
+     }
+ 
+     return 0;
+-- 
+2.43.0
+

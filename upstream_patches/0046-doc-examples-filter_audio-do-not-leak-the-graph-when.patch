@@ -1,0 +1,42 @@
+From 62253640382453706b1b061dd4bcd9a3d4f2812f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:38:52 +0000
+Subject: [PATCH] doc/examples/filter_audio: do not leak the graph when its
+ setup fails
+
+init_filter_graph() returned on every error without freeing the graph
+it had allocated, together with the filters already created in it.
+
+Hand the graph to the caller right after allocating it. main() already
+calls avfilter_graph_free() on its failure path.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/filter_audio.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/doc/examples/filter_audio.c b/doc/examples/filter_audio.c
+index bd3a899..893c442 100644
+--- a/doc/examples/filter_audio.c
++++ b/doc/examples/filter_audio.c
+@@ -82,6 +82,8 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src,
+         fprintf(stderr, "Unable to create filter graph.\n");
+         return AVERROR(ENOMEM);
+     }
++    /* The caller frees the graph, also when this function fails. */
++    *graph = filter_graph;
+ 
+     /* Create the abuffer filter;
+      * it will be used for feeding the data into the graph. */
+@@ -200,7 +202,6 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src,
+         return err;
+     }
+ 
+-    *graph = filter_graph;
+     *src   = abuffer_ctx;
+     *sink  = abuffersink_ctx;
+ 
+-- 
+2.43.0
+
