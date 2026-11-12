@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 用 ASan/UBSan（或 valgrind）检查课程里 L02 到 L20 的全部程序：
+# 用 ASan/UBSan（或 valgrind）检查课程里 L02 到 L21 的全部程序：
 #   1. 每个程序用正常的输入跑一遍，退出码必须是 0；
 #   2. 再用“坏输入”跑一遍（空文件、乱码、截断的文件、只有视频或只有音频的文件、一张图片、
 #      17x15 的奇数尺寸），不要求成功，但不能崩溃、不能超时、不能有任何 sanitizer 报告；
@@ -23,7 +23,7 @@ cd "$(dirname "$0")/.."
 MODE=${1:-asan}
 [ $# -gt 0 ] && shift
 LESSONS=("$@")
-[ ${#LESSONS[@]} -eq 0 ] && LESSONS=(L02 L03 L04 L05 L06 L07 L08 L09 L10 L11 L12 L13 L14 L15 L16 L17 L18 L19 L20)
+[ ${#LESSONS[@]} -eq 0 ] && LESSONS=(L02 L03 L04 L05 L06 L07 L08 L09 L10 L11 L12 L13 L14 L15 L16 L17 L18 L19 L20 L21)
 
 case $MODE in
     asan)
@@ -119,6 +119,7 @@ declare -A KNOWN=(
     ["L06 decode_audio|坏输入 empty.bin"]="0019：输入是空文件时 decoded_frame 还没分配就送去冲刷，段错误"
     ["L15 mux|出错路径"]="0094：输出文件打不开时直接 return 1，资源全部泄漏"
     ["L16 transcode_av|坏输入 odd.mkv"]="外部：libx264 在 17x15 打不开编码器时自己泄漏 166 字节（ffmpeg 命令行同样，valgrind 确认）"
+    ["L21 hw_encode_av|奇数尺寸 17x15"]="外部：libx264 在 17x15 打不开编码器时自己泄漏 166 字节（同 L16）"
 )
 # 退出码不规范（不是 0 到 10）的程序，同样按 patch 归类；键是 "课次 程序"
 declare -A KNOWN_RC=(
@@ -260,6 +261,37 @@ spec L20 hw_info none
 spec L20 hw_decode_av av @IN@ @OUT@.nv12 device=none pix_fmt=nv12
 spec L20 hw_decode_av av @IN@ - md5=1 stats=1
 
+# L21 的 hw_encode_av 和 nv12_linesize 读的是原始 NV12 文件（不是容器），所以不用 spec，自己列
+hw_encode_cases() {
+    [[ " ${LESSONS[*]} " == *" L21 "* ]] || return 0
+    local n=$IN/clip_160x90.nv12 b
+    if [ ! -f "$n" ]; then
+        ff -i $MP4 -t 1 -an -vf scale=160:90 -pix_fmt nv12 -f rawvideo "$n"
+        head -c 30000 "$n" > "$IN/trunc.nv12"        # 不是整数帧（一帧 21600 字节）
+    fi
+    spec L21 hw_enc_info none
+    spec L21 hw_enc_info none codec=libx264
+    one L21 hw_encode_av 正常 0 160 90 "$n" @OUT@.h264 enc=libx264
+    one L21 hw_encode_av "正常，auto（没有显卡时退回软件）" 0 160 90 "$n" @OUT@.h264 stats=1
+    one L21 hw_encode_av "正常，yuv420p 输入" any 160 90 "$IN/clip.y4m" @OUT@.h264 enc=libx264 pix_fmt=yuv420p
+    one L21 hw_encode_av "只算 MD5" 0 160 90 "$n" - enc=libx264 md5=1
+    one L21 hw_encode_av "只编码 3 帧" 0 160 90 "$n" @OUT@.h264 enc=libx264 frames=3
+    one L21 nv12_linesize 表格 0 table
+    one L21 nv12_linesize naive 0 naive 160 90 "$n" @OUT@.nv12
+    one L21 nv12_linesize fixed 0 fixed 160 90 "$n" @OUT@.nv12
+    [ "$MODE" = valgrind ] && return 0
+    for b in "$IN/empty.bin" "$IN/garbage.bin" "$IN/trunc.nv12" "$IN/one.png"; do
+        one L21 hw_encode_av "坏输入 ${b##*/}" any 160 90 "$b" @OUT@.h264 enc=libx264
+        one L21 nv12_linesize "naive 坏输入 ${b##*/}" any naive 160 90 "$b" @OUT@.nv12
+        one L21 nv12_linesize "fixed 坏输入 ${b##*/}" any fixed 160 90 "$b" @OUT@.nv12
+    done
+    one L21 hw_encode_av "奇数尺寸 17x15" any 17 15 "$IN/garbage.bin" @OUT@.h264 enc=libx264
+    one L21 hw_encode_av "编码器名字不对" any 160 90 "$n" @OUT@.h264 enc=nonexistent_codec
+    one L21 hw_encode_av "选项不对" any 160 90 "$n" @OUT@.h264 bogus=1
+    one L21 hw_encode_av "编码器选项不对" any 160 90 "$n" @OUT@.h264 enc=libx264 opts=nonexistent=1
+}
+hw_encode_cases
+
 # 出错路径：输入文件不存在、输出目录不存在、编码器名字不对（必须不崩溃、不泄漏）
 echo "== 不存在的输入和输出"
 ghost() {
@@ -294,6 +326,15 @@ ghost L20 hw_decode vaapi $D/in.mp4 @OUT@.nv12
 ghost L20 hw_decode_av $D/in.mp4 -
 ghost L20 hw_decode_av $MP4 $D/out.nv12 device=none
 ghost L20 hw_decode_av $MP4 - device=vaapi
+ghost L21 vaapi_encode 160 90 $IN/clip_160x90.nv12 @OUT@.h264
+ghost L21 vaapi_encode 160 90 $D/in.nv12 @OUT@.h264
+ghost L21 vaapi_transcode $MP4 h264_vaapi @OUT@.mp4
+ghost L21 vaapi_transcode $D/in.mp4 h264_vaapi @OUT@.mp4
+ghost L21 hw_encode_av 160 90 $D/in.nv12 -
+ghost L21 hw_encode_av 160 90 $IN/clip_160x90.nv12 $D/out.h264 enc=libx264
+ghost L21 hw_encode_av 160 90 $IN/clip_160x90.nv12 - enc=h264_vaapi device_path=/nonexistent
+ghost L21 hw_enc_info codec=nonexistent_codec
+ghost L21 hw_enc_info try=1 device=/nonexistent
 
 echo
 echo "共 $total 项：正常 $pass，已知问题 $known，失败 $fail；退出码大于 10 又没有记录的有 $warn 项（模式 $MODE，结果表 $W/results.tsv）"
