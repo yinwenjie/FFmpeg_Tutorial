@@ -1,0 +1,65 @@
+From cab01b6b0e02a731ebedd1ceb81de08357e39c34 Mon Sep 17 00:00:00 2001
+From: t <a@b>
+Date: Thu, 12 Nov 2026 16:19:41 +0000
+Subject: [PATCH] doc/examples/transcode_aac: do not drop the frames that are
+ left in the decoder
+
+decode_audio_frame() marked the stream as finished as soon as av_read_frame()
+returned AVERROR_EOF. read_decode_convert_and_store() then returned before
+using the frame that the flush had just made available, and no further call
+read the frames that the decoder still held. For decoders that return frames
+after being flushed (AV_CODEC_CAP_DELAY, e.g. wmav2, ape, or any decoder
+using frame threads) the end of the input is lost. A WMA file with
+219136 samples per channel gives
+
+    $ ffmpeg -i in.wma -f s16le -ac 2 - | wc -c         # 876544 bytes
+    $ transcode_aac in.wma out.m4a
+    $ ffmpeg -i out.m4a -f s16le -ac 2 - | wc -c        # 868352 bytes
+
+that is one 2048 sample frame less. Only mark the stream as finished when
+the decoder reports AVERROR_EOF. At the end of the input the empty packet is
+sent again on each call; a decoder that has been flushed already answers
+AVERROR_EOF to that, which is not an error. With this change the output has
+all 219136 samples.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode_aac.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/doc/examples/transcode_aac.c b/doc/examples/transcode_aac.c
+index cee48a3..55970bf 100644
+--- a/doc/examples/transcode_aac.c
++++ b/doc/examples/transcode_aac.c
+@@ -394,10 +394,9 @@ static int decode_audio_frame(AVFrame *frame,
+     *finished = 0;
+     /* Read one audio frame from the input file into a temporary packet. */
+     if ((error = av_read_frame(input_format_context, input_packet)) < 0) {
+-        /* If we are at the end of the file, flush the decoder below. */
+-        if (error == AVERROR_EOF)
+-            *finished = 1;
+-        else {
++        /* At the end of the file the packet stays empty. Sending it to the
++         * decoder below flushes the decoder, which may still hold frames. */
++        if (error != AVERROR_EOF) {
+             fprintf(stderr, "Could not read frame (error '%s')\n",
+                     av_err2str(error));
+             goto cleanup;
+@@ -405,8 +404,11 @@ static int decode_audio_frame(AVFrame *frame,
+     }
+ 
+     /* Send the audio frame stored in the temporary packet to the decoder.
+-     * The input audio stream decoder is used to do this. */
+-    if ((error = avcodec_send_packet(input_codec_context, input_packet)) < 0) {
++     * The input audio stream decoder is used to do this.
++     * Flushing a decoder that has been flushed already returns AVERROR_EOF,
++     * which is not an error: the remaining frames are received below. */
++    error = avcodec_send_packet(input_codec_context, input_packet);
++    if (error < 0 && error != AVERROR_EOF) {
+         fprintf(stderr, "Could not send packet for decoding (error '%s')\n",
+                 av_err2str(error));
+         goto cleanup;
+-- 
+2.43.0
+

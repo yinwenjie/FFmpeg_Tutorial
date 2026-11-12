@@ -1,0 +1,81 @@
+From 3343f2dc462bd850f07832f47150377ac79f861b Mon Sep 17 00:00:00 2001
+From: t <a@b>
+Date: Thu, 12 Nov 2026 16:21:19 +0000
+Subject: [PATCH] doc/examples/transcode_aac: copy the metadata of the input
+
+The output file gets none of the input's metadata. Converting a tagged
+file loses the tags that make up the file's identity in a music library,
+and the language of the stream:
+
+    $ ffprobe -show_entries format_tags=title,artist -of compact in.flac
+    format|tag:title=My Song|tag:artist=Me
+    $ transcode_aac in.flac out.m4a
+    $ ffprobe -show_entries format_tags=title,artist -of compact out.m4a
+    format
+
+Copy the metadata of the container and of the audio stream, and the
+disposition of the stream, before the header is written, like
+doc/examples/remux does. The files written this way are identical to the
+ones written by ffmpeg -i in -c:a aac -b:a 96k out.m4a, for the FLAC and
+Matroska inputs that were tried.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode_aac.c | 33 +++++++++++++++++++++++++++++++++
+ 1 file changed, 33 insertions(+)
+
+diff --git a/doc/examples/transcode_aac.c b/doc/examples/transcode_aac.c
+index 2cd2d96..b7a59ad 100644
+--- a/doc/examples/transcode_aac.c
++++ b/doc/examples/transcode_aac.c
+@@ -255,6 +255,35 @@ cleanup:
+     return error < 0 ? error : AVERROR_EXIT;
+ }
+ 
++/**
++ * Copy the metadata of the input file and of its audio stream (title, artist,
++ * language, ...) to the output file, and the dispositions of the stream.
++ * This has to be done before the header of the output file is written.
++ * @param input_format_context  Format context of the input file
++ * @param input_stream_index    Index of the audio stream in the input file
++ * @param output_format_context Format context of the output file
++ * @return Error code (0 if successful)
++ */
++static int copy_metadata(const AVFormatContext *input_format_context,
++                         int input_stream_index,
++                         AVFormatContext *output_format_context)
++{
++    const AVStream *input_stream = input_format_context->streams[input_stream_index];
++    AVStream *output_stream      = output_format_context->streams[0];
++    int error;
++
++    if ((error = av_dict_copy(&output_format_context->metadata,
++                              input_format_context->metadata, 0)) < 0 ||
++        (error = av_dict_copy(&output_stream->metadata,
++                              input_stream->metadata, 0)) < 0) {
++        fprintf(stderr, "Could not copy metadata (error '%s')\n",
++                av_err2str(error));
++        return error;
++    }
++    output_stream->disposition = input_stream->disposition;
++    return 0;
++}
++
+ /**
+  * Initialize one data packet for reading or writing.
+  * @param[out] packet Packet to be initialized
+@@ -827,6 +856,10 @@ int main(int argc, char **argv)
+     if (open_output_file(argv[2], input_codec_context,
+                          &output_format_context, &output_codec_context))
+         goto cleanup;
++    /* Copy the metadata (title, artist, ...) of the input file. */
++    if (copy_metadata(input_format_context, input_stream_index,
++                      output_format_context))
++        goto cleanup;
+     /* Initialize the resampler to be able to convert audio sample formats. */
+     if (init_resampler(input_codec_context, output_codec_context,
+                        &resample_context))
+-- 
+2.43.0
+

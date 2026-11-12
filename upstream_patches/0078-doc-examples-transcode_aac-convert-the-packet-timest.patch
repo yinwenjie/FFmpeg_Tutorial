@@ -1,0 +1,72 @@
+From 95ffa62e25bd70b73e6c7c610eca2c915eb2bb9b Mon Sep 17 00:00:00 2001
+From: t <a@b>
+Date: Thu, 12 Nov 2026 16:19:10 +0000
+Subject: [PATCH] doc/examples/transcode_aac: convert the packet timestamps to
+ the stream time base
+
+The example timestamps the frames in samples and sets the stream time base
+to 1/sample_rate, but the muxer is free to pick another time base in
+avformat_write_header(), and the packets are written without being converted
+to it. With MP4 the muxer keeps 1/sample_rate, so the output looks right,
+but the usage comment says that other formats are supported based on the
+output file extension, and for those the timestamps are wrong. A 5 second
+44.1 kHz input becomes:
+
+    out.mkv  221.5 s  (time base 1/1000)
+    out.flv  221.5 s  (time base 1/1000)
+    out.ts     2.5 s  (time base 1/90000)
+    out.avi  5143 s   (time base 256/11025, and a 5 MB file for 62 KB of audio)
+
+Set the encoder time base explicitly instead of relying on the stream one,
+convert each packet with av_packet_rescale_ts() before writing it, and set
+its stream index. The timestamps in the files written for MP4, MKV, FLV and
+AVI are now the same as those written by
+
+    ffmpeg -i in.wav -c:a aac -b:a 96k out.<ext>
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode_aac.c | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/transcode_aac.c b/doc/examples/transcode_aac.c
+index f3e48dd..cee48a3 100644
+--- a/doc/examples/transcode_aac.c
++++ b/doc/examples/transcode_aac.c
+@@ -216,9 +216,14 @@ static int open_output_file(const char *filename,
+     avctx->sample_rate    = input_codec_context->sample_rate;
+     avctx->bit_rate       = OUTPUT_BIT_RATE;
+ 
+-    /* Set the sample rate for the container. */
+-    stream->time_base.den = input_codec_context->sample_rate;
+-    stream->time_base.num = 1;
++    /* The encoder timestamps its frames and packets in samples. */
++    avctx->time_base.den  = input_codec_context->sample_rate;
++    avctx->time_base.num  = 1;
++
++    /* Suggest the same time base for the container. The muxer is free to
++     * choose another one in avformat_write_header(), so the packet
++     * timestamps are converted before they are written. */
++    stream->time_base     = avctx->time_base;
+ 
+     /* Some container formats (like MP4) require global headers to be present.
+      * Mark the encoder so that it behaves accordingly. */
+@@ -708,6 +713,14 @@ static int encode_audio_frame(AVFrame *frame,
+         *data_present = 1;
+     }
+ 
++    /* Convert the timestamps from the encoder's time base to the time base
++     * the muxer has chosen for the stream. */
++    if (*data_present) {
++        av_packet_rescale_ts(output_packet, output_codec_context->time_base,
++                             output_format_context->streams[0]->time_base);
++        output_packet->stream_index = 0;
++    }
++
+     /* Write one audio frame from the temporary packet to the output file. */
+     if (*data_present &&
+         (error = av_write_frame(output_format_context, output_packet)) < 0) {
+-- 
+2.43.0
+
