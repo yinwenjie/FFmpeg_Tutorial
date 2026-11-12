@@ -18,7 +18,7 @@
 | 复核时的上游 master | `21ae927dc6`（2026-11-12）。`doc/examples`、`libavformat/aviobuf.c`、`file.c`、`tcp.c`、`avio.c` 与 `a337e8ddaa` 完全相同；`configure` 只有一行（AMF 版本号）不同；`libavformat/http.c` 多了三处改动（拒绝主机名和 CONNECT 目标里的控制字符、只对同一个主机复用连接），不在 patch 改的地方附近 |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `21ae927dc6` 上用 `git am` 按顺序应用无冲突（0001 到 0093）。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `21ae927dc6` 上用 `git am` 按顺序应用无冲突（0001 到 0095）。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -118,6 +118,8 @@
 | [0091](0091-doc-examples-avio_http_serve_files-open-the-input-be.patch) | avio_http_serve_files.c | 错误 | 先回复“200 OK”、后打开文件：要发送的文件不存在时，客户端收到一个成功的、空的回复 | L19 |
 | [0092](0092-doc-examples-avio_http_serve_files-do-not-leave-zomb.patch) | avio_http_serve_files.c | 不符合规范 | 每个客户端 fork 一个子进程却从不回收，子进程退出后留下僵尸进程（代码里的注释自己承认了） | L19 |
 | [0093](0093-avformat-file-do-not-close-file-descriptor-0-when-cl.patch) | **libavformat/file.c**（不是示例） | 错误 | `avio_close_dir()` 会 `close(0)`：file 协议的关闭函数去关一个从没打开过的 0 号描述符，标准输入被关掉，多线程程序里别人的连接也可能被关掉 | L19 |
+| [0094](0094-doc-examples-mux-free-everything-when-the-output-can.patch) | mux.c | 错误 | 输出文件打不开、写文件头失败、写文件尾失败时，`main()` 直接 `return 1`，格式上下文、两个编码器上下文、帧、缩放器、重采样器全部泄漏（正常路径都释放了），ASan 报告泄漏 | L22 |
+| [0095](0095-doc-examples-transcode_aac-return-a-plain-exit-statu.patch) | transcode_aac.c | 不符合规范 | `main()` 出错时返回 `AVERROR_EXIT`（一个很大的负数），进程的退出码是它的低 8 位 187，不管是什么错；其他示例返回 1 | L22 |
 
 ## 怎么使用
 
@@ -158,7 +160,7 @@ make -j"$(nproc)" examples
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
    filter_audio（0042 到 0047）一组、
    decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组，
-   encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组，transcode_aac（0078 到 0081）一组，
+   encode_audio（0056 到 0061）一组，mux（0062 到 0070、0094）一组，transcode_aac（0078 到 0081、0095）一组，
    avio_read_callback（0082、0083）一组，avio_list_dir（0085）一组，avio_http_serve_files（0089 到 0092）一组。
    **0084、0086、0087、0088、0093 改的是 libavformat，不是示例**，要单独提交，邮件主题和评审的人都不一样（`avformat/aviobuf: ...`、`avformat/file: ...`、`avformat/http: ...`、`avformat/tcp, avformat/http: ...`），不要和示例的 patch 放在一组。
    0086 和 0093 都改 `libavformat/file.c` 的目录函数，可以一起提交。0087 和 0088 都改 `http.c` 里 `http_close()` 的同一处，0088 在 0087 的基础上改，要按顺序提交。
@@ -1482,6 +1484,31 @@ $ curl -s http://127.0.0.1:8080/sub                                      # 第�
 ```
 
 修复：`file_open_dir()` 把 `c->fd` 设成 -1，`file_close()` 看到 `c->fd < 0` 什么也不做。ftp、sftp 有自己的 `url_close`，不受影响；smb 没有环境，没有验证。
+
+### 0094 mux 出错时泄漏所有资源
+
+输出文件打不开的时候，`main()` 在 `avio_open()` 之后直接 `return 1`，前面分配的东西都没有释放；写文件头、写文件尾失败的两处也一样。
+用 ASan（LeakSanitizer）一跑就看到：
+
+```console
+$ doc/examples/mux /nonexistent/dir/x.mp4 2>&1 >/dev/null | grep -E 'Could not open|SUMMARY'    # 用 -fsanitize=address 编译
+Could not open '/nonexistent/dir/x.mp4': No such file or directory
+SUMMARY: AddressSanitizer: 1264716 byte(s) leaked in 64 allocation(s).
+```
+
+修复：这三处改成跳到 `fail:`，释放选项字典、两个流的编码器等、输出文件、格式上下文。成功路径的输出没有变化（用 `-flags +bitexact -fflags +bitexact` 生成的 MP4 和 MKV，修复前后 `md5sum` 相同）。
+各个辅助函数（`add_stream()`、`open_audio()` 等）自己出错时还是 `exit(1)`，这个 patch 不动它们。
+
+### 0095 transcode_aac 的退出码永远是 187
+
+`main()` 里的 `ret` 初始值是 `AVERROR_EXIT`，成功时才改成 0，最后 `return ret;`。`AVERROR_EXIT` 是 `-MKTAG('E','X','I','T')`，一个很大的负数，进程的退出码只有低 8 位：
+
+```console
+$ doc/examples/transcode_aac /nonexistent.mp2 /tmp/x.m4a 2>/dev/null; echo $?
+187
+```
+
+脚本里没法从退出码得到任何信息，而且和其他示例（出错返回 1）不一致。`transcode.c` 的最后一行是 `return ret ? 1 : 0;`，这里照着改。修复后同样的命令退出码是 1，成功时仍是 0。
 
 ## 已记录、暂未制作 patch 的观察项
 
