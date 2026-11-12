@@ -65,7 +65,7 @@ cmake -S . -B build && cmake --build build
 | | [L11 滤镜图基础](L11_filter_audio/README.md) | filter_audio.c |
 | | [L12 解码 + 滤镜](L12_decode_filter/README.md) | decode_filter_video.c、decode_filter_audio.c |
 | 4 编码 | [L13 视频编码](L13_encode_video/README.md) | encode_video.c |
-| | L14 音频编码 | encode_audio.c |
+| | [L14 音频编码](L14_encode_audio/README.md) | encode_audio.c |
 | 5 封装输出与转码 | L15 编码并封装 | mux.c |
 | | L16 完整转码 | transcode.c |
 | | L17 音频转码与帧长适配 | transcode_aac.c |

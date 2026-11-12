@@ -1,0 +1,42 @@
+From cb8ae2543b85409661a1efac0347298b262071ef Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:59:28 +0000
+Subject: [PATCH] doc/examples/encode_audio: use int16_t for signed 16-bit
+ samples
+
+The frame holds AV_SAMPLE_FMT_S16 samples and the generated values are
+negative half of the time, but they were stored through a uint16_t
+pointer. The result was the same only because of the implicit
+conversion. Use the type that matches the sample format.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_audio.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index 0e68b54..9a87a93 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -150,7 +150,7 @@ int main(int argc, char **argv)
+     AVPacket *pkt;
+     int i, j, k, ret;
+     FILE *f;
+-    uint16_t *samples;
++    int16_t *samples;
+     double t, tincr;
+ 
+     if (argc <= 1) {
+@@ -237,7 +237,7 @@ int main(int argc, char **argv)
+         ret = av_frame_make_writable(frame);
+         if (ret < 0)
+             exit(1);
+-        samples = (uint16_t*)frame->data[0];
++        samples = (int16_t*)frame->data[0];
+ 
+         for (j = 0; j < c->frame_size; j++) {
+             samples[c->ch_layout.nb_channels*j] = (int)(sin(t) * 10000);
+-- 
+2.43.0
+

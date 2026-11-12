@@ -1,0 +1,37 @@
+From ec0c931e5be140ecfc29d94503d750b6c3e68239 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:59:56 +0000
+Subject: [PATCH] doc/examples/encode_audio: set the timestamps of the frames
+
+The frames were sent to the encoder with pts left at AV_NOPTS_VALUE, so
+the packets it returned carried no timestamps either. That goes
+unnoticed here because the packets are written out raw, but code derived
+from this example and feeding a muxer would write a stream without
+timestamps.
+
+Set pts to the number of samples sent so far, in the default audio
+encoder time base of 1 / sample_rate.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_audio.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index e9ede0d..a22d645 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -249,6 +249,9 @@ int main(int argc, char **argv)
+                 samples[c->ch_layout.nb_channels*j + k] = samples[c->ch_layout.nb_channels*j];
+             t += tincr;
+         }
++        /* the timestamp is in time_base units, which defaults to
++         * 1 / sample_rate for audio encoders */
++        frame->pts = (int64_t)i * c->frame_size;
+         encode(c, frame, pkt, f);
+     }
+ 
+-- 
+2.43.0
+

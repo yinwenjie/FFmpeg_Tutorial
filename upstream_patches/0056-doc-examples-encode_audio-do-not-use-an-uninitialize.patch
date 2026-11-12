@@ -1,0 +1,41 @@
+From 23fc80115f8cbd2a10301e822a30fa00c418e0f5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 11:59:03 +0000
+Subject: [PATCH] doc/examples/encode_audio: do not use an uninitialized layout
+ pointer
+
+select_channel_layout() only assigns best_ch_layout inside the loop over
+the supported layouts. If the encoder reports an empty list, the pointer
+is passed to av_channel_layout_copy() uninitialized. gcc -O2 warns:
+
+    warning: 'best_ch_layout' may be used uninitialized
+
+Fall back to stereo for an empty list, as is already done when the
+encoder does not report any list at all.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/encode_audio.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/examples/encode_audio.c b/doc/examples/encode_audio.c
+index 32c98ff..d4d756c 100644
+--- a/doc/examples/encode_audio.c
++++ b/doc/examples/encode_audio.c
+@@ -95,10 +95,10 @@ static int select_channel_layout(const AVCodec *codec, AVChannelLayout *dst)
+         fprintf(stderr, "Error getting supported channel layouts\n");
+         exit(1);
+     }
+-    const AVChannelLayout *p = out_config, *best_ch_layout;
++    const AVChannelLayout *p = out_config, *best_ch_layout = NULL;
+     int best_nb_channels   = 0;
+ 
+-    if (!p)
++    if (!p || !p->nb_channels)
+         return av_channel_layout_copy(dst, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO);
+ 
+     while (p->nb_channels) {
+-- 
+2.43.0
+
