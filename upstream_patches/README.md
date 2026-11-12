@@ -15,10 +15,10 @@
 | 项目 | 值 |
 | --- | --- |
 | 制作和测试所用的提交 | `a337e8ddaa`（课程固定使用的版本，2026-11-10） |
-| 复核时的上游 master | `986bab2`（2026-11-12），`doc/examples` 和 `configure` 与 `a337e8ddaa` 完全相同 |
+| 复核时的上游 master | `40a5422`（2026-11-12），`doc/examples` 与 `a337e8ddaa` 完全相同，`configure` 只有一行（AMF 版本号）不同，不影响 patch |
 | 测试环境 | Ubuntu 24.04，gcc 13.3，编译选项见 [L02](../L02_environment/README.md) |
 
-全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `986bab2` 上用 `git am` 按顺序应用无冲突。
+全部 patch 在 `a337e8ddaa` 上编译并运行验证过，在 `40a5422` 上用 `git am` 按顺序应用无冲突。
 提交前请先在最新的 master 上重新应用一遍，确认问题没有被别人先修掉。
 
 ## 问题清单
@@ -102,6 +102,10 @@
 | [0075](0075-doc-examples-transcode-copy-the-metadata-and-the-dis.patch) | transcode.c | 不满足现有需求 | 不拷贝容器和流的元数据（标题、语言），也不拷贝 default 等标志，播放器选不对默认音轨 | L16 |
 | [0076](0076-doc-examples-transcode-terminate-the-Could-not-open-.patch) | transcode.c | 错误 | `Could not open output file` 后面没有换行，下一行日志接在同一行里 | L16 |
 | [0077](0077-doc-examples-transcode-make-the-audio-timestamps-con.patch) | transcode.c | 错误 | 输入的时间基很粗（FLV、MKV 是毫秒）时，音频帧的时间戳被取整，间隔是 1014、1015、1058 个采样而不是 1024，输出的音频包时间戳也跟着不均匀 | L16 |
+| [0078](0078-doc-examples-transcode_aac-convert-the-packet-timest.patch) | transcode_aac.c | 错误 | 写包前不把时间戳换算到输出流的时间基，只有 MP4 碰巧对：5 秒的输入，MKV、FLV 变成 222 秒，TS 变成 2.5 秒，AVI 变成 5159 秒 | L17 |
+| [0079](0079-doc-examples-transcode_aac-do-not-drop-the-frames-th.patch) | transcode_aac.c | 错误 | 读到文件尾就宣布解码结束，带 `AV_CODEC_CAP_DELAY` 的解码器（WMA、APE……）留在里面的最后几帧丢了，输出少一整帧 | L17 |
+| [0080](0080-doc-examples-transcode_aac-accept-inputs-that-have-m.patch) | transcode_aac.c | 不满足现有需求 | 输入不止一路流就拒绝（`Expected one audio input stream`），视频文件里的音轨、带封面图的音乐文件都用不了 | L17 |
+| [0081](0081-doc-examples-transcode_aac-copy-the-metadata-of-the-.patch) | transcode_aac.c | 不满足现有需求 | 不拷贝容器和流的元数据，转出来的文件没有标题、艺术家 | L17 |
 
 ## 怎么使用
 
@@ -117,7 +121,7 @@
 0007、0008、0048 到 0052 都改 decode_filter_audio.c 或 decode_filter_video.c，
 0016、0053 到 0055 都改 encode_video.c，
 0010、0016、0056 到 0061 都改 encode_audio.c，
-0062 到 0070 都改 mux.c），所以要按编号顺序应用：
+0062 到 0070 都改 mux.c，0078 到 0081 都改 transcode_aac.c），所以要按编号顺序应用：
 
 ```bash
 cd ~/ffmpeg_src
@@ -142,7 +146,7 @@ make -j"$(nproc)" examples
    scale_video（0034 到 0037）一组、resample_audio（0038 到 0041）一组、
    filter_audio（0042 到 0047）一组、
    decode_filter_audio 和 decode_filter_video（0048 到 0052）一组，encode_video（0053 到 0055）一组，
-   encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组。
+   encode_audio（0056 到 0061）一组，mux（0062 到 0070）一组，transcode_aac（0078 到 0081）一组。
 
 这些 patch 对应的提交同时保存在 fork 仓库 `yinwenjie/FFmpeg` 的 `claude/project-thread-h6un3a` 分支上，
 一个提交对应一个 patch。以后发现新问题时，在这个分支上追加提交，再用
@@ -1186,6 +1190,78 @@ $ ffprobe -v error -select_streams a -show_entries packet=pts -of csv=p=0 /tmp/o
 修复后相邻帧都相差 1024（输入本身有断档的两处除外，命令行的结果也是这样）；
 时间基本来就是 1/采样率的输入（MP4 里的音频）不受影响。
 
+### 0078 transcode_aac 写包前不换算时间戳
+
+示例让编码器和输出流都用 1/采样率做时间基，可是复用器在 `avformat_write_header()` 里可以改流的时间基，
+包写出去之前没有用 `av_packet_rescale_ts()` 换算。MP4 的复用器保持 1/采样率，所以输出碰巧是对的；
+示例开头的说明却写着“按输出文件的扩展名支持其他格式”，换成别的容器，时间戳就全错了：
+
+```console
+$ for e in m4a mkv flv ts avi; do
+    doc/examples/transcode_aac $S/audio_44k_stereo.mp2 /tmp/out.$e >/dev/null 2>&1
+    echo "$e $(ffprobe -v error -show_entries format=duration -of csv=p=0 /tmp/out.$e)"
+  done
+m4a 5.015510
+mkv 222.208000
+flv 222.208000
+ts 2.480811
+avi 5159.659683
+```
+
+输入是 5 秒的音频。复用器选的时间基：MKV、FLV 是 1/1000，TS 是 1/90000，AVI 是 256/11025；AVI 的文件有 5.4 MB，里面的音频只有 62 KB。
+修复后显式设置编码器的时间基，写包前换算，并设置包的 `stream_index`。MP4、MKV、FLV、AVI 的输出的时间戳与
+`ffmpeg -i in -c:a aac -b:a 96k -ac 2 out.<ext>` 的完全相同（用 `cmp` 比较整个文件，MP4、FLV、AVI 逐字节相同，
+MKV 只差命令行多写的流级别 `ENCODER` 标签；TS 的音频包相同，但文件比命令行的大三成，因为命令行默认把 `AVFormatContext.max_delay`
+设成 0.7 秒，让 MPEG-TS 复用器把靠得近的几个音频帧装进同一个 PES 包，示例没有设，把它设成 0.7 秒以后也逐字节相同）。
+
+### 0079 transcode_aac 丢掉解码器里剩下的帧
+
+`decode_audio_frame()` 一读到文件尾（`av_read_frame()` 返回 `AVERROR_EOF`）就把 `finished` 置 1，
+`read_decode_convert_and_store()` 看到 `finished` 直接返回，既没有使用冲刷刚刚吐出来的那一帧，之后也没有人再去取解码器里的帧。
+有的解码器（带 `AV_CODEC_CAP_DELAY` 标志的，例如 wmav2、ape，或者开了帧线程的）收到冲刷信号才把缓存的帧吐出来，输出的结尾就丢了：
+
+```console
+$ ffmpeg -v error -y -i $S/audio_44k_stereo.mp2 -c:a wmav2 /tmp/in.wma
+$ ffmpeg -v error -i /tmp/in.wma -f s16le -ac 2 - | wc -c
+876544
+$ doc/examples/transcode_aac /tmp/in.wma /tmp/out.m4a >/dev/null 2>&1
+$ ffmpeg -v error -i /tmp/out.m4a -f s16le -ac 2 - | wc -c
+868352
+```
+
+少了 8192 个字节，正好是 2048 个采样的一帧。修复后只在解码器报告 `AVERROR_EOF` 时才置 `finished`；
+文件尾以后每次调用都送一次空包，已经冲刷过的解码器对它回答 `AVERROR_EOF`，这不是错误。修复后输出是 876544 字节，和命令行的一致。
+（用 MP2、FLAC、Vorbis、Opus、AC-3 的输入试过，修复前后输出没有区别：这几个解码器冲刷时没有帧留在里面。）
+
+### 0080 transcode_aac 不接受有多路流的输入
+
+示例要求输入里只有一路流：
+
+```console
+$ doc/examples/transcode_aac $S/small_360p25.mp4 /tmp/out.m4a
+Expected one audio input stream, but found 2
+```
+
+这拒绝了两种最常见的输入：要取音轨的视频文件，和带封面图的音乐文件（MP3、FLAC、M4A 里的封面是第二路流，一路“视频”）。
+修复后用 `av_find_best_stream()` 选出最好的一路音频，别的流的包读到就丢掉；输入里没有音频时明确报告。
+这两种输入的输出都和 `ffmpeg -i in -vn -c:a aac -b:a 96k -ac 2 out.m4a` 逐字节相同。
+
+### 0081 transcode_aac 丢掉元数据
+
+输出里没有输入的标题、艺术家，也没有流的元数据和标志（和 0013 的 remux、0075 的 transcode 是同一类问题）：
+
+```console
+$ ffmpeg -v error -y -i $S/audio_44k_stereo.mp2 -metadata title="My Song" -metadata artist="Me" /tmp/tag.flac
+$ ffprobe -v error -show_entries format_tags=title,artist -of compact /tmp/tag.flac
+format|tag:artist=Me|tag:title=My Song
+$ doc/examples/transcode_aac /tmp/tag.flac /tmp/out.m4a >/dev/null 2>&1
+$ ffprobe -v error -show_entries format_tags=title,artist -of compact /tmp/out.m4a
+format
+```
+
+标题和艺术家是音乐库里一个文件的身份，转码以后全丢了。修复后在写文件头之前用 `av_dict_copy()` 拷贝容器和这一路流的元数据，
+再复制流的 `disposition`；输出与 `ffmpeg -i in -c:a aac -b:a 96k -ac 2 out.m4a` 逐字节相同（FLAC 和 Matroska 的输入试过）。
+
 ## 已记录、暂未制作 patch 的观察项
 
 这些问题需要结合对应课次仔细研究之后再决定怎么改，到那一讲时处理。
@@ -1194,6 +1270,14 @@ $ ffprobe -v error -select_streams a -show_entries packet=pts -of csv=p=0 /tmp/o
 | --- | --- | --- |
 | avio_read_callback.c | 只提供读回调、没有 seek 回调。`moov` 在文件末尾的 MP4 读不到完整的流参数（报 `partial file` 和 `unspecified pixel format`） | L18 |
 | avio_http_serve_files.c | 用 `uint8_t` 数组当字符串，脱离源码树用 `-Wall` 编译时有 `-Wpointer-sign` 警告（filter_audio.c 的同类问题已在 0042 改掉） | L19 |
+
+transcode_aac.c 在 L17 研究过，除了 0078 到 0081，下面几处也看到了，但各自要改的地方比较大或者属于风格问题，暂时没有制作 patch：
+
+- 输出采样率固定等于输入，`init_resampler()` 里用 `av_assert0()` 写明“暂不支持采样率转换”。输入的采样率 AAC 不支持（192 kHz、4 kHz……）时，
+  `avcodec_open2()` 失败。要支持的话，要换成 `swr_convert_frame()` 或者估算输出采样数、冲刷转换器，是一个功能的增加，不是修一个错误。
+- 先 `avio_open()` 创建输出文件，再配编码器；后面任何一步失败，输出文件已经被创建、清空，留下 0 字节的垃圾。可以把创建文件挪到写文件头之前。
+- `add_samples_to_fifo()` 里先 `av_audio_fifo_realloc()` 再 `av_audio_fifo_write()`：`av_audio_fifo_write()` 空间不够时自己会扩，前一句是多余的。
+- `avctx->pkt_timebase` 设在 `avcodec_open2()` 之后。目前的解码器是每解一帧才读它，碰巧没有问题，但接口没有这样保证。
 
 用 `-Wdeprecated-declarations` 编译全部能独立编译的示例，没有发现使用已标记废弃的函数。
 qsv_decode.c 和 qsv_transcode.c 需要 Intel 的库才能编译，还没有检查。

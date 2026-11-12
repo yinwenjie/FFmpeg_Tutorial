@@ -1,0 +1,168 @@
+From 6823b56392bcec83e28842b1ba80d77a5e93f12a Mon Sep 17 00:00:00 2001
+From: t <a@b>
+Date: Thu, 12 Nov 2026 16:20:46 +0000
+Subject: [PATCH] doc/examples/transcode_aac: accept inputs that have more than
+ one stream
+
+The example refuses every input with more than one stream:
+
+    $ transcode_aac movie.mp4 out.m4a
+    Expected one audio input stream, but found 2
+
+This includes the common cases of a video file whose audio track is to
+be extracted and of an audio file with embedded cover art (MP3, FLAC and
+M4A files with an attached picture have a second, video stream).
+
+Select the audio stream with av_find_best_stream() instead, and skip the
+packets that belong to other streams. An input without any audio stream
+is reported as such. For the two cases above the output is identical to
+the one of
+
+    ffmpeg -i in -vn -c:a aac -b:a 96k out.m4a
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/transcode_aac.c | 50 ++++++++++++++++++++++--------------
+ 1 file changed, 31 insertions(+), 19 deletions(-)
+
+diff --git a/doc/examples/transcode_aac.c b/doc/examples/transcode_aac.c
+index 55970bf..2cd2d96 100644
+--- a/doc/examples/transcode_aac.c
++++ b/doc/examples/transcode_aac.c
+@@ -54,11 +54,13 @@
+  * @param      filename             File to be opened
+  * @param[out] input_format_context Format context of opened file
+  * @param[out] input_codec_context  Codec context of opened file
++ * @param[out] input_stream_index   Index of the audio stream that is decoded
+  * @return Error code (0 if successful)
+  */
+ static int open_input_file(const char *filename,
+                            AVFormatContext **input_format_context,
+-                           AVCodecContext **input_codec_context)
++                           AVCodecContext **input_codec_context,
++                           int *input_stream_index)
+ {
+     AVCodecContext *avctx;
+     const AVCodec *input_codec;
+@@ -82,22 +84,19 @@ static int open_input_file(const char *filename,
+         return error;
+     }
+ 
+-    /* Make sure that there is only one stream in the input file. */
+-    if ((*input_format_context)->nb_streams != 1) {
+-        fprintf(stderr, "Expected one audio input stream, but found %d\n",
+-                (*input_format_context)->nb_streams);
+-        avformat_close_input(input_format_context);
+-        return AVERROR_EXIT;
+-    }
+-
+-    stream = (*input_format_context)->streams[0];
+-
+-    /* Find a decoder for the audio stream. */
+-    if (!(input_codec = avcodec_find_decoder(stream->codecpar->codec_id))) {
+-        fprintf(stderr, "Could not find input codec\n");
++    /* Select the audio stream and find a decoder for it. Other streams in
++     * the input file, such as the video of a movie or the cover art of an
++     * audio file, are ignored. */
++    error = av_find_best_stream(*input_format_context, AVMEDIA_TYPE_AUDIO,
++                                -1, -1, &input_codec, 0);
++    if (error < 0) {
++        fprintf(stderr, "Could not find an audio stream and its decoder "
++                "(error '%s')\n", av_err2str(error));
+         avformat_close_input(input_format_context);
+-        return AVERROR_EXIT;
++        return error;
+     }
++    *input_stream_index = error;
++    stream = (*input_format_context)->streams[*input_stream_index];
+ 
+     /* Allocate a new decoding context. */
+     avctx = avcodec_alloc_context3(input_codec);
+@@ -369,6 +368,8 @@ static int write_output_file_header(AVFormatContext *output_format_context)
+  * @param      frame                Audio frame to be decoded
+  * @param      input_format_context Format context of the input file
+  * @param      input_codec_context  Codec context of the input file
++ * @param      input_stream_index   Index of the audio stream to be decoded.
++ *                                  Packets of other streams are skipped.
+  * @param[out] data_present         Indicates whether data has been decoded
+  * @param[out] finished             Indicates whether the end of file has
+  *                                  been reached and all data has been
+@@ -380,6 +381,7 @@ static int write_output_file_header(AVFormatContext *output_format_context)
+ static int decode_audio_frame(AVFrame *frame,
+                               AVFormatContext *input_format_context,
+                               AVCodecContext *input_codec_context,
++                              int input_stream_index,
+                               int *data_present, int *finished)
+ {
+     /* Packet used for temporary storage. */
+@@ -392,8 +394,13 @@ static int decode_audio_frame(AVFrame *frame,
+ 
+     *data_present = 0;
+     *finished = 0;
+-    /* Read one audio frame from the input file into a temporary packet. */
+-    if ((error = av_read_frame(input_format_context, input_packet)) < 0) {
++    /* Read one audio frame from the input file into a temporary packet,
++     * skipping the packets of other streams. */
++    do {
++        av_packet_unref(input_packet);
++        error = av_read_frame(input_format_context, input_packet);
++    } while (error >= 0 && input_packet->stream_index != input_stream_index);
++    if (error < 0) {
+         /* At the end of the file the packet stays empty. Sending it to the
+          * decoder below flushes the decoder, which may still hold frames. */
+         if (error != AVERROR_EOF) {
+@@ -542,6 +549,7 @@ static int add_samples_to_fifo(AVAudioFifo *fifo,
+  * @param      fifo                 Buffer used for temporary storage
+  * @param      input_format_context Format context of the input file
+  * @param      input_codec_context  Codec context of the input file
++ * @param      input_stream_index   Index of the audio stream to be decoded
+  * @param      output_codec_context Codec context of the output file
+  * @param      resampler_context    Resample context for the conversion
+  * @param[out] finished             Indicates whether the end of file has
+@@ -555,6 +563,7 @@ static int add_samples_to_fifo(AVAudioFifo *fifo,
+ static int read_decode_convert_and_store(AVAudioFifo *fifo,
+                                          AVFormatContext *input_format_context,
+                                          AVCodecContext *input_codec_context,
++                                         int input_stream_index,
+                                          AVCodecContext *output_codec_context,
+                                          SwrContext *resampler_context,
+                                          int *finished)
+@@ -571,7 +580,8 @@ static int read_decode_convert_and_store(AVAudioFifo *fifo,
+         goto cleanup;
+     /* Decode one frame worth of audio samples. */
+     if (decode_audio_frame(input_frame, input_format_context,
+-                           input_codec_context, &data_present, finished))
++                           input_codec_context, input_stream_index,
++                           &data_present, finished))
+         goto cleanup;
+     /* If we are at the end of the file and there are no more samples
+      * in the decoder which are delayed, we are actually finished.
+@@ -801,6 +811,7 @@ int main(int argc, char **argv)
+     AVCodecContext *input_codec_context = NULL, *output_codec_context = NULL;
+     SwrContext *resample_context = NULL;
+     AVAudioFifo *fifo = NULL;
++    int input_stream_index = 0;
+     int ret = AVERROR_EXIT;
+ 
+     if (argc != 3) {
+@@ -810,7 +821,7 @@ int main(int argc, char **argv)
+ 
+     /* Open the input file for reading. */
+     if (open_input_file(argv[1], &input_format_context,
+-                        &input_codec_context))
++                        &input_codec_context, &input_stream_index))
+         goto cleanup;
+     /* Open the output file for writing. */
+     if (open_output_file(argv[2], input_codec_context,
+@@ -844,6 +855,7 @@ int main(int argc, char **argv)
+              * output sample format and put it into the FIFO buffer. */
+             if (read_decode_convert_and_store(fifo, input_format_context,
+                                               input_codec_context,
++                                              input_stream_index,
+                                               output_codec_context,
+                                               resample_context, &finished))
+                 goto cleanup;
+-- 
+2.43.0
+
