@@ -1,0 +1,163 @@
+From 005923d9bb94b8757afcbd1da202cd3385aafe3b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:09:29 +0000
+Subject: [PATCH] doc/examples/scale_video: use sws_scale_frame()
+
+swscale.h describes sws_getContext() and sws_scale() as the legacy
+(stateful) API and recommends setting the frame properties and calling
+sws_scale_frame() on a context from sws_alloc_context() instead. The
+scaler selection flags such as SWS_BILINEAR are likewise deprecated in
+favor of SwsContext.scaler.
+
+Convert the example to the recommended API: the images are held in
+AVFrames, the context is no longer initialized for a fixed pair of
+formats, and the scaler is selected with SwsContext.scaler.
+
+As the lines of an AVFrame may be padded, the output is now written
+line by line. The output for 100x75, 320x240 and 640x480 is identical
+to the one of the previous code.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/scale_video.c | 78 ++++++++++++++++++++++----------------
+ 1 file changed, 45 insertions(+), 33 deletions(-)
+
+diff --git a/doc/examples/scale_video.c b/doc/examples/scale_video.c
+index a4c570f..239cba6 100644
+--- a/doc/examples/scale_video.c
++++ b/doc/examples/scale_video.c
+@@ -27,6 +27,7 @@
+  * Generate a synthetic video signal and use libswscale to perform rescaling.
+  */
+ 
++#include <libavutil/frame.h>
+ #include <libavutil/imgutils.h>
+ #include <libavutil/parseutils.h>
+ #include <libswscale/swscale.h>
+@@ -52,16 +53,15 @@ static void fill_yuv_image(uint8_t *data[4], int linesize[4],
+ 
+ int main(int argc, char **argv)
+ {
+-    uint8_t *src_data[4] = { NULL }, *dst_data[4] = { NULL };
+-    int src_linesize[4], dst_linesize[4];
++    AVFrame *src_frame = NULL, *dst_frame = NULL;
+     int src_w = 320, src_h = 240, dst_w, dst_h;
+     enum AVPixelFormat src_pix_fmt = AV_PIX_FMT_YUV420P, dst_pix_fmt = AV_PIX_FMT_RGB24;
+     const char *dst_size = NULL;
+     const char *dst_filename = NULL;
+     FILE *dst_file;
+-    int dst_bufsize;
+-    struct SwsContext *sws_ctx;
+-    int i, ret;
++    int dst_linesize;
++    SwsContext *sws_ctx = NULL;
++    int i, y, ret;
+ 
+     if (argc != 3) {
+         fprintf(stderr, "Usage: %s output_file output_size\n"
+@@ -87,52 +87,64 @@ int main(int argc, char **argv)
+         exit(1);
+     }
+ 
+-    /* create scaling context */
+-    sws_ctx = sws_getContext(src_w, src_h, src_pix_fmt,
+-                             dst_w, dst_h, dst_pix_fmt,
+-                             SWS_BILINEAR, NULL, NULL, NULL);
++    /* create scaling context; the properties of the conversion are taken
++     * from the frames passed to sws_scale_frame() */
++    sws_ctx = sws_alloc_context();
+     if (!sws_ctx) {
+-        fprintf(stderr,
+-                "Impossible to create scale context for the conversion "
+-                "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
+-                av_get_pix_fmt_name(src_pix_fmt), src_w, src_h,
+-                av_get_pix_fmt_name(dst_pix_fmt), dst_w, dst_h);
+-        ret = AVERROR(EINVAL);
++        fprintf(stderr, "Could not allocate the scaling context\n");
++        ret = AVERROR(ENOMEM);
++        goto end;
++    }
++    sws_ctx->scaler = SWS_SCALE_BILINEAR;
++
++    /* allocate source and destination frames */
++    src_frame = av_frame_alloc();
++    dst_frame = av_frame_alloc();
++    if (!src_frame || !dst_frame) {
++        fprintf(stderr, "Could not allocate frames\n");
++        ret = AVERROR(ENOMEM);
+         goto end;
+     }
+ 
+-    /* allocate source and destination image buffers */
+-    if ((ret = av_image_alloc(src_data, src_linesize,
+-                              src_w, src_h, src_pix_fmt, 16)) < 0) {
++    src_frame->format = src_pix_fmt;
++    src_frame->width  = src_w;
++    src_frame->height = src_h;
++    if ((ret = av_frame_get_buffer(src_frame, 0)) < 0) {
+         fprintf(stderr, "Could not allocate source image\n");
+         goto end;
+     }
+ 
+-    /* buffer is going to be written to rawvideo file, no alignment */
+-    if ((ret = av_image_alloc(dst_data, dst_linesize,
+-                              dst_w, dst_h, dst_pix_fmt, 1)) < 0) {
++    dst_frame->format = dst_pix_fmt;
++    dst_frame->width  = dst_w;
++    dst_frame->height = dst_h;
++    if ((ret = av_frame_get_buffer(dst_frame, 0)) < 0) {
+         fprintf(stderr, "Could not allocate destination image\n");
+         goto end;
+     }
+-    dst_bufsize = ret;
++
++    /* number of bytes of one line of the destination image without padding */
++    dst_linesize = av_image_get_linesize(dst_pix_fmt, dst_w, 0);
+ 
+     for (i = 0; i < 100; i++) {
+         /* generate synthetic video */
+-        fill_yuv_image(src_data, src_linesize, src_w, src_h, i);
++        fill_yuv_image(src_frame->data, src_frame->linesize, src_w, src_h, i);
+ 
+         /* convert to destination format */
+-        ret = sws_scale(sws_ctx, (const uint8_t * const*)src_data,
+-                        src_linesize, 0, src_h, dst_data, dst_linesize);
++        ret = sws_scale_frame(sws_ctx, dst_frame, src_frame);
+         if (ret < 0) {
+             fprintf(stderr, "Error while scaling: %s\n", av_err2str(ret));
+             goto end;
+         }
+ 
+-        /* write scaled image to file */
+-        if (fwrite(dst_data[0], 1, dst_bufsize, dst_file) != dst_bufsize) {
+-            fprintf(stderr, "Error writing to %s\n", dst_filename);
+-            ret = AVERROR(EIO);
+-            goto end;
++        /* write scaled image to file; the lines of the frame may be padded,
++         * the rawvideo file must not contain the padding */
++        for (y = 0; y < dst_h; y++) {
++            if (fwrite(dst_frame->data[0] + y * dst_frame->linesize[0],
++                       1, dst_linesize, dst_file) != dst_linesize) {
++                fprintf(stderr, "Error writing to %s\n", dst_filename);
++                ret = AVERROR(EIO);
++                goto end;
++            }
+         }
+     }
+ 
+@@ -148,8 +160,8 @@ int main(int argc, char **argv)
+ 
+ end:
+     fclose(dst_file);
+-    av_freep(&src_data[0]);
+-    av_freep(&dst_data[0]);
+-    sws_freeContext(sws_ctx);
++    av_frame_free(&src_frame);
++    av_frame_free(&dst_frame);
++    sws_free_context(&sws_ctx);
+     return ret < 0;
+ }
+-- 
+2.43.0
+

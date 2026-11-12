@@ -1,0 +1,53 @@
+From d5bb71950d12cddde0b58f41c4941565c9ba2e48 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 07:08:42 +0000
+Subject: [PATCH] doc/examples/scale_video: check for scaling and write errors
+
+The return values of sws_scale() and fwrite() were ignored, so the
+example reported success and returned 0 even when nothing could be
+written, for example on a full disk.
+
+Check both, and flush the output before reporting success.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FZ4G6798n6Ua4qu6xwWu3S
+---
+ doc/examples/scale_video.c | 20 +++++++++++++++++---
+ 1 file changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/doc/examples/scale_video.c b/doc/examples/scale_video.c
+index 62417cb..a4c570f 100644
+--- a/doc/examples/scale_video.c
++++ b/doc/examples/scale_video.c
+@@ -121,11 +121,25 @@ int main(int argc, char **argv)
+         fill_yuv_image(src_data, src_linesize, src_w, src_h, i);
+ 
+         /* convert to destination format */
+-        sws_scale(sws_ctx, (const uint8_t * const*)src_data,
+-                  src_linesize, 0, src_h, dst_data, dst_linesize);
++        ret = sws_scale(sws_ctx, (const uint8_t * const*)src_data,
++                        src_linesize, 0, src_h, dst_data, dst_linesize);
++        if (ret < 0) {
++            fprintf(stderr, "Error while scaling: %s\n", av_err2str(ret));
++            goto end;
++        }
+ 
+         /* write scaled image to file */
+-        fwrite(dst_data[0], 1, dst_bufsize, dst_file);
++        if (fwrite(dst_data[0], 1, dst_bufsize, dst_file) != dst_bufsize) {
++            fprintf(stderr, "Error writing to %s\n", dst_filename);
++            ret = AVERROR(EIO);
++            goto end;
++        }
++    }
++
++    if (fflush(dst_file)) {
++        fprintf(stderr, "Error writing to %s\n", dst_filename);
++        ret = AVERROR(EIO);
++        goto end;
+     }
+ 
+     fprintf(stderr, "Scaling succeeded. Play the output file with the command:\n"
+-- 
+2.43.0
+
